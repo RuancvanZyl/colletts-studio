@@ -4,11 +4,9 @@ import type { Database } from './database.types';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error(
-    'Missing Supabase environment variables.\n' +
-    'Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your .env file.'
-  );
-}
+// During local dev without a Supabase project yet, use placeholder values.
+// The app will show the landing page but DB calls will fail until you add real credentials.
+const url = supabaseUrl || 'https://placeholder.supabase.co';
+const key = supabaseAnonKey || 'placeholder-anon-key';
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient<Database>(url, key);
