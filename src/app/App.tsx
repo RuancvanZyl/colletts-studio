@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { HunterPortal } from './components/apex/HunterPortal';
 import { TaxidermyPortal } from './components/apex/TaxidermyPortal';
 import { OutfitterPortal } from './components/apex/OutfitterPortal';
@@ -10,30 +10,47 @@ import { ErrorBoundary } from './components/apex/ErrorBoundary';
 import { ThemeProvider } from './components/apex/ThemeProvider';
 import { PortalThemeProvider, PortalType } from './components/apex/PortalThemeProvider';
 import { Toaster } from './components/ui/sonner';
+import { AuthProvider, useAuth } from '../lib/auth';
 
 export type UserRole = 'hunter' | 'admin' | 'outfitter' | 'taxidermy' | 'unified' | null;
 
 type AppView = 'landing' | 'login' | 'register' | 'portal' | 'dashboard';
 
-function App() {
+function AppInner() {
+  const { user, profile, loading, signOut } = useAuth();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  void profile; // used in useEffect below
   const [currentView, setCurrentView] = useState<AppView>('landing');
   const [selectedPortal, setSelectedPortal] = useState<PortalType | null>(null);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  // Auto-redirect authenticated staff to their portal
+  useEffect(() => {
+    if (!loading && user && profile && currentView === 'landing') {
+      setSelectedPortal('admin');
+      setCurrentView('portal');
+    }
+  }, [loading, user, profile]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   const handleSelectPortal = (portal: 'hunter' | 'outfitter' | 'taxidermy') => {
-    // Map taxidermy to admin portal
     const mappedPortal = portal === 'taxidermy' ? 'admin' : portal;
     setSelectedPortal(mappedPortal as PortalType);
     setCurrentView('login');
   };
 
   const handleLogin = () => {
-    setIsLoggedIn(true);
     setCurrentView('portal');
   };
 
-  const handleLogout = () => {
-    setIsLoggedIn(false);
+  const handleLogout = async () => {
+    await signOut();
     setSelectedPortal(null);
     setCurrentView('landing');
   };
@@ -133,7 +150,7 @@ function App() {
   }
 
   // Portal Views (after login)
-  if (currentView === 'portal' && selectedPortal && isLoggedIn) {
+  if (currentView === 'portal' && selectedPortal && user) {
     return (
       <ErrorBoundary>
         <ThemeProvider>
@@ -141,7 +158,6 @@ function App() {
             portalType={selectedPortal}
             onPortalChange={(type) => {
               setSelectedPortal(type);
-              setIsLoggedIn(false);
               setCurrentView('login');
             }}
           >
@@ -165,6 +181,14 @@ function App() {
         </PortalThemeProvider>
       </ThemeProvider>
     </ErrorBoundary>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppInner />
+    </AuthProvider>
   );
 }
 

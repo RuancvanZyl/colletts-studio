@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
+import { useAuth } from '../../../../lib/auth';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -26,11 +28,20 @@ export function LoginScreen({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const { theme, toggleTheme } = useTheme();
+  const { signIn } = useAuth();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onLogin();
+    setSubmitting(true);
+    const { error } = await signIn(email, password);
+    setSubmitting(false);
+    if (error) {
+      toast.error(error);
+    } else {
+      onLogin();
+    }
   };
 
   const getPortalConfig = () => {
@@ -189,12 +200,13 @@ export function LoginScreen({
             </div>
 
             {/* Login Button */}
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
+              disabled={submitting}
               className={`w-full h-12 bg-gradient-to-r ${config.gradient} hover:${config.hoverGradient} text-white shadow-lg hover:shadow-xl transition-all`}
               size="lg"
             >
-              Sign In
+              {submitting ? 'Signing in…' : 'Sign In'}
             </Button>
 
             {/* Register Link */}
