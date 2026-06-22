@@ -15,7 +15,7 @@ import {
   List,
   RefreshCw,
 } from 'lucide-react';
-import { useDashboard } from '../../../../../lib/hooks/useDashboard';
+import { useDashboard } from '../../../../lib/hooks/useDashboard';
 
 interface WorkshopDashboardProps {
   onNavigate: (view: string) => void;

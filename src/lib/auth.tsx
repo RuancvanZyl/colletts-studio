@@ -3,6 +3,11 @@ import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import type { StaffRole } from './database.types';
 
+const HAS_SUPABASE = !!(
+  import.meta.env.VITE_SUPABASE_URL &&
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
+
 interface StaffProfile {
   id: string;
   full_name: string;
@@ -26,7 +31,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<StaffProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(HAS_SUPABASE);
 
   async function loadProfile(userId: string) {
     const { data } = await supabase
@@ -38,12 +43,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
+    if (!HAS_SUPABASE) return; // No credentials yet — skip auth
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) loadProfile(session.user.id);
       setLoading(false);
-    });
+    }).catch(() => setLoading(false));
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);

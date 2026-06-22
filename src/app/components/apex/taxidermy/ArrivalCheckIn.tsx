@@ -13,9 +13,9 @@ import {
 } from '../../ui/select';
 import { ClipboardCheck, Upload, CheckCircle2, ArrowLeft, Camera, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { useAuth } from '../../../../../lib/auth';
-import { useReceiving } from '../../../../../lib/hooks/useReceiving';
-import { supabase } from '../../../../../lib/supabase';
+import { useAuth } from '../../../../lib/auth';
+import { useReceiving } from '../../../../lib/hooks/useReceiving';
+import { supabase } from '../../../../lib/supabase';
 
 interface ArrivalCheckInProps {
   onComplete: () => void;

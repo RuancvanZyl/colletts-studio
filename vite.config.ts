@@ -15,15 +15,21 @@ function figmaAssetResolver() {
   }
 }
 
-// Figma Make exports imports like `sonner@2.0.3` — map them to bare package names
+// Figma Make exports imports like `sonner@2.0.3` — strip the version suffix
+// and delegate to vite's normal node_modules resolver.
 function figmaVersionedImportResolver() {
   return {
     name: 'figma-versioned-import-resolver',
-    resolveId(id: string) {
-      // Match `package@version` or `@scope/package@version`
-      const match = id.match(/^(@[^/]+\/[^@]+|[^@]+)@[\d.]+$/)
+    enforce: 'pre' as const,
+    async resolveId(
+      this: any,
+      id: string,
+      importer: string | undefined,
+      options: any
+    ) {
+      const match = id.match(/^(@[^/]+\/[^@]+|[^@/][^@]*)@[\d.][^\s]*$/)
       if (match) {
-        return { id: match[1], external: false }
+        return this.resolve(match[1], importer, { ...options, skipSelf: true })
       }
     },
   }
@@ -31,8 +37,8 @@ function figmaVersionedImportResolver() {
 
 export default defineConfig({
   plugins: [
-    figmaAssetResolver(),
     figmaVersionedImportResolver(),
+    figmaAssetResolver(),
     react(),
     tailwindcss(),
   ],
