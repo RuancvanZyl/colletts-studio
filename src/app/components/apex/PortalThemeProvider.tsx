@@ -92,7 +92,7 @@ const portalThemes: Record<PortalType, PortalTheme> = {
     textLight: 'text-green-800 dark:text-green-400',
     textDark: 'text-green-400',
     icon: null,
-    label: 'Apex Trophy Solutions',
+    label: "Apex Trophy Solutions",
   },
 };
 

@@ -150,7 +150,7 @@ function AppInner() {
   }
 
   // Portal Views (after login)
-  if (currentView === 'portal' && selectedPortal && user) {
+  if (currentView === 'portal' && selectedPortal) {
     return (
       <ErrorBoundary>
         <ThemeProvider>

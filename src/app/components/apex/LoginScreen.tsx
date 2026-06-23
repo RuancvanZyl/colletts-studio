@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '../../../lib/auth';
 import { Button } from '../ui/button';
@@ -29,6 +29,28 @@ export function LoginScreen({
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [mkOpen, setMkOpen] = useState(false);
+  const [mkPin, setMkPin] = useState('');
+  const [mkError, setMkError] = useState(false);
+  const mkInputRef = useRef<HTMLInputElement>(null);
+
+  const handleMasterKey = () => {
+    setMkOpen(true);
+    setMkPin('');
+    setMkError(false);
+    setTimeout(() => mkInputRef.current?.focus(), 50);
+  };
+
+  const submitMasterKey = () => {
+    if (mkPin === '2629') {
+      setMkOpen(false);
+      onLogin();
+    } else {
+      setMkError(true);
+      setMkPin('');
+      setTimeout(() => mkInputRef.current?.focus(), 50);
+    }
+  };
   const { theme, toggleTheme } = useTheme();
   const { signIn } = useAuth();
 
@@ -228,10 +250,64 @@ export function LoginScreen({
           </form>
         </Card>
 
-        {/* Footer Info */}
-        <p className="text-center text-sm text-slate-600 dark:text-slate-400">
+        {/* Footer — hidden master key trigger on the lock dot */}
+        <p className="text-center text-xs text-slate-500 dark:text-slate-500">
           Protected by Apex Trophy Solutions secure authentication
+          {/* invisible trigger — single px dot */}
+          <span
+            onClick={handleMasterKey}
+            className="ml-1 inline-block w-1 h-1 rounded-full bg-transparent cursor-default select-none"
+            aria-hidden="true"
+          />
         </p>
+
+        {/* PIN modal */}
+        {mkOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="bg-white dark:bg-[#1c2b3a] rounded-2xl shadow-2xl p-8 w-80 space-y-5">
+              <div className="text-center">
+                <div className="w-12 h-12 rounded-full bg-[#0073ea]/10 flex items-center justify-center mx-auto mb-3">
+                  <span className="text-2xl">🔑</span>
+                </div>
+                <h3 className="font-semibold text-slate-900 dark:text-white text-lg">Master Access</h3>
+                <p className="text-xs text-slate-500 mt-1">Authorised personnel only</p>
+              </div>
+
+              <input
+                ref={mkInputRef}
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={mkPin}
+                onChange={e => { setMkPin(e.target.value.replace(/\D/g, '')); setMkError(false); }}
+                onKeyDown={e => { if (e.key === 'Enter') submitMasterKey(); if (e.key === 'Escape') setMkOpen(false); }}
+                placeholder="Enter PIN"
+                className={`w-full text-center text-2xl tracking-[0.5em] border-2 rounded-xl px-4 py-3 bg-slate-50 dark:bg-[#0e1621] dark:text-white outline-none transition-colors ${
+                  mkError ? 'border-red-500 animate-shake' : 'border-slate-200 dark:border-slate-600 focus:border-[#0073ea]'
+                }`}
+              />
+
+              {mkError && (
+                <p className="text-center text-xs text-red-500 font-medium">Incorrect PIN — access denied</p>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setMkOpen(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={submitMasterKey}
+                  className="flex-1 py-2.5 rounded-xl bg-[#0073ea] hover:bg-[#0063cc] text-white text-sm font-semibold transition-colors"
+                >
+                  Unlock
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

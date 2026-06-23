@@ -138,6 +138,27 @@ export function ArrivalCheckIn({ onComplete }: ArrivalCheckInProps) {
       toast.error(result.error);
     } else {
       toast.success('Trophy checked in!');
+      // Print QR label for the tag
+      if (form.tagNumber) {
+        const win = window.open('', '_blank', 'width=350,height=420');
+        if (win) {
+          win.document.write(`
+            <html><head><title>Tag ${form.tagNumber}</title></head>
+            <body style="display:flex;flex-direction:column;align-items:center;padding:20px;font-family:sans-serif;text-align:center">
+              <h3 style="margin:0 0 4px">COLLETT'S WILDLIFE ARTISTRY</h3>
+              <p style="margin:0 0 12px;font-size:12px;color:#666">Taxidermy</p>
+              <div id="qr"></div>
+              <p style="margin-top:12px;font-size:18px;font-weight:bold;letter-spacing:2px">${form.tagNumber}</p>
+              <p style="margin:4px 0 0;font-size:12px;color:#555">${form.speciesName || 'Trophy'}</p>
+              <p style="margin:2px 0 0;font-size:11px;color:#999">${new Date().toLocaleDateString()}</p>
+              <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+              <script>new QRCode(document.getElementById("qr"),{text:"${form.tagNumber}",width:180,height:180});</script>
+            </body></html>
+          `);
+          win.document.close();
+          setTimeout(() => win.print(), 600);
+        }
+      }
       // Reset for next trophy in the same batch
       setForm(f => ({ ...f, tagNumber: '', instructions: '', partTypes: [], notes: '', speciesId: '', speciesName: '' }));
       setPhotoFile(null);

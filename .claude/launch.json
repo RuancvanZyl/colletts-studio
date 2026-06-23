@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "colletts-studio",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "export PATH=~/.npm-global/bin:$PATH && pnpm dev --port 3001"],
+      "port": 3001
+    }
+  ]
+}

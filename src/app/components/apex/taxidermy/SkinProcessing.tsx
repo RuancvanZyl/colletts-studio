@@ -1,185 +1,148 @@
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { Button } from '../../ui/button';
-import { Input } from '../../ui/input';
 import { Badge } from '../../ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../ui/table';
-import { Droplet, Scan, CheckCircle2, Clock } from 'lucide-react';
-import { toast } from 'sonner';
+import { Droplet, ArrowRight, RefreshCw, AlertTriangle, Clock, Loader2 } from 'lucide-react';
+import { useJobs } from '../../../../lib/hooks/useJobs';
+import { PhaseAdvanceDialog, PHASE_LABELS } from '../shared/PhaseAdvanceDialog';
+import type { JobWithRelations } from '../../../../lib/hooks/useJobs';
 
-interface SkinPart {
-  id: string;
-  partType: string;
-  trophyId: string;
-  huntId: string;
-  timeIn: string;
-  saltingBatch: string;
-  status: 'pending' | 'in-progress' | 'completed';
+function daysInPhase(job: JobWithRelations): number {
+  // We'd read from phase_history; approximate from updated_at for now
+  const updated = new Date(job.updated_at);
+  return Math.floor((Date.now() - updated.getTime()) / 86400000);
 }
 
 export function SkinProcessing() {
-  const [scanInput, setScanInput] = useState('');
-  const [parts, setParts] = useState<SkinPart[]>([
-    {
-      id: 'SKIN-001',
-      partType: 'Cape Skin',
-      trophyId: 'KUDU-001',
-      huntId: 'HUNT-2025-004',
-      timeIn: '09:30 AM',
-      saltingBatch: 'BATCH-A12',
-      status: 'in-progress'
-    },
-    {
-      id: 'SKIN-002',
-      partType: 'Full Skin',
-      trophyId: 'LION-008',
-      huntId: 'HUNT-2025-006',
-      timeIn: '10:15 AM',
-      saltingBatch: 'BATCH-A12',
-      status: 'pending'
-    }
-  ]);
+  const { jobs, loading, refresh, advancePhase } = useJobs('skin_processing');
+  const [advanceTarget, setAdvanceTarget] = useState<JobWithRelations | null>(null);
 
-  const handleScan = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!scanInput.trim()) return;
-    
-    toast.success(`Skin ${scanInput} loaded`);
-    setScanInput('');
-  };
-
-  const handleComplete = (partId: string) => {
-    setParts(prev => prev.map(part => 
-      part.id === partId ? { ...part, status: 'completed' } : part
-    ));
-    toast.success('Skin processing completed. Moving to Pre-Tannery Storage.');
-  };
+  const skinJobs = jobs.filter(j =>
+    j.parts.some(p => p.part_type === 'cape_skin' || p.part_type === 'full_skin')
+    || j.parts.length === 0 // show all skin_processing jobs even without parts listed
+  );
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-slate-900 dark:text-slate-100">Skin Cleaning & Salting</h1>
-        <p className="text-slate-600 dark:text-slate-400">Process skins for tannery preparation</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-slate-900 dark:text-slate-100">Skin Cleaning & Salting</h1>
+          <p className="text-slate-600 dark:text-slate-400">Process skins for tannery preparation</p>
+        </div>
+        <Button variant="ghost" size="icon" onClick={refresh} disabled={loading}>
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+        </Button>
       </div>
 
-      {/* Scan Area */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Scan className="w-5 h-5 text-blue-600" />
-            Scan Skin Tag
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleScan} className="flex gap-3">
-            <Input
-              value={scanInput}
-              onChange={(e) => setScanInput(e.target.value)}
-              placeholder="Scan or enter skin tag ID..."
-              className="flex-1"
-              autoFocus
-            />
-            <Button type="submit">
-              <Scan className="w-4 h-4 mr-2" />
-              Load
-            </Button>
-          </form>
+      {/* Process steps reference */}
+      <Card className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+        <CardContent className="pt-4 pb-4">
+          <div className="flex flex-wrap gap-4 text-sm text-blue-900 dark:text-blue-100">
+            {['1. Flesh removal & cleaning', '2. Salt skin side liberally', '3. Fold & drain', '4. Mark complete when cured'].map((step, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <span className="w-5 h-5 bg-blue-200 dark:bg-blue-800 rounded-full flex items-center justify-center text-xs font-bold">{i + 1}</span>
+                <span>{step.slice(3)}</span>
+              </div>
+            ))}
+          </div>
         </CardContent>
       </Card>
 
-      {/* Processing Table */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <Droplet className="w-5 h-5 text-blue-600" />
-              Active Skins
+      {loading ? (
+        <Card><CardContent className="py-12 text-center"><Loader2 className="w-8 h-8 animate-spin text-slate-400 mx-auto" /></CardContent></Card>
+      ) : jobs.length === 0 ? (
+        <Card className="border-dashed">
+          <CardContent className="py-12 text-center">
+            <Droplet className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+            <p className="text-slate-600 dark:text-slate-400">No skins currently in processing</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <span className="flex items-center gap-2"><Droplet className="w-5 h-5 text-blue-600" />Active Skins</span>
+              <Badge variant="secondary">{jobs.length} job{jobs.length !== 1 ? 's' : ''}</Badge>
             </CardTitle>
-            <Badge variant="secondary">{parts.length} skins</Badge>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Part ID</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Trophy</TableHead>
-                  <TableHead>Hunt ID</TableHead>
-                  <TableHead>Time In</TableHead>
-                  <TableHead>Salting Batch</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {parts.map((part) => (
-                  <TableRow key={part.id}>
-                    <TableCell className="font-mono text-sm">{part.id}</TableCell>
-                    <TableCell>{part.partType}</TableCell>
-                    <TableCell>{part.trophyId}</TableCell>
-                    <TableCell className="font-mono text-sm">{part.huntId}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-slate-400" />
-                        {part.timeIn}
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-mono text-sm">{part.saltingBatch}</TableCell>
-                    <TableCell>
-                      <Badge variant={
-                        part.status === 'completed' ? 'default' :
-                        part.status === 'in-progress' ? 'secondary' :
-                        'outline'
-                      }>
-                        {part.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {part.status !== 'completed' && (
-                        <Button 
-                          size="sm"
-                          onClick={() => handleComplete(part.id)}
-                          className="bg-green-600 hover:bg-green-700"
-                        >
-                          <CheckCircle2 className="w-4 h-4 mr-2" />
-                          Complete
-                        </Button>
-                      )}
-                    </TableCell>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Tag</TableHead>
+                    <TableHead>Client</TableHead>
+                    <TableHead>Species</TableHead>
+                    <TableHead>Parts</TableHead>
+                    <TableHead>Days in Phase</TableHead>
+                    <TableHead>Due Date</TableHead>
+                    <TableHead>Action</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+                </TableHeader>
+                <TableBody>
+                  {jobs.map(job => {
+                    const days = daysInPhase(job);
+                    const overdue = job.due_date && new Date(job.due_date) < new Date();
+                    return (
+                      <TableRow key={job.id} className={overdue ? 'bg-red-50 dark:bg-red-950/30' : ''}>
+                        <TableCell className="font-mono text-sm">
+                          {job.specimens?.tag_number ?? '—'}
+                          {job.rush && <Badge className="ml-2 bg-red-600 text-xs">RUSH</Badge>}
+                        </TableCell>
+                        <TableCell className="font-medium">{job.specimens?.clients?.full_name ?? '—'}</TableCell>
+                        <TableCell>{job.specimens?.species?.common_name ?? job.specimens?.species_name ?? '—'}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {job.parts.length > 0
+                              ? job.parts.map(p => <Badge key={p.id} variant="outline" className="text-xs">{p.part_type.replace('_', ' ')}</Badge>)
+                              : <span className="text-slate-400 text-sm">—</span>
+                            }
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-slate-400" />
+                            <span className={days > 3 ? 'text-amber-600 font-medium' : ''}>{days}d</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {job.due_date ? (
+                            <div className="flex items-center gap-1">
+                              {overdue && <AlertTriangle className="w-3 h-3 text-red-600" />}
+                              <span className={`text-sm ${overdue ? 'text-red-600 font-medium' : ''}`}>
+                                {new Date(job.due_date).toLocaleDateString()}
+                              </span>
+                            </div>
+                          ) : <span className="text-slate-400">—</span>}
+                        </TableCell>
+                        <TableCell>
+                          <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => setAdvanceTarget(job)}>
+                            <ArrowRight className="w-4 h-4 mr-1" />
+                            {PHASE_LABELS['storage_pre']}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Process Info */}
-      <Card className="bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-        <CardContent className="pt-6">
-          <h3 className="text-sm font-medium text-slate-900 dark:text-slate-100 mb-3">Processing Steps:</h3>
-          <ol className="space-y-2 text-sm text-slate-600 dark:text-slate-400">
-            <li className="flex items-start gap-2">
-              <span className="w-6 h-6 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full flex items-center justify-center flex-shrink-0 text-xs">1</span>
-              <span>Flesh removal and cleaning</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="w-6 h-6 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full flex items-center justify-center flex-shrink-0 text-xs">2</span>
-              <span>Apply salt liberally to skin side</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="w-6 h-6 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full flex items-center justify-center flex-shrink-0 text-xs">3</span>
-              <span>Fold and store in drainage area</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="w-6 h-6 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full flex items-center justify-center flex-shrink-0 text-xs">4</span>
-              <span>Mark as complete when curing is finished</span>
-            </li>
-          </ol>
-        </CardContent>
-      </Card>
+      {advanceTarget && (
+        <PhaseAdvanceDialog
+          open={true}
+          onClose={() => setAdvanceTarget(null)}
+          jobId={advanceTarget.id}
+          currentPhase="skin_processing"
+          nextPhase="storage_pre"
+          jobLabel={`${advanceTarget.specimens?.species?.common_name ?? advanceTarget.specimens?.species_name ?? 'Trophy'} — ${advanceTarget.specimens?.clients?.full_name ?? ''}`}
+          onConfirm={advancePhase}
+        />
+      )}
     </div>
   );
 }

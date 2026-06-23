@@ -1,206 +1,187 @@
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { Button } from '../../ui/button';
-import { Input } from '../../ui/input';
 import { Badge } from '../../ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
-import { Warehouse, Scan, MapPin, CheckCircle2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../ui/table';
+import { Warehouse, ArrowRight, RefreshCw, AlertTriangle, Clock, Loader2 } from 'lucide-react';
+import { useJobs } from '../../../../lib/hooks/useJobs';
+import { PhaseAdvanceDialog, PHASE_LABELS } from '../shared/PhaseAdvanceDialog';
+import type { JobWithRelations } from '../../../../lib/hooks/useJobs';
+
+function daysIn(dateStr: string) {
+  return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
+}
+
+function JobTable({
+  jobs,
+  nextPhase,
+  onAdvance,
+}: {
+  jobs: JobWithRelations[];
+  nextPhase: 'tannery' | 'mounting';
+  onAdvance: (job: JobWithRelations) => void;
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Tag</TableHead>
+            <TableHead>Client</TableHead>
+            <TableHead>Species</TableHead>
+            <TableHead>Parts</TableHead>
+            <TableHead>Days in Storage</TableHead>
+            <TableHead>Due</TableHead>
+            <TableHead>Action</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {jobs.map(job => {
+            const days = daysIn(job.updated_at);
+            const overdue = job.due_date && new Date(job.due_date) < new Date();
+            const stalledWarning = days > 7;
+            return (
+              <TableRow key={job.id} className={stalledWarning ? 'bg-amber-50 dark:bg-amber-950/20' : ''}>
+                <TableCell className="font-mono text-sm">
+                  {job.specimens?.tag_number ?? '—'}
+                  {job.rush && <Badge className="ml-2 bg-red-600 text-xs">RUSH</Badge>}
+                </TableCell>
+                <TableCell className="font-medium">{job.specimens?.clients?.full_name ?? '—'}</TableCell>
+                <TableCell>{job.specimens?.species?.common_name ?? job.specimens?.species_name ?? '—'}</TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap gap-1">
+                    {job.parts.map(p => (
+                      <Badge key={p.id} variant="outline" className="text-xs">{p.part_type.replace(/_/g, ' ')}</Badge>
+                    ))}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-slate-400" />
+                    <span className={stalledWarning ? 'text-amber-600 font-medium' : ''}>{days}d</span>
+                    {stalledWarning && <AlertTriangle className="w-3 h-3 text-amber-500" />}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  {job.due_date ? (
+                    <span className={`text-sm ${overdue ? 'text-red-600 font-medium' : ''}`}>
+                      {overdue && <AlertTriangle className="w-3 h-3 inline mr-1" />}
+                      {new Date(job.due_date).toLocaleDateString()}
+                    </span>
+                  ) : <span className="text-slate-400 text-sm">—</span>}
+                </TableCell>
+                <TableCell>
+                  <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => onAdvance(job)}>
+                    <ArrowRight className="w-4 h-4 mr-1" />
+                    {PHASE_LABELS[nextPhase]}
+                  </Button>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
 
 export function StorageManagement() {
-  const [scanInput, setScanInput] = useState('');
-  const [selectedSection, setSelectedSection] = useState('');
-  const [rackNumber, setRackNumber] = useState('');
-  const [binNumber, setBinNumber] = useState('');
-  const [currentPart, setCurrentPart] = useState<any>(null);
+  const { jobs: preTanneryJobs, loading: loadingPre, refresh: refreshPre, advancePhase: advancePre } = useJobs('storage_pre');
+  const { jobs: postTanneryJobs, loading: loadingPost, refresh: refreshPost, advancePhase: advancePost } = useJobs('storage_post');
+  const [advanceTarget, setAdvanceTarget] = useState<{ job: JobWithRelations; type: 'pre' | 'post' } | null>(null);
 
-  const sections = ['Skulls', 'Hides', 'Tusks', 'Horns', 'Full Bodies'];
-
-  const handleScan = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!scanInput.trim()) return;
-    
-    setCurrentPart({
-      id: scanInput,
-      type: 'Cape Skin',
-      trophy: 'Kudu 001',
-      huntId: 'HUNT-2025-004'
-    });
-    
-    toast.success(`Part ${scanInput} loaded`);
-    setScanInput('');
-  };
-
-  const handleAssignLocation = () => {
-    if (!selectedSection || !rackNumber || !binNumber) {
-      toast.error('Please fill in all location details');
-      return;
-    }
-
-    toast.success(`Part assigned to ${selectedSection} - Rack ${rackNumber}, Bin ${binNumber}`);
-    setCurrentPart(null);
-    setSelectedSection('');
-    setRackNumber('');
-    setBinNumber('');
-  };
+  const refresh = () => { refreshPre(); refreshPost(); };
+  const loading = loadingPre || loadingPost;
 
   return (
-    <div className="space-y-6 max-w-4xl">
-      <div>
-        <h1 className="text-slate-900 dark:text-slate-100">Storage Management</h1>
-        <p className="text-slate-600 dark:text-slate-400">Track and organize parts in storage</p>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-slate-900 dark:text-slate-100">Storage Management</h1>
+          <p className="text-slate-600 dark:text-slate-400">Pre-tannery and post-tannery storage</p>
+        </div>
+        <Button variant="ghost" size="icon" onClick={refresh} disabled={loading}>
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+        </Button>
       </div>
 
-      {/* Scan Area */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Scan className="w-5 h-5 text-blue-600" />
-            Scan Part
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleScan} className="flex gap-3">
-            <Input
-              value={scanInput}
-              onChange={(e) => setScanInput(e.target.value)}
-              placeholder="Scan or enter part ID..."
-              className="flex-1"
-              autoFocus
-            />
-            <Button type="submit">
-              <Scan className="w-4 h-4 mr-2" />
-              Load
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-
-      {/* Location Assignment */}
-      {currentPart && (
+      {/* Summary */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <MapPin className="w-5 h-5 text-blue-600" />
-              Assign Storage Location
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Current Part Info */}
-            <div className="p-4 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div>
-                  <p className="text-xs text-blue-700 dark:text-blue-300">Part ID</p>
-                  <p className="text-sm font-mono text-blue-900 dark:text-blue-100">{currentPart.id}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-blue-700 dark:text-blue-300">Type</p>
-                  <p className="text-sm text-blue-900 dark:text-blue-100">{currentPart.type}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-blue-700 dark:text-blue-300">Trophy</p>
-                  <p className="text-sm text-blue-900 dark:text-blue-100">{currentPart.trophy}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-blue-700 dark:text-blue-300">Hunt ID</p>
-                  <p className="text-sm font-mono text-blue-900 dark:text-blue-100">{currentPart.huntId}</p>
-                </div>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-600 dark:text-slate-400">Pre-Tannery Storage</p>
+                <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1">{preTanneryJobs.length}</p>
               </div>
-            </div>
-
-            {/* Location Fields */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm text-slate-700 dark:text-slate-300">Section</label>
-                <Select value={selectedSection} onValueChange={setSelectedSection}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select section..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sections.map((section) => (
-                      <SelectItem key={section} value={section}>
-                        {section}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="w-12 h-12 bg-purple-50 dark:bg-purple-950 rounded-lg flex items-center justify-center">
+                <Warehouse className="w-6 h-6 text-purple-600" />
               </div>
-
-              <div className="space-y-2">
-                <label className="text-sm text-slate-700 dark:text-slate-300">Rack #</label>
-                <Input
-                  value={rackNumber}
-                  onChange={(e) => setRackNumber(e.target.value)}
-                  placeholder="e.g. R-12"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm text-slate-700 dark:text-slate-300">Bin #</label>
-                <Input
-                  value={binNumber}
-                  onChange={(e) => setBinNumber(e.target.value)}
-                  placeholder="e.g. B-05"
-                />
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex gap-3">
-              <Button 
-                onClick={handleAssignLocation}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                <CheckCircle2 className="w-4 h-4 mr-2" />
-                Assign Location
-              </Button>
-              <Button 
-                variant="outline"
-                onClick={() => setCurrentPart(null)}
-              >
-                Cancel
-              </Button>
             </div>
           </CardContent>
         </Card>
-      )}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-600 dark:text-slate-400">Post-Tannery Storage</p>
+                <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1">{postTanneryJobs.length}</p>
+              </div>
+              <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-950 rounded-lg flex items-center justify-center">
+                <Warehouse className="w-6 h-6 text-indigo-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-      {/* Storage Overview */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Warehouse className="w-5 h-5 text-blue-600" />
-            Storage Overview
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[
-              { section: 'Skulls', count: 23, capacity: 50 },
-              { section: 'Hides', count: 34, capacity: 80 },
-              { section: 'Tusks', count: 12, capacity: 30 },
-              { section: 'Horns', count: 18, capacity: 60 },
-              { section: 'Full Bodies', count: 5, capacity: 15 },
-            ].map((item) => {
-              const percentage = (item.count / item.capacity) * 100;
-              return (
-                <div key={item.section} className="p-4 bg-slate-50 dark:bg-slate-900 rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-slate-700 dark:text-slate-300">{item.section}</span>
-                    <Badge variant="secondary">{item.count}/{item.capacity}</Badge>
-                  </div>
-                  <div className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full ${percentage > 80 ? 'bg-red-500' : percentage > 60 ? 'bg-amber-500' : 'bg-green-500'}`}
-                      style={{ width: `${percentage}%` }}
-                    ></div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="pre">
+        <TabsList>
+          <TabsTrigger value="pre">Pre-Tannery ({preTanneryJobs.length})</TabsTrigger>
+          <TabsTrigger value="post">Post-Tannery ({postTanneryJobs.length})</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="pre" className="mt-4">
+          {loadingPre ? (
+            <Card><CardContent className="py-12 text-center"><Loader2 className="w-8 h-8 animate-spin text-slate-400 mx-auto" /></CardContent></Card>
+          ) : preTanneryJobs.length === 0 ? (
+            <Card className="border-dashed"><CardContent className="py-10 text-center text-slate-500">No items in pre-tannery storage</CardContent></Card>
+          ) : (
+            <Card>
+              <CardContent className="pt-4">
+                <JobTable jobs={preTanneryJobs} nextPhase="tannery" onAdvance={job => setAdvanceTarget({ job, type: 'pre' })} />
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="post" className="mt-4">
+          {loadingPost ? (
+            <Card><CardContent className="py-12 text-center"><Loader2 className="w-8 h-8 animate-spin text-slate-400 mx-auto" /></CardContent></Card>
+          ) : postTanneryJobs.length === 0 ? (
+            <Card className="border-dashed"><CardContent className="py-10 text-center text-slate-500">No items in post-tannery storage</CardContent></Card>
+          ) : (
+            <Card>
+              <CardContent className="pt-4">
+                <JobTable jobs={postTanneryJobs} nextPhase="mounting" onAdvance={job => setAdvanceTarget({ job, type: 'post' })} />
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      {advanceTarget && (
+        <PhaseAdvanceDialog
+          open={true}
+          onClose={() => setAdvanceTarget(null)}
+          jobId={advanceTarget.job.id}
+          currentPhase={advanceTarget.type === 'pre' ? 'storage_pre' : 'storage_post'}
+          nextPhase={advanceTarget.type === 'pre' ? 'tannery' : 'mounting'}
+          jobLabel={`${advanceTarget.job.specimens?.species?.common_name ?? advanceTarget.job.specimens?.species_name ?? 'Trophy'} — ${advanceTarget.job.specimens?.clients?.full_name ?? ''}`}
+          onConfirm={advanceTarget.type === 'pre' ? advancePre : advancePost}
+        />
+      )}
     </div>
   );
 }

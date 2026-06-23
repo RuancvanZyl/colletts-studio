@@ -22,7 +22,7 @@ export function UniversalAIAssistant() {
     {
       id: '1',
       role: 'assistant',
-      content: 'Hello! I\'m your Apex Trophy Solutions AI assistant. How can I help you today?',
+      content: "Hello! I'm your Apex Trophy Solutions AI assistant. How can I help you today?",
       timestamp: new Date(),
       suggestions: [
         'Track my trophies',
