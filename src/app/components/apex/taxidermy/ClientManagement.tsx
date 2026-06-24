@@ -23,7 +23,7 @@ const EMPTY_FORM = {
 };
 
 export function ClientManagement() {
-  const { clients, loading, createClient, updateClient, refresh } = useClients();
+  const { clients, loading, error, createClient, updateClient, refresh } = useClients();
   const { jobs } = useJobs();
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Client | null>(null);
@@ -118,6 +118,13 @@ export function ClientManagement() {
 
           {loading ? (
             <Card><CardContent className="py-12 text-center"><Loader2 className="w-8 h-8 animate-spin text-slate-400 mx-auto" /></CardContent></Card>
+          ) : error ? (
+            <Card className="border-red-200">
+              <CardContent className="py-12 text-center">
+                <p className="text-red-500 font-medium">Error loading clients</p>
+                <p className="text-red-400 text-sm mt-1">{error}</p>
+              </CardContent>
+            </Card>
           ) : filtered.length === 0 ? (
             <Card className="border-dashed">
               <CardContent className="py-12 text-center">
