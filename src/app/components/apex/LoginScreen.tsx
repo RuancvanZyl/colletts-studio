@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '../../../lib/auth';
+import { supabase } from '../../../lib/supabase';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -41,8 +42,9 @@ export function LoginScreen({
     setTimeout(() => mkInputRef.current?.focus(), 50);
   };
 
-  const submitMasterKey = () => {
-    if (mkPin === '2629') {
+  const submitMasterKey = async () => {
+    const { data, error } = await supabase.rpc('validate_master_pin', { pin: mkPin });
+    if (!error && data === true) {
       setMkOpen(false);
       onLogin();
     } else {
