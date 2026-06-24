@@ -1,75 +1,56 @@
 #!/usr/bin/env python3
 """
 Apex Trophy Solutions — Dropbox Data Importer
-Run this on Steve's laptop where Dropbox is synced.
-It scans all client folders and imports into Supabase.
+Scans all WI / T client folders and imports into Supabase.
 
 Usage:
-  pip install openpyxl requests
   python3 import-dropbox-data.py
 """
 
-import os
-import re
-import json
-import zipfile
-import xml.etree.ElementTree as ET
-import requests
+import os, re, zipfile, xml.etree.ElementTree as ET, requests, json
 from datetime import datetime
 
-# ── CONFIG — fill these in ─────────────────────────────────────────────────
-SUPABASE_URL  = "https://kpbtydfkqrrtbpwxvbep.supabase.co"
-SUPABASE_KEY  = ""   # paste your anon key here
+# ── CONFIG ─────────────────────────────────────────────────────────────────
+SUPABASE_URL = "https://kpbtydfkqrrtbpwxvbep.supabase.co"
+SUPABASE_KEY = ""
 
-# Path to Dropbox on Steve's Mac — try these in order, first one that exists wins
-DROPBOX_PATHS = [
-    os.path.expanduser("~/Dropbox/Colletts SA/01 Export Client Invoices"),
-    os.path.expanduser("~/Library/CloudStorage/Dropbox/Colletts SA/01 Export Client Invoices"),
-    os.path.expanduser("~/Dropbox (Personal)/Colletts SA/01 Export Client Invoices"),
+DROPBOX_ROOT = os.path.expanduser(
+    "~/Library/CloudStorage/Dropbox/Colletts SA"
+)
+
+SCAN_ROOTS = [
+    "01 Export Client Invoices",   # international / export clients
+    "02 Local Clients Invoices",   # local SA clients
 ]
 
-# Which years to import — set to None to import ALL years
-YEARS_TO_IMPORT = None   # e.g. [2025, 2026] for only recent years
+# Set to e.g. ["2025","2026"] to only import recent years, or None for all
+YEARS_FILTER = None
 
-# ── HELPERS ────────────────────────────────────────────────────────────────
+# ── EXCEL HELPERS ──────────────────────────────────────────────────────────
 
-def find_dropbox():
-    for p in DROPBOX_PATHS:
-        if os.path.isdir(p):
-            print(f"✅ Found Dropbox at: {p}")
-            return p
-    return None
-
-
-def parse_xlsx_strings(z):
-    """Extract shared strings table from xlsx."""
+def xlsx_strings(z):
     try:
         with z.open("xl/sharedStrings.xml") as f:
-            tree = ET.parse(f)
-            ns = {"ns": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+            NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
             return [
-                "".join(t.text or "" for t in si.iter("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}t"))
-                or (si.text or "")
-                for si in tree.findall(".//ns:si", ns)
+                "".join(t.text or "" for t in si.iter(f"{{{NS}}}t"))
+                for si in ET.parse(f).findall(f".//{{{NS}}}si")
             ]
     except Exception:
         return []
 
-
-def get_sheet_values(z, sheet_name, strings):
-    """Return list of rows (each row = list of cell values)."""
+def sheet_rows(z, sheet="sheet1.xml", strings=None):
+    strings = strings or []
     try:
-        with z.open(f"xl/worksheets/{sheet_name}") as f:
-            tree = ET.parse(f)
-            ns = {"ns": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+        with z.open(f"xl/worksheets/{sheet}") as f:
+            NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
             rows = []
-            for row in tree.findall(".//ns:row", ns):
+            for row in ET.parse(f).findall(f".//{{{NS}}}row"):
                 cells = []
-                for c in row.findall("ns:c", ns):
-                    t = c.get("t")
-                    v = c.find("ns:v", ns)
+                for c in row.findall(f"{{{NS}}}c"):
+                    v = c.find(f"{{{NS}}}v")
                     if v is not None and v.text is not None:
-                        cells.append(strings[int(v.text)] if t == "s" else v.text)
+                        cells.append(strings[int(v.text)] if c.get("t") == "s" else v.text)
                     else:
                         cells.append("")
                 rows.append(cells)
@@ -77,139 +58,119 @@ def get_sheet_values(z, sheet_name, strings):
     except Exception:
         return []
 
-
-def cell(rows, row_idx, col_idx, default=""):
-    """Safely get a cell value."""
-    try:
-        val = rows[row_idx][col_idx]
-        return str(val).strip() if val else default
-    except (IndexError, TypeError):
-        return default
-
-
-def find_cell_containing(rows, text):
-    """Find first cell containing text and return the cell to its right."""
-    text_lower = text.lower()
+def find_after(rows, label):
+    """Find the cell value immediately after a label in any row."""
+    label_l = label.lower()
     for row in rows:
         for i, c in enumerate(row):
-            if text_lower in str(c).lower():
-                if i + 1 < len(row):
-                    return str(row[i + 1]).strip()
+            if label_l in str(c).lower() and i + 1 < len(row):
+                val = str(row[i + 1]).strip()
+                if val:
+                    return val
     return ""
 
-
 def parse_info_sheet(xlsx_path):
-    """Parse an Info sheet.xlsx and return a dict of client + job data."""
     data = {
         "client_name": "", "email": "", "phone": "", "address": "",
-        "safari_operator": "", "ph": "", "shipping_agent": "",
-        "country_of_import": "", "area_hunted": "",
-        "trophies": [],   # list of {"species": ..., "item": ..., "notes": ...}
-        "invoice_items": [],  # list of {"trophy": ..., "item": ..., "cost": ...}
-        "invoice_total_usd": None,
-        "raw_errors": [],
+        "operator": "", "ph": "", "shipping_agent": "",
+        "country": "", "area_hunted": "",
+        "trophies": [], "invoice_total_usd": None,
     }
     try:
         with zipfile.ZipFile(xlsx_path) as z:
-            strings = parse_xlsx_strings(z)
+            strings = xlsx_strings(z)
+            s1 = sheet_rows(z, "sheet1.xml", strings)
+            s2 = sheet_rows(z, "sheet2.xml", strings)
 
-            # Sheet 1 — intake form
-            s1 = get_sheet_values(z, "sheet1.xml", strings)
-            data["client_name"]     = find_cell_containing(s1, "client name") or find_cell_containing(s1, "client:")
-            data["email"]           = find_cell_containing(s1, "e-mail")
-            data["phone"]           = find_cell_containing(s1, "phone")
-            data["address"]         = find_cell_containing(s1, "address")
-            data["safari_operator"] = find_cell_containing(s1, "safari operator") or find_cell_containing(s1, "operator:")
-            data["ph"]              = find_cell_containing(s1, "ph:")
-            data["shipping_agent"]  = find_cell_containing(s1, "shipping agent")
-            data["country_of_import"] = find_cell_containing(s1, "country of import")
-            data["area_hunted"]     = find_cell_containing(s1, "area hunted")
+            data["client_name"]    = find_after(s1, "client name:") or find_after(s1, "client:")  or find_after(s2, "client:")
+            data["email"]          = find_after(s1, "e-mail")        or find_after(s2, "email:")
+            data["phone"]          = find_after(s1, "phone number")  or find_after(s1, "tel no")
+            data["address"]        = find_after(s1, "address:")
+            data["operator"]       = find_after(s1, "safari operator") or find_after(s1, "operator:")
+            data["ph"]             = find_after(s1, "ph:")
+            data["shipping_agent"] = find_after(s1, "shipping agent")
+            data["country"]        = find_after(s1, "country of import")
+            data["area_hunted"]    = find_after(s1, "area hunted")
 
-            # Collect trophy rows from sheet1
+            # Trophy rows from sheet1
             collecting = False
             for row in s1:
                 row_text = " ".join(str(c) for c in row).lower()
                 if "trophy received" in row_text and "item" in row_text:
-                    collecting = True
-                    continue
-                if collecting and any(row):
+                    collecting = True; continue
+                if collecting:
                     species = str(row[0]).strip() if row else ""
-                    item    = str(row[1]).strip() if len(row) > 1 else ""
-                    notes   = str(row[3]).strip() if len(row) > 3 else ""
-                    if species and species.lower() not in ("trophy received", ""):
-                        data["trophies"].append({"species": species, "item": item, "notes": notes})
+                    if not species or species.lower() in ("trophy received", "area hunted", ""):
+                        continue
+                    data["trophies"].append({
+                        "species": species,
+                        "item": str(row[1]).strip() if len(row) > 1 else "",
+                        "notes": str(row[3]).strip() if len(row) > 3 else "",
+                    })
 
-            # Sheet 2 — invoice
-            s2 = get_sheet_values(z, "sheet2.xml", strings)
-            data["client_name"] = data["client_name"] or find_cell_containing(s2, "client:")
-            data["email"]       = data["email"]       or find_cell_containing(s2, "email:")
-
-            collecting_inv = False
+            # Invoice total from sheet2
             for row in s2:
                 row_text = " ".join(str(c) for c in row).lower()
-                if "trophy" in row_text and "item" in row_text and "cost" in row_text:
-                    collecting_inv = True
-                    continue
-                if collecting_inv and any(row):
-                    trophy = str(row[0]).strip() if row else ""
-                    item   = str(row[1]).strip() if len(row) > 1 else ""
-                    cost   = str(row[3]).strip() if len(row) > 3 else ""
-                    if trophy and trophy.lower() not in ("", "trophy"):
-                        if "total" in trophy.lower():
-                            try:
-                                data["invoice_total_usd"] = float(cost.replace(",", ""))
-                            except Exception:
-                                pass
+                if "total" in row_text:
+                    for c in reversed(row):
+                        try:
+                            data["invoice_total_usd"] = float(str(c).replace(",", "").strip())
                             break
-                        data["invoice_items"].append({"trophy": trophy, "item": item, "cost": cost})
-
+                        except Exception:
+                            continue
+                    if data["invoice_total_usd"]:
+                        break
     except Exception as e:
-        data["raw_errors"].append(str(e))
-
+        pass
     return data
 
-
-def find_info_sheet(folder_path):
-    """Find the Info sheet xlsx in a client folder."""
-    for fname in os.listdir(folder_path):
-        if fname.endswith(".xlsx") and ("info" in fname.lower() or "sheet" in fname.lower()):
-            return os.path.join(folder_path, fname)
-    # Fallback: any xlsx
-    for fname in os.listdir(folder_path):
-        if fname.endswith(".xlsx"):
-            return os.path.join(folder_path, fname)
+def find_xlsx(folder):
+    for f in os.listdir(folder):
+        if f.endswith(".xlsx") and ("info" in f.lower() or "sheet" in f.lower()):
+            return os.path.join(folder, f)
+    for f in os.listdir(folder):
+        if f.endswith(".xlsx"):
+            return os.path.join(folder, f)
     return None
 
+# ── FOLDER NAME PARSING ────────────────────────────────────────────────────
 
-def parse_folder_name(folder_name):
+def parse_folder(name, year, source):
     """
-    Extract job number, year, client name, outfitter from folder name.
-    Examples:
+    Extract structured data from folder names like:
       WI 2826 Jason Richard Hagerty - Jimmy Nichols Safaris
+      WI 0326 Deirdre Matthews L261 - Steve works with this client
       T0326 E835 Seth Burton Scholes
     """
-    result = {"job_ref": "", "client_name": "", "outfitter": "", "job_type": "export"}
+    ref = client = outfitter = ref_num = notes = ""
+    job_type = "export" if source == "01 Export Client Invoices" else "local"
 
     # WI format
-    wi_match = re.match(r"WI\s+(\d+)\s+(.+?)(?:\s+-\s+(.+))?$", folder_name, re.IGNORECASE)
-    if wi_match:
-        result["job_ref"]     = f"WI{wi_match.group(1)}"
-        result["client_name"] = wi_match.group(2).strip()
-        result["outfitter"]   = (wi_match.group(3) or "").strip()
-        result["job_type"]    = "export"
-        return result
+    m = re.match(r"WI\s+(\d+)\s+(.*)", name, re.I)
+    if m:
+        ref = f"WI {m.group(1)}"
+        rest = m.group(2).strip()
+        # Extract reference number (E### or L###)
+        ref_m = re.search(r"\b([EL]\d{3,})\b", rest)
+        if ref_m:
+            ref_num = ref_m.group(1)
+            rest = rest.replace(ref_m.group(0), "").strip()
+        # Split on " - " for outfitter / notes
+        parts = re.split(r"\s+-\s+", rest, maxsplit=1)
+        client = parts[0].strip()
+        outfitter = parts[1].strip() if len(parts) > 1 else ""
+        return dict(ref=ref, client=client, outfitter=outfitter,
+                    ref_num=ref_num, job_type=job_type, year=year)
 
-    # T format (taxidermy local)
-    t_match = re.match(r"T(\d+)\s+\w+\s+(.+)$", folder_name, re.IGNORECASE)
-    if t_match:
-        result["job_ref"]     = f"T{t_match.group(1)}"
-        result["client_name"] = t_match.group(2).strip()
-        result["job_type"]    = "local"
-        return result
+    # T format (taxidermy)
+    m = re.match(r"T(\d+)\s+\w+\s+(.*)", name, re.I)
+    if m:
+        ref = f"T{m.group(1)}"
+        client = m.group(2).strip()
+        return dict(ref=ref, client=client, outfitter="",
+                    ref_num="", job_type="taxidermy", year=year)
 
-    result["client_name"] = folder_name
-    return result
-
+    return None
 
 # ── SUPABASE ───────────────────────────────────────────────────────────────
 
@@ -217,132 +178,125 @@ HEADERS = {
     "apikey": SUPABASE_KEY,
     "Authorization": f"Bearer {SUPABASE_KEY}",
     "Content-Type": "application/json",
-    "Prefer": "return=representation,resolution=merge-duplicates",
+    "Prefer": "return=representation",
 }
 
-
-def upsert(table, data):
-    r = requests.post(f"{SUPABASE_URL}/rest/v1/{table}", headers=HEADERS, json=data)
-    if r.status_code not in (200, 201):
-        return None, r.text
-    rows = r.json()
-    return (rows[0] if rows else {}), None
-
-
-def find_or_create_client(client_name, email, phone, address, notes=""):
-    if not client_name:
-        return None
-    payload = {
-        "full_name": client_name,
-        "email": email or None,
-        "phone": phone or None,
-        "address": address or None,
-        "notes": notes or None,
-    }
-    row, err = upsert("clients", payload)
-    if err:
-        print(f"   ⚠️  Client error: {err}")
-        return None
-    return row.get("id")
-
+def sb_insert(table, payload):
+    r = requests.post(f"{SUPABASE_URL}/rest/v1/{table}", headers=HEADERS, json=payload)
+    if r.status_code in (200, 201):
+        rows = r.json()
+        return rows[0] if rows else {}, None
+    return {}, r.text
 
 # ── MAIN ───────────────────────────────────────────────────────────────────
 
 def main():
     print("\n🦌  Apex Trophy Solutions — Data Importer")
-    print("=" * 50)
+    print("=" * 55)
 
     if not SUPABASE_KEY:
-        print("\n❌  SUPABASE_KEY is empty!")
-        print("   Open this script in a text editor and paste your Supabase anon key.")
+        print("\n❌  Add your SUPABASE_KEY to this script first!")
         return
 
-    dropbox_root = find_dropbox()
-    if not dropbox_root:
-        print("\n❌  Dropbox folder not found!")
-        print("   Make sure the Dropbox desktop app is installed and synced.")
-        print("   Expected path: ~/Dropbox/Colletts SA/01 Export Client Invoices")
-        return
+    imported = skipped = 0
+    all_clients = []
 
-    imported = 0
-    skipped  = 0
-    errors   = []
-
-    # Scan years
-    for year_entry in sorted(os.scandir(dropbox_root), key=lambda e: e.name):
-        if not year_entry.is_dir():
-            continue
-        year_name = year_entry.name
-        if not re.match(r"\d{4}", year_name):
-            continue
-        if YEARS_TO_IMPORT and int(year_name) not in YEARS_TO_IMPORT:
+    for scan_root in SCAN_ROOTS:
+        base = os.path.join(DROPBOX_ROOT, scan_root)
+        if not os.path.isdir(base):
+            print(f"⚠️  Not found: {base}")
             continue
 
-        print(f"\n📅  {year_name}")
+        for year_entry in sorted(os.scandir(base), key=lambda e: e.name):
+            if not year_entry.is_dir() or not re.match(r"\d{4}$", year_entry.name):
+                continue
+            year = year_entry.name
+            if YEARS_FILTER and year not in YEARS_FILTER:
+                continue
 
-        # Scan subfolders (could be direct WI/T folders or inside 01 Taxidermy etc)
-        def scan_for_clients(folder):
-            nonlocal imported, skipped
-            for entry in sorted(os.scandir(folder), key=lambda e: e.name):
-                if not entry.is_dir():
-                    continue
-                name = entry.name
-                # Skip meta-folders
-                if name.startswith("0") and len(name) < 20 and not re.match(r"(WI|T)\d", name, re.I):
-                    scan_for_clients(entry.path)
-                    continue
-                if not re.match(r"(WI|T)\d", name, re.I):
-                    continue
+            print(f"\n📅  {year}  ({scan_root})")
 
-                meta = parse_folder_name(name)
-                info_path = find_info_sheet(entry.path)
+            def scan_dir(folder):
+                nonlocal imported, skipped
+                try:
+                    entries = sorted(os.scandir(folder), key=lambda e: e.name)
+                except PermissionError:
+                    return
+                for entry in entries:
+                    if not entry.is_dir():
+                        continue
+                    meta = parse_folder(entry.name, year, scan_root)
+                    if not meta:
+                        # Maybe a sub-folder like "01 Taxidermy" — recurse one level
+                        scan_dir(entry.path)
+                        continue
 
-                print(f"   📁  {name}")
+                    print(f"   📁  {entry.name[:60]}")
 
-                sheet_data = {}
-                if info_path:
-                    sheet_data = parse_info_sheet(info_path)
-                    if sheet_data["raw_errors"]:
-                        print(f"       ⚠️  Parse warning: {sheet_data['raw_errors']}")
+                    # Parse Excel
+                    xlsx = find_xlsx(entry.path)
+                    sheet = parse_info_sheet(xlsx) if xlsx else {}
 
-                # Merge folder name data with sheet data
-                client_name = sheet_data.get("client_name") or meta["client_name"]
-                email       = sheet_data.get("email", "")
-                phone       = sheet_data.get("phone", "")
-                address     = sheet_data.get("address", "")
-                outfitter   = sheet_data.get("safari_operator") or meta["outfitter"]
+                    client_name = sheet.get("client_name") or meta["client"]
+                    email       = sheet.get("email", "")
+                    phone       = sheet.get("phone", "")
+                    address     = sheet.get("address", "")
+                    operator    = sheet.get("operator") or meta["outfitter"]
 
-                notes_parts = []
-                if outfitter:         notes_parts.append(f"Outfitter: {outfitter}")
-                if meta.get("ph"):    notes_parts.append(f"PH: {meta['ph']}")
-                if sheet_data.get("country_of_import"): notes_parts.append(f"Country: {sheet_data['country_of_import']}")
-                if sheet_data.get("area_hunted"):        notes_parts.append(f"Area: {sheet_data['area_hunted']}")
+                    notes_parts = [f"Job ref: {meta['ref']}", f"Year: {year}"]
+                    if operator:           notes_parts.append(f"Operator: {operator}")
+                    if sheet.get("ph"):    notes_parts.append(f"PH: {sheet['ph']}")
+                    if sheet.get("country"): notes_parts.append(f"Country: {sheet['country']}")
+                    if meta.get("ref_num"): notes_parts.append(f"Ref: {meta['ref_num']}")
 
-                # Push to Supabase
-                client_id = find_or_create_client(
-                    client_name, email, phone, address,
-                    notes=" | ".join(notes_parts)
-                )
+                    trophies = sheet.get("trophies", [])
+                    trophy_summary = ", ".join(t["species"] for t in trophies if t["species"])
 
-                if client_id:
-                    print(f"       ✅  Client: {client_name} (id={client_id})")
-                    imported += 1
-                else:
-                    print(f"       ❌  Failed to import: {client_name}")
-                    errors.append(name)
-                    skipped += 1
+                    all_clients.append({
+                        "folder": entry.name,
+                        "year": year,
+                        "source": scan_root,
+                        "ref": meta["ref"],
+                        "job_type": meta["job_type"],
+                        "client_name": client_name,
+                        "email": email,
+                        "phone": phone,
+                        "address": address,
+                        "operator": operator,
+                        "trophies": trophy_summary,
+                        "notes": " | ".join(notes_parts),
+                        "invoice_total_usd": sheet.get("invoice_total_usd"),
+                    })
 
-        scan_for_clients(year_entry.path)
+                    # Push client to Supabase
+                    payload = {
+                        "full_name": client_name or entry.name,
+                        "email": email or None,
+                        "phone": phone or None,
+                        "address": address or None,
+                        "notes": " | ".join(notes_parts),
+                    }
+                    row, err = sb_insert("clients", payload)
+                    if err:
+                        print(f"       ❌  {err[:80]}")
+                        skipped += 1
+                    else:
+                        client_id = row.get("id", "?")
+                        print(f"       ✅  {client_name or '(unnamed)'} → id={client_id}")
+                        imported += 1
 
-    print(f"\n{'=' * 50}")
-    print(f"✅  Imported:  {imported} clients")
-    print(f"⚠️   Skipped:   {skipped} clients")
-    if errors:
-        print(f"\nFailed folders:")
-        for e in errors:
-            print(f"  - {e}")
-    print("\n🎉  Done! Open the app → Clients to see all imported data.")
+            scan_dir(year_entry.path)
 
+    # Save a local backup JSON
+    backup_path = os.path.expanduser("~/Desktop/apex-import-backup.json")
+    with open(backup_path, "w") as f:
+        json.dump(all_clients, f, indent=2)
+
+    print(f"\n{'=' * 55}")
+    print(f"✅  Imported : {imported} clients")
+    print(f"⚠️   Skipped  : {skipped} clients")
+    print(f"💾  Backup   : {backup_path}")
+    print("\n🎉  Open the app → Clients to see all imported data.")
 
 if __name__ == "__main__":
     main()
