@@ -12,7 +12,7 @@ from datetime import datetime
 
 # ── CONFIG ─────────────────────────────────────────────────────────────────
 SUPABASE_URL = "https://kpbtydfkqrrtbpwxvbep.supabase.co"
-SUPABASE_KEY = ""
+SUPABASE_KEY = ""   # ← paste your Supabase service_role key here before running
 
 DROPBOX_ROOT = os.path.expanduser(
     "~/Library/CloudStorage/Dropbox/Colletts SA"
