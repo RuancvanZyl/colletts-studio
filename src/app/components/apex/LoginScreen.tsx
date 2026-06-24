@@ -43,8 +43,17 @@ export function LoginScreen({
   };
 
   const submitMasterKey = async () => {
-    const { data, error } = await supabase.rpc('validate_master_pin', { pin: mkPin });
-    if (!error && data === true) {
+    const { data, error } = await supabase.rpc('validate_master_pin_with_creds', { pin: mkPin });
+    if (!error && data) {
+      // Sign in with the master account so RLS passes and real data loads
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: data.email,
+        password: data.password,
+      });
+      if (signInError) {
+        // Fallback: still allow UI access even if sign-in fails
+        console.warn('Master sign-in failed:', signInError.message);
+      }
       setMkOpen(false);
       onLogin();
     } else {
