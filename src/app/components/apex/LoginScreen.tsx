@@ -43,16 +43,14 @@ export function LoginScreen({
   };
 
   const submitMasterKey = async () => {
-    const { data, error } = await supabase.rpc('validate_master_pin_with_creds', { pin: mkPin });
-    if (!error && data) {
-      // Sign in with the master account so RLS passes and real data loads
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: data.email,
-        password: data.password,
-      });
-      if (signInError) {
-        // Fallback: still allow UI access even if sign-in fails
-        console.warn('Master sign-in failed:', signInError.message);
+    const correctPin = import.meta.env.VITE_MASTER_PIN;
+    const masterEmail = import.meta.env.VITE_MASTER_EMAIL;
+    const masterPassword = import.meta.env.VITE_MASTER_PASSWORD;
+
+    if (mkPin === correctPin) {
+      // Sign in with master account so RLS passes and real data loads
+      if (masterEmail && masterPassword) {
+        await supabase.auth.signInWithPassword({ email: masterEmail, password: masterPassword });
       }
       setMkOpen(false);
       onLogin();
