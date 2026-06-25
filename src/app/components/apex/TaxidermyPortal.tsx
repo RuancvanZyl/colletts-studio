@@ -15,6 +15,7 @@ import { ClientManagement } from './taxidermy/ClientManagement';
 import { InvoiceManagement } from './taxidermy/InvoiceManagement';
 import { AdminConfiguration } from './taxidermy/AdminConfiguration';
 import { NoticeBoard } from './shared/NoticeBoard';
+import { GlobalSearch } from './shared/GlobalSearch';
 import { useAuth } from '../../../lib/auth';
 import { Input } from '../ui/input';
 import {
@@ -260,14 +261,8 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
           </div>
 
           {/* Search */}
-          <div className="flex-1 max-w-sm mx-auto sm:mx-4 relative hidden md:block">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-            <Input
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search jobs, clients, tags…"
-              className="pl-8 h-8 text-sm bg-slate-50 dark:bg-[#2c3d5b] border-slate-200 dark:border-transparent focus:border-[#0073ea] dark:text-white"
-            />
+          <div className="flex-1 mx-4 hidden md:block">
+            <GlobalSearch onNavigate={navigate} />
           </div>
 
           {/* Right controls */}
