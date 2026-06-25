@@ -50,9 +50,14 @@ export function LoginScreen({
     if (mkPin === correctPin) {
       // Sign in with master account so RLS passes and real data loads
       if (masterEmail && masterPassword) {
-        await supabase.auth.signInWithPassword({ email: masterEmail, password: masterPassword });
+        const { error } = await supabase.auth.signInWithPassword({ email: masterEmail, password: masterPassword });
+        if (error) {
+          console.error('Master key auth error:', error.message);
+        }
       }
       setMkOpen(false);
+      // Small delay to let Supabase session propagate before loading data
+      await new Promise(r => setTimeout(r, 300));
       onLogin();
     } else {
       setMkError(true);
