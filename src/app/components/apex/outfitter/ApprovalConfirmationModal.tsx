@@ -6,7 +6,7 @@ import { Label } from '../../ui/label';
 import { Card } from '../../ui/card';
 import { Badge } from '../../ui/badge';
 import { AlertCircle, CheckCircle } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 interface HuntLinkRequest {
   id: string;

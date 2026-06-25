@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from '../../ui/select';
 import { ArrowLeft, Upload, X, CheckCircle } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { mockAnimals } from '../mockAnimalData';
 
 interface CreateHuntProps {

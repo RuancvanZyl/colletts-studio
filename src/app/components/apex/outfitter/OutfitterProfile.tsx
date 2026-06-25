@@ -7,7 +7,7 @@ import { Label } from '../../ui/label';
 import { Badge } from '../../ui/badge';
 import { Avatar, AvatarFallback } from '../../ui/avatar';
 import { Edit2, Save, X, LogOut, CheckCircle, Clock, XCircle } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 interface OutfitterProfileProps {
   onLogout: () => void;

@@ -70,7 +70,12 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     setSidebarOpen(false);
   };
 
-  const navGroups: NavGroup[] = [
+  const role = profile?.role;
+  const isAdmin      = role === 'admin' || role === 'studio_manager';
+  const isBookkeeper = role === 'bookkeeper';
+  const canSeeBusiness = isAdmin || isBookkeeper;
+
+  const allNavGroups: (NavGroup & { roles?: string[] })[] = [
     {
       heading: 'Overview',
       items: [
@@ -108,15 +113,17 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
         { view: 'inventory', icon: List,    label: 'Job Tracker' },
       ],
     },
-    {
+    ...(canSeeBusiness ? [{
       heading: 'Business',
       items: [
-        { view: 'clients',  icon: Users,    label: 'Clients' },
-        { view: 'invoices', icon: FileText, label: 'Invoicing' },
-        { view: 'admin',    icon: Settings, label: 'Admin' },
+        { view: 'clients'  as TaxidermyView, icon: Users,    label: 'Clients' },
+        { view: 'invoices' as TaxidermyView, icon: FileText, label: 'Invoicing' },
+        ...(isAdmin ? [{ view: 'admin' as TaxidermyView, icon: Settings, label: 'Admin' }] : []),
       ],
-    },
+    }] : []),
   ];
+
+  const navGroups = allNavGroups;
 
   const renderView = () => {
     switch (currentView) {

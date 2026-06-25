@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '../../ui/popover';
 import { Textarea } from '../../ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
 import { Compass, Calendar as CalendarIcon, MapPin, User, CheckCircle, Search } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { formatDate as format } from '../utils/dateUtils';
 
 interface HunterOnboardingProps {

@@ -5,7 +5,7 @@ import { Input } from '../../ui/input';
 import { Badge } from '../../ui/badge';
 import { MessageCircle, Send, X, Minimize2, Maximize2, User, Bot, AlertCircle } from 'lucide-react';
 import { usePortalTheme } from '../PortalThemeProvider';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 interface Message {
   id: string;

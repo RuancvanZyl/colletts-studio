@@ -19,7 +19,7 @@ import {
   DialogTitle,
 } from '../../ui/dialog';
 import { Search, UserPlus, Mail, QrCode, Copy } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 const mockLinkedHunters = [
   {

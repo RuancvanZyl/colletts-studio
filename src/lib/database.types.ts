@@ -66,6 +66,7 @@ export interface Database {
           passport_number: string | null;
           passport_expiry: string | null;
           outfitter_id: string | null;
+          auth_user_id: string | null;
           onboarding_status: 'not_started' | 'in_progress' | 'complete';
           notes: string | null;
           created_at: string;

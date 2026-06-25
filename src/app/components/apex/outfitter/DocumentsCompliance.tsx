@@ -5,7 +5,7 @@ import { Card } from '../../ui/card';
 import { Button } from '../../ui/button';
 import { Badge } from '../../ui/badge';
 import { Upload, FileText, AlertTriangle, CheckCircle, Clock, XCircle } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 const documentTypeLabels = {
   'id-copy': 'ID Copy',

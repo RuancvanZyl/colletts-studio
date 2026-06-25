@@ -16,11 +16,21 @@ import { Button } from '../ui/button';
 import { Home, Award, Bell, User, Search, Moon, Sun, Trophy as TrophyIcon, Plus } from 'lucide-react';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
-import { mockTrophies, mockNotifications } from './mockData';
+import { mockNotifications } from './mockData';
 import { Trophy, TrophySelection as TrophySelectionType } from './types';
 import { useTheme } from './ThemeProvider';
 import { usePortalTheme } from './PortalThemeProvider';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
+import { useHunterClient } from '../../../lib/hooks/useHunterClient';
+import { useAuth } from '../../../lib/auth';
+import { AlertCircle, CreditCard } from 'lucide-react';
+
+const PHASE_PROGRESS: Record<string, number> = {
+  intake: 10, skin_processing: 20, skull_processing: 30,
+  storage_pre: 35, tannery: 45, storage_post: 55,
+  mounting: 65, finishing: 75, quality_check: 85,
+  packing: 90, shipped: 95, delivered: 100,
+};
 
 interface HunterPortalProps {
   onLogout: () => void;
@@ -38,16 +48,38 @@ type HunterFlow =
 type HunterView = 'home' | 'trophies' | 'trophy-detail' | 'notifications' | 'profile' | 'trophy-selection';
 
 export function HunterPortal({ onLogout }: HunterPortalProps) {
+  const { user } = useAuth();
+  const { client, specimens, loading: clientLoading, displayName, ensureClient } = useHunterClient();
+
   // Flow state - determines which major section the user is in
-  const [flow, setFlow] = useState<HunterFlow>('main'); // Change to 'registration' for testing the full flow
+  const [flow, setFlow] = useState<HunterFlow>('main');
   const [huntData, setHuntData] = useState<any>(null);
-  
+
   // Main portal state
   const [currentView, setCurrentView] = useState<HunterView>('home');
   const [selectedTrophy, setSelectedTrophy] = useState<Trophy | null>(null);
   const [notifications, setNotifications] = useState(mockNotifications);
   const { theme, toggleTheme } = useTheme();
   const { theme: portalTheme } = usePortalTheme();
+
+  // Convert real specimens to the Trophy shape expected by existing UI components
+  const realTrophies: Trophy[] = specimens.map(s => {
+    const job = s.jobs?.[0];
+    const phase = job?.current_phase ?? 'intake';
+    const progress = PHASE_PROGRESS[phase] ?? 0;
+    return {
+      id: s.id,
+      species: s.species?.common_name ?? s.species_name ?? 'Unknown Species',
+      clientName: displayName,
+      progress,
+      currentStage: phase as any,
+      parts: [],
+      imageUrl: undefined,
+      createdAt: s.created_at,
+      lastUpdated: s.updated_at,
+      events: [],
+    };
+  });
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -127,10 +159,10 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
   if (flow === 'active-hunt') {
     return (
       <>
-        <ActiveHuntDashboard 
+        <ActiveHuntDashboard
           huntData={huntData}
           onAddTrophy={handleAddTrophy}
-          onViewTrophy={handleViewTrophy}
+          onViewTrophy={(t: any) => handleViewTrophy(t as Trophy)}
           onSubmitHunt={handleSubmitHunt}
         />
         <UniversalAIAssistant />
@@ -167,9 +199,9 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
   const renderView = () => {
     switch (currentView) {
       case 'home':
-        return <HunterHome trophies={mockTrophies} onViewTrophy={handleViewTrophy} onAddTrophy={() => setCurrentView('trophy-selection')} />;
+        return <HunterHome trophies={realTrophies} onViewTrophy={handleViewTrophy} onAddTrophy={() => setCurrentView('trophy-selection')} hunterName={displayName} />;
       case 'trophies':
-        return <MyTrophies trophies={mockTrophies} onViewTrophy={handleViewTrophy} />;
+        return <MyTrophies trophies={realTrophies} onViewTrophy={handleViewTrophy} />;
       case 'trophy-detail':
         return selectedTrophy ? (
           <TrophyDetail trophy={selectedTrophy} onBack={handleBackToList} />
@@ -195,7 +227,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
           />
         );
       default:
-        return <HunterHome trophies={mockTrophies} onViewTrophy={handleViewTrophy} onAddTrophy={() => setCurrentView('trophy-selection')} />;
+        return <HunterHome trophies={realTrophies} onViewTrophy={handleViewTrophy} onAddTrophy={() => setCurrentView('trophy-selection')} hunterName={displayName} />;
     }
   };
 
@@ -211,7 +243,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
               </div>
               <div>
                 <h2 className="bg-gradient-to-r from-green-800 via-green-700 to-lime-700 bg-clip-text text-transparent">APEX TROPHY SOLUTIONS</h2>
-                <p className="text-xs text-slate-600 dark:text-slate-400">Hunter Portal</p>
+                <p className="text-xs text-slate-600 dark:text-slate-400">Hunter Portal {displayName ? `· ${displayName}` : ''}</p>
               </div>
             </div>
             
@@ -251,6 +283,23 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
           </div>
         </div>
       </header>
+
+      {/* Payment Required Banner — shown when client has trophies but no deposit paid */}
+      {client && specimens.length > 0 && specimens.some(s => s.jobs?.length === 0 || s.status === 'expected') && (
+        <div className="bg-amber-50 dark:bg-amber-950/50 border-b border-amber-200 dark:border-amber-800">
+          <div className="container mx-auto px-4 py-3 flex items-center gap-3">
+            <CreditCard className="w-5 h-5 text-amber-600 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-amber-800 dark:text-amber-300 font-medium text-sm">
+                Deposit required before processing begins
+              </p>
+              <p className="text-amber-700 dark:text-amber-400 text-xs">
+                Your trophies are registered. A 50% deposit invoice will be sent to you — work starts once payment is confirmed.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       <main className="container mx-auto px-4 py-6 pb-24 md:pb-6">

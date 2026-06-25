@@ -58,6 +58,21 @@ def sheet_rows(z, sheet="sheet1.xml", strings=None):
     except Exception:
         return []
 
+EXCEL_ERRORS = {"#ref!", "#value!", "#name?", "#n/a", "#div/0!", "#null!", "#num!"}
+
+def is_clean(val):
+    """Return True if val is a real non-formula, non-error cell value."""
+    s = str(val).strip()
+    if not s or s == "0":
+        return False
+    if s.lower() in EXCEL_ERRORS:
+        return False
+    if s.startswith("="):
+        return False
+    if s.replace(",", "").replace(".", "").isdigit():
+        return False
+    return True
+
 def find_after(rows, label):
     """Find the cell value immediately after a label in any row."""
     label_l = label.lower()
@@ -65,7 +80,7 @@ def find_after(rows, label):
         for i, c in enumerate(row):
             if label_l in str(c).lower() and i + 1 < len(row):
                 val = str(row[i + 1]).strip()
-                if val:
+                if val and is_clean(val):
                     return val
     return ""
 
@@ -237,7 +252,8 @@ def main():
                     xlsx = find_xlsx(entry.path)
                     sheet = parse_info_sheet(xlsx) if xlsx else {}
 
-                    client_name = sheet.get("client_name") or meta["client"]
+                    raw_name    = sheet.get("client_name") or meta["client"]
+                    client_name = raw_name if is_clean(raw_name) else meta["client"]
                     email       = sheet.get("email", "")
                     phone       = sheet.get("phone", "")
                     address     = sheet.get("address", "")
@@ -268,9 +284,16 @@ def main():
                         "invoice_total_usd": sheet.get("invoice_total_usd"),
                     })
 
+                    # Skip rows with no usable name
+                    final_name = client_name if is_clean(client_name) else ""
+                    if not final_name:
+                        print(f"       ⚠️  Skipped (no valid name): {entry.name[:60]}")
+                        skipped += 1
+                        continue
+
                     # Push client to Supabase
                     payload = {
-                        "full_name": client_name or entry.name,
+                        "full_name": final_name,
                         "email": email or None,
                         "phone": phone or None,
                         "address": address or None,

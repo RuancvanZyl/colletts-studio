@@ -8,7 +8,7 @@ import { Textarea } from '../../ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
 import { Badge } from '../../ui/badge';
 import { Search, Send, Paperclip, Plus, MessageSquarePlus, FileText } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 export function CommunicationPanel() {
   const [searchQuery, setSearchQuery] = useState('');

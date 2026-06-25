@@ -4,10 +4,10 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Card } from '../ui/card';
 import { Checkbox } from '../ui/checkbox';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { ArrowLeft, Trophy, Compass, User, Package, Upload } from 'lucide-react';
+import { ArrowLeft, Compass, User, Package, Upload, Loader2 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
+import { supabase } from '../../../lib/supabase';
 
 interface RegisterScreenProps {
   onBack: () => void;
@@ -32,12 +32,18 @@ export function RegisterScreen({
     agreeToTerms: false,
   });
   const { theme } = useTheme();
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (formData.password !== formData.confirmPassword) {
       toast.error('Passwords do not match');
+      return;
+    }
+
+    if (formData.password.length < 10) {
+      toast.error('Password must be at least 10 characters');
       return;
     }
 
@@ -46,7 +52,26 @@ export function RegisterScreen({
       return;
     }
 
-    toast.success('Registration successful! Please check your email to verify your account.');
+    setSubmitting(true);
+    const { error } = await supabase.auth.signUp({
+      email: formData.email,
+      password: formData.password,
+      options: {
+        data: {
+          full_name: `${formData.firstName} ${formData.lastName}`.trim(),
+          phone: formData.phone,
+          portal_type: portalType,
+        },
+      },
+    });
+    setSubmitting(false);
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    toast.success('Account created! Please check your email and click the confirmation link before logging in.');
     onRegisterComplete();
   };
 
@@ -261,12 +286,13 @@ export function RegisterScreen({
             </div>
 
             {/* Submit Button */}
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
+              disabled={submitting}
               className={`w-full h-12 bg-gradient-to-r ${config.gradient} hover:${config.hoverGradient} text-white shadow-lg hover:shadow-xl transition-all`}
               size="lg"
             >
-              Create Account
+              {submitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating Account…</> : 'Create Account'}
             </Button>
 
             {/* Login Link */}

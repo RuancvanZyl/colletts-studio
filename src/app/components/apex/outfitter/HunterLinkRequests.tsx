@@ -17,7 +17,7 @@ import {
 import { LinkRequestDetailsModal } from './LinkRequestDetailsModal';
 import { ApprovalConfirmationModal } from './ApprovalConfirmationModal';
 import { DeclineModal } from './DeclineModal';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 interface HuntLinkRequest {
   id: string;
