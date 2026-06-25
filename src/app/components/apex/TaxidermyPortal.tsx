@@ -112,12 +112,12 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       items: [
         { view: 'packing',   icon: Package, label: 'Packing & Shipping' },
         { view: 'inventory', icon: List,    label: 'Job Tracker' },
+        { view: 'clients',   icon: Users,   label: 'Clients' },
       ],
     },
     ...(canSeeBusiness ? [{
       heading: 'Business',
       items: [
-        { view: 'clients'  as TaxidermyView, icon: Users,    label: 'Clients' },
         { view: 'invoices' as TaxidermyView, icon: FileText, label: 'Invoicing' },
         ...(isAdmin ? [{ view: 'admin' as TaxidermyView, icon: Settings, label: 'Admin' }] : []),
       ],
