@@ -21,7 +21,13 @@ export function useClients() {
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN') load();
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   async function createClient(input: ClientInsert) {
     const { data, error } = await supabase.from('clients').insert(input).select().single();

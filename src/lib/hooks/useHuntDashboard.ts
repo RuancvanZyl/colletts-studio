@@ -26,53 +26,66 @@ export function useHuntDashboard() {
 
   async function load() {
     setLoading(true);
-    // Try RPC first (migration 010)
-    const { data, error } = await (supabase as any).rpc('get_hunt_dashboard');
-    if (!error && data) {
-      setStats(data as HuntDashboardStats);
-    } else {
-      // Fallback: direct count queries if RPC not deployed yet
-      const [huntsRes, clientsRes] = await Promise.all([
-        (supabase as any).from('client_hunts').select('id, status, year', { count: 'exact' }),
-        (supabase as any).from('clients').select('id, client_type', { count: 'exact' }),
-      ]);
 
-      const hunts = huntsRes.data ?? [];
-      const clients = clientsRes.data ?? [];
+    // Fallback: direct count queries (works with RLS when authenticated)
+    const [huntsRes, clientsRes, docsRes] = await Promise.all([
+      (supabase as any).from('client_hunts').select('id, status, year, client_id'),
+      (supabase as any).from('clients').select('id, client_type'),
+      (supabase as any).from('hunt_documents').select('hunt_id, doc_type, status'),
+    ]);
 
-      const byYear: Record<string, number> = {};
-      const byType: Record<string, number> = { export: 0, local: 0 };
+    const hunts = huntsRes.data ?? [];
+    const clients = clientsRes.data ?? [];
+    const docs = docsRes.data ?? [];
 
-      hunts.forEach((h: any) => {
-        byYear[h.year] = (byYear[h.year] ?? 0) + 1;
-      });
-      clients.forEach((c: any) => {
-        const t = c.client_type ?? 'export';
-        byType[t] = (byType[t] ?? 0) + 1;
-      });
+    const byYear: Record<string, number> = {};
+    const byType: Record<string, number> = { export: 0, local: 0 };
 
-      setStats({
-        total_hunts:            hunts.length,
-        total_clients:          clients.length,
-        export_clients:         byType.export,
-        local_clients:          byType.local,
-        active_hunts:           hunts.filter((h: any) => h.status === 'active').length,
-        completed_hunts:        hunts.filter((h: any) => h.status === 'completed').length,
-        hunts_with_job_card:    0,
-        hunts_with_receiving:   0,
-        hunts_with_invoice:     0,
-        hunts_with_permit:      0,
-        total_documents:        0,
-        trophies_received:      0,
-        hunts_missing_receiving:0,
-        hunts_missing_job_card: 0,
-        hunts_by_year:          byYear,
-        hunts_by_type:          byType,
-      });
-    }
+    hunts.forEach((h: any) => {
+      byYear[h.year] = (byYear[h.year] ?? 0) + 1;
+    });
+    clients.forEach((c: any) => {
+      const t = c.client_type ?? 'export';
+      byType[t] = (byType[t] ?? 0) + 1;
+    });
+
+    const completeDocs = docs.filter((d: any) => d.status === 'complete');
+    const huntsWithJobCard   = new Set(completeDocs.filter((d: any) => d.doc_type === 'job_card').map((d: any) => d.hunt_id));
+    const huntsWithReceiving = new Set(completeDocs.filter((d: any) => d.doc_type === 'receiving_sheet').map((d: any) => d.hunt_id));
+    const huntsWithInvoice   = new Set(completeDocs.filter((d: any) => d.doc_type === 'invoice').map((d: any) => d.hunt_id));
+    const huntsWithPermit    = new Set(completeDocs.filter((d: any) => ['permit','cites','import_permit'].includes(d.doc_type)).map((d: any) => d.hunt_id));
+    const huntIds            = new Set(hunts.map((h: any) => h.id));
+
+    setStats({
+      total_hunts:             hunts.length,
+      total_clients:           clients.length,
+      export_clients:          byType.export ?? 0,
+      local_clients:           byType.local ?? 0,
+      active_hunts:            hunts.filter((h: any) => h.status === 'active').length,
+      completed_hunts:         hunts.filter((h: any) => h.status === 'completed').length,
+      hunts_with_job_card:     huntsWithJobCard.size,
+      hunts_with_receiving:    huntsWithReceiving.size,
+      hunts_with_invoice:      huntsWithInvoice.size,
+      hunts_with_permit:       huntsWithPermit.size,
+      total_documents:         docs.length,
+      trophies_received:       huntsWithReceiving.size,
+      hunts_missing_receiving: hunts.filter((h: any) => h.status === 'active' && !huntsWithReceiving.has(h.id)).length,
+      hunts_missing_job_card:  hunts.filter((h: any) => h.status === 'active' && !huntsWithJobCard.has(h.id)).length,
+      hunts_by_year:           byYear,
+      hunts_by_type:           byType,
+    });
+
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  // Re-fetch when auth session changes
+  useEffect(() => {
+    load();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN') load();
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
   return { stats, loading, refresh: load };
 }
