@@ -1,0 +1,16 @@
+-- Trophy References Storage Bucket
+-- This migration is a note only — the bucket must be created manually in Supabase Storage.
+--
+-- Bucket name:   trophy-references
+-- Public:        NO (private)
+-- File size limit: 10MB
+-- Allowed MIME types: image/*
+--
+-- Upload path convention:
+--   {clientId}/{huntId}/{speciesName}-{tagNumber}/{filename}
+--
+-- After creating the bucket, add a storage policy allowing authenticated users to upload:
+--   Policy name: "Staff can upload trophy references"
+--   Operation:   INSERT
+--   Target roles: authenticated
+--   Policy:      (auth.role() = 'authenticated')
