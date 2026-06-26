@@ -219,7 +219,7 @@ export function ArrivalCheckIn({ onComplete }: ArrivalCheckInProps) {
   const clientType = clientMode === 'search' ? (selectedClient as any)?.client_type ?? 'export' : newClient.client_type;
   const clientNumber = clientMode === 'search' ? (selectedClient as any)?.client_number ?? '' : '';
   const clientName = clientMode === 'search' ? (selectedClient?.full_name ?? '') : newClient.full_name;
-  const currency = clientType === 'local' ? 'ZAR' : 'USD';
+  const currency = '';
 
   // Recalculate prices when client type switches between local/export
   useEffect(() => {
@@ -536,8 +536,8 @@ export function ArrivalCheckIn({ onComplete }: ArrivalCheckInProps) {
                 <Select value={newClient.client_type} onValueChange={(v: string) => setNewClient(p => ({ ...p, client_type: v }))}>
                   <SelectTrigger className="bg-slate-700 border-slate-600 text-white"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="export">Export (USD)</SelectItem>
-                    <SelectItem value="local">Local (ZAR)</SelectItem>
+                    <SelectItem value="export">✈️ Export</SelectItem>
+                    <SelectItem value="local">🇿🇦 Local</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -640,10 +640,10 @@ export function ArrivalCheckIn({ onComplete }: ArrivalCheckInProps) {
 
                     {/* Price */}
                     <div className="space-y-1">
-                      <Label className="text-slate-400 text-xs">Price ({currency})</Label>
+                      <Label className="text-slate-400 text-xs">Price</Label>
                       <div className="flex items-center gap-2">
                         {displayPrice !== null && !t.priceOverride
-                          ? <div className="flex-1 px-3 py-2 bg-slate-600/50 rounded-md text-sm text-slate-300 border border-slate-600">{currency} {displayPrice.toLocaleString()}</div>
+                          ? <div className="flex-1 px-3 py-2 bg-slate-600/50 rounded-md text-sm text-slate-300 border border-slate-600">{displayPrice.toLocaleString()}</div>
                           : null}
                         <Input
                           type="number"
@@ -745,7 +745,7 @@ export function ArrivalCheckIn({ onComplete }: ArrivalCheckInProps) {
             <div className="bg-slate-700/40 rounded-lg p-4 space-y-1 text-sm">
               <p className="text-slate-300"><span className="text-slate-500">Client:</span> {clientMode === 'search' ? selectedClient?.full_name : newClient.full_name}</p>
               <p className="text-slate-300"><span className="text-slate-500">Trophies:</span> {trophies.length}</p>
-              <p className="text-slate-300"><span className="text-slate-500">Currency:</span> {currency}</p>
+              <p className="text-slate-300"><span className="text-slate-500">Type:</span> {clientType === 'local' ? '🇿🇦 Local' : '✈️ Export'}</p>
             </div>
 
             <div className="overflow-x-auto">
@@ -769,7 +769,7 @@ export function ArrivalCheckIn({ onComplete }: ArrivalCheckInProps) {
                         <td className="py-2 text-slate-400">{t.mountType}</td>
                         <td className="py-2 text-slate-400 font-mono text-xs">{t.tagNumber}</td>
                         <td className="py-2 text-slate-300 text-right">{t.quantity}</td>
-                        <td className="py-2 text-slate-300 text-right">{rowTotal ? `${currency} ${rowTotal.toLocaleString()}` : <span className="text-slate-500 italic">Quote</span>}</td>
+                        <td className="py-2 text-slate-300 text-right">{rowTotal ? rowTotal.toLocaleString() : <span className="text-slate-500 italic">Quote</span>}</td>
                       </tr>
                     );
                   })}
@@ -777,7 +777,7 @@ export function ArrivalCheckIn({ onComplete }: ArrivalCheckInProps) {
                 <tfoot>
                   <tr>
                     <td colSpan={4} className="pt-3 text-slate-400 font-medium">Total</td>
-                    <td className="pt-3 text-white font-bold text-right">{currency} {totalPrice.toLocaleString()}</td>
+                    <td className="pt-3 text-white font-bold text-right">{totalPrice.toLocaleString()}</td>
                   </tr>
                 </tfoot>
               </table>

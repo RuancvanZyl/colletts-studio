@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import {
   Users, Plus, Search, RefreshCw, Edit2, Phone, Mail, Globe,
   Loader2, ChevronRight, Camera, ImagePlus, Trash2, X, ZoomIn,
-  Plane, MapPin, ArrowLeft,
+  Plane, MapPin, ArrowLeft, FileText, Upload, CheckCircle2,
 } from 'lucide-react';
 import { useClients } from '../../../../lib/hooks/useClients';
 import { useJobs } from '../../../../lib/hooks/useJobs';
@@ -25,7 +25,7 @@ type Client = Database['public']['Tables']['clients']['Row'];
 type ClientType = 'all' | 'local' | 'export';
 
 const EMPTY_FORM = {
-  full_name: '', email: '', phone: '', address: '', country: '',
+  full_name: '', email: '', phone: '', address: '', delivery_address: '', country: '',
   nationality: '', passport_number: '', passport_expiry: '', notes: '',
   client_type: 'export' as 'local' | 'export',
 };
@@ -164,6 +164,102 @@ function PhotoSection({ clientId, photoType, label, photos, onUploaded, onDelete
           <img src={lightbox} alt="" className="max-w-full max-h-full rounded-lg object-contain" />
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Passport upload ───────────────────────────────────────────────────────────
+function PassportUploadSection({ clientId }: { clientId: string | null }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploaded, setUploaded] = useState(false);
+  const [existing, setExisting] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!clientId) return;
+    (supabase as any).from('client_documents')
+      .select('id, file_name')
+      .eq('client_id', clientId)
+      .eq('doc_type', 'passport')
+      .limit(1)
+      .then(({ data }: any) => { if (data?.[0]) setExisting(data[0].file_name); });
+  }, [clientId]);
+
+  async function handleUpload(f: File) {
+    if (!clientId) { setFile(f); return; } // will upload after client created
+    setUploading(true);
+    const ext = f.name.split('.').pop() ?? 'pdf';
+    const path = `passports/${clientId}/passport-${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from('client-documents').upload(path, f, { upsert: true });
+    if (!error) {
+      await (supabase as any).from('client_documents').upsert({
+        client_id: clientId, doc_type: 'passport', storage_path: path, file_name: f.name,
+      }, { onConflict: 'client_id,doc_type' });
+      setExisting(f.name);
+      setUploaded(true);
+      toast.success('Passport document saved');
+    } else {
+      toast.error('Upload failed: ' + error.message);
+    }
+    setUploading(false);
+  }
+
+  return (
+    <div>
+      <Label className="text-xs">
+        Passport / ID Document <span className="text-slate-400">(photo or scan)</span>
+      </Label>
+      <div
+        className={`mt-1 border-2 border-dashed rounded-lg p-4 flex items-center gap-3 cursor-pointer transition-colors ${
+          uploaded || existing
+            ? 'border-green-400 bg-green-50 dark:bg-green-900/10'
+            : 'border-slate-200 dark:border-slate-600 hover:border-blue-400'
+        }`}
+        onClick={() => inputRef.current?.click()}
+      >
+        {uploaded || existing ? (
+          <>
+            <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-green-700 dark:text-green-400 truncate">
+                {existing ?? file?.name ?? 'Document uploaded'}
+              </p>
+              <p className="text-xs text-slate-500">Click to replace</p>
+            </div>
+          </>
+        ) : file ? (
+          <>
+            <FileText className="w-5 h-5 text-blue-500 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300 truncate">{file.name}</p>
+              <p className="text-xs text-slate-500">{clientId ? 'Will upload on save' : 'Ready — will upload after client is created'}</p>
+            </div>
+          </>
+        ) : (
+          <>
+            <Upload className="w-5 h-5 text-slate-400 shrink-0" />
+            <div>
+              <p className="text-sm text-slate-600 dark:text-slate-400">Upload passport or ID</p>
+              <p className="text-xs text-slate-400">JPG, PNG or PDF · max 10 MB</p>
+            </div>
+          </>
+        )}
+        {uploading && <Loader2 className="w-4 h-4 text-blue-500 animate-spin shrink-0" />}
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*,.pdf"
+        className="hidden"
+        onChange={e => {
+          const f = e.target.files?.[0];
+          if (!f) return;
+          if (f.size > 10 * 1024 * 1024) { toast.error('File too large — max 10 MB'); return; }
+          handleUpload(f);
+          e.target.value = '';
+        }}
+      />
     </div>
   );
 }
@@ -339,6 +435,7 @@ export function ClientManagement() {
       email:            client.email ?? '',
       phone:            client.phone ?? '',
       address:          client.address ?? '',
+      delivery_address: (client as any).delivery_address ?? '',
       country:          client.country ?? '',
       nationality:      client.nationality ?? '',
       passport_number:  client.passport_number ?? '',
@@ -357,8 +454,9 @@ export function ClientManagement() {
       full_name:       form.full_name.trim(),
       email:           form.email || null,
       phone:           form.phone || null,
-      address:         form.address || null,
-      country:         form.country || null,
+      address:          form.address || null,
+      delivery_address: form.delivery_address || null,
+      country:          form.country || null,
       nationality:     form.nationality || null,
       passport_number: form.passport_number || null,
       passport_expiry: form.passport_expiry || null,
@@ -548,13 +646,12 @@ export function ClientManagement() {
 
             {[
               { key: 'full_name',       label: 'Full Name *' },
-              { key: 'email',           label: 'Email',            type: 'email' },
+              { key: 'email',           label: 'Email',           type: 'email' },
               { key: 'phone',           label: 'Phone' },
-              { key: 'country',         label: 'Country' },
+              { key: 'country',         label: 'Country of Origin' },
               { key: 'nationality',     label: 'Nationality' },
               { key: 'passport_number', label: 'Passport Number' },
-              { key: 'passport_expiry', label: 'Passport Expiry',  type: 'date' },
-              { key: 'address',         label: 'Address' },
+              { key: 'passport_expiry', label: 'Passport Expiry', type: 'date' },
             ].map(f => (
               <div key={f.key}>
                 <Label className="text-xs">{f.label}</Label>
@@ -566,9 +663,23 @@ export function ClientManagement() {
                 />
               </div>
             ))}
+
+            {/* Address fields */}
+            <div>
+              <Label className="text-xs">Home / Billing Address</Label>
+              <Textarea value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} rows={2} className="mt-1 resize-none" placeholder="Street, City, Postal Code" />
+            </div>
+            <div>
+              <Label className="text-xs">Delivery Address <span className="text-slate-400">(where trophies will be shipped)</span></Label>
+              <Textarea value={form.delivery_address} onChange={e => setForm(p => ({ ...p, delivery_address: e.target.value }))} rows={2} className="mt-1 resize-none" placeholder="If different from billing address" />
+            </div>
+
+            {/* Passport document upload — only for new clients or existing without one */}
+            <PassportUploadSection clientId={selected?.id ?? null} />
+
             <div>
               <Label className="text-xs">Notes</Label>
-              <Textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} rows={3} className="mt-1" />
+              <Textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} rows={2} className="mt-1 resize-none" />
             </div>
           </div>
           <DialogFooter>
