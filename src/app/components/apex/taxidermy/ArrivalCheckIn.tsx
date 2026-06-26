@@ -365,7 +365,8 @@ export function ArrivalCheckIn({ onComplete }: ArrivalCheckInProps) {
             hunt_id: huntId,
             doc_type: 'job_card',
             title: `${trophy.species} - ${trophy.mountType} (Tag: ${trophy.tagNumber})`,
-            status: 'complete',
+            status: 'pending',
+            current_department: 'receiving',
             form_data: {
               species: trophy.species,
               mount_type: trophy.mountType,

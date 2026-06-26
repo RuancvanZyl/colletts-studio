@@ -337,8 +337,13 @@ function ReceivingForm({ huntId, onBack }: { huntId: string; onBack: () => void 
           if (!error) photoPaths.push(path);
         }
 
+        // Determine first processing stage after receiving
+        const { getNextDepartment } = await import('../../../../lib/pipeline');
+        const nextDept = getNextDepartment(line.mountType, 'receiving') ?? line.department;
+
         await (supabase as any).from('hunt_documents').update({
           status: 'in_progress',
+          current_department: nextDept,
           form_data: {
             species: line.species,
             mount_type: line.mountType,
@@ -353,6 +358,9 @@ function ReceivingForm({ huntId, onBack }: { huntId: string; onBack: () => void 
             received_by: receivedBy,
             received_at: new Date().toISOString(),
             intake_photo_paths: photoPaths,
+            stage_history: [
+              { dept: 'receiving', completedBy: receivedBy, completedAt: new Date().toISOString() },
+            ],
           },
         }).eq('id', line.docId);
       }

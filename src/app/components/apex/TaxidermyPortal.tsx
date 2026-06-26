@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { MyTasks } from './taxidermy/MyTasks';
 import { WorkshopDashboard } from './taxidermy/WorkshopDashboard';
 import { SummarySheet } from './taxidermy/SummarySheet';
 import { PartScanningStation } from './taxidermy/PartScanningStation';
@@ -23,13 +24,14 @@ import {
   LayoutDashboard, Scan, ClipboardCheck, Droplet, Skull,
   Warehouse, Scissors, Paintbrush, CheckCircle2, Package,
   List, Settings, Search, LogOut, Menu, X, Moon, Sun,
-  Users, FileText, ChevronRight, BarChart3, ClipboardList,
+  Users, FileText, ChevronRight, BarChart3, ClipboardList, ListTodo,
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 
 type TaxidermyView =
   | 'summary'
   | 'dashboard'
+  | 'tasks'
   | 'scan'
   | 'arrival'
   | 'receiving'
@@ -65,11 +67,13 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
   const [currentView, setCurrentView] = useState<TaxidermyView>('summary');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [navClientId, setNavClientId] = useState<string | undefined>(undefined);
   const { theme, toggleTheme } = useTheme();
   const { profile } = useAuth();
 
-  const navigate = (view: string) => {
+  const navigate = (view: string, clientId?: string) => {
     setCurrentView(view as TaxidermyView);
+    setNavClientId(clientId);
     setSidebarOpen(false);
   };
 
@@ -82,7 +86,8 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     {
       heading: 'Overview',
       items: [
-        { view: 'summary',   icon: BarChart3,      label: 'Summary' },
+        { view: 'tasks',     icon: ListTodo,        label: 'My Tasks' },
+        { view: 'summary',   icon: BarChart3,       label: 'Summary' },
         { view: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
       ],
     },
@@ -131,9 +136,10 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
 
   const renderView = () => {
     switch (currentView) {
+      case 'tasks':           return <MyTasks />;
       case 'summary':         return <SummarySheet onNavigate={navigate} />;
       case 'dashboard':       return <WorkshopDashboard onNavigate={navigate} />;
-      case 'scan':            return <PartScanningStation />;
+      case 'scan':            return <PartScanningStation onNavigate={navigate} />;
       case 'arrival':         return <ArrivalCheckIn onComplete={() => navigate('receiving')} />;
       case 'receiving':       return <ReceivingSheet onNavigate={navigate} />;
       case 'skin-processing': return <SkinProcessing />;
@@ -144,7 +150,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'quality':         return <QualityInspection />;
       case 'packing':         return <PackingShipping />;
       case 'inventory':       return <InventoryView />;
-      case 'clients':         return <ClientManagement />;
+      case 'clients':         return <ClientManagement initialClientId={navClientId} />;
       case 'invoices':        return <InvoiceManagement />;
       case 'admin':           return <AdminConfiguration />;
       default:                return <SummarySheet onNavigate={navigate} />;
