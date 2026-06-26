@@ -363,7 +363,8 @@ export function ClientManagement() {
       passport_number: form.passport_number || null,
       passport_expiry: form.passport_expiry || null,
       notes:           form.notes || null,
-      client_type:     form.client_type,
+      // client_type is set at registration only — never updated after creation
+      ...(!selected && { client_type: form.client_type }),
     };
     const result = selected
       ? await updateClient(selected.id, payload)
@@ -512,26 +513,37 @@ export function ClientManagement() {
             <DialogTitle>{selected ? 'Edit Client' : 'New Client'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            {/* Client type toggle */}
+            {/* Client type — set at registration only, locked after */}
             <div>
               <Label className="text-xs">Client Type</Label>
-              <div className="flex gap-2 mt-1">
-                {(['local', 'export'] as const).map(ct => (
-                  <button
-                    key={ct}
-                    onClick={() => setForm(p => ({ ...p, client_type: ct }))}
-                    className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                      form.client_type === ct
-                        ? ct === 'local'
-                          ? 'bg-green-600 text-white border-green-600'
-                          : 'bg-[#0073ea] text-white border-[#0073ea]'
-                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    {ct === 'local' ? '🇿🇦 Local' : '✈️ Export'}
-                  </button>
-                ))}
-              </div>
+              {selected ? (
+                <div className={`mt-1 px-3 py-2 rounded-lg text-sm font-medium border inline-flex items-center gap-1 ${
+                  form.client_type === 'local'
+                    ? 'bg-green-50 text-green-700 border-green-200'
+                    : 'bg-blue-50 text-blue-700 border-blue-200'
+                }`}>
+                  {form.client_type === 'local' ? '🇿🇦 Local' : '✈️ Export'}
+                  <span className="ml-2 text-xs text-slate-400 font-normal">(set at registration — cannot be changed)</span>
+                </div>
+              ) : (
+                <div className="flex gap-2 mt-1">
+                  {(['local', 'export'] as const).map(ct => (
+                    <button
+                      key={ct}
+                      onClick={() => setForm(p => ({ ...p, client_type: ct }))}
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                        form.client_type === ct
+                          ? ct === 'local'
+                            ? 'bg-green-600 text-white border-green-600'
+                            : 'bg-[#0073ea] text-white border-[#0073ea]'
+                          : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      {ct === 'local' ? '🇿🇦 Local' : '✈️ Export'}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {[

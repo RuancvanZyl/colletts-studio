@@ -1,4 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { getPartsForTrophy, makePartTag, type TrophyPart } from '../../../../lib/trophyParts';
+import { TrophyLabels } from './TrophyLabels';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
@@ -22,13 +24,12 @@ interface ArrivalCheckInProps {
 }
 
 const SPECIES_LIST = [
-  'Baboon','Blesbok','Buffalo','Bushbuck','Bushpig','Caracal','Civit','Crocodile','Duiker',
-  'Eland','Elephant','Fallow Deer','Gemsbok','Genet Cat','Giraffe','Grysbok','Hartebeest',
-  'Hippo','Hyena','Impala','Jackal','Klipspringer','Kudu','Leopard','Lion','Nyala','Oribi',
-  'Reedbuck (Common)','Reedbuck (Mountain)','Reedbuck (Vaal)','Roan','Sable','Serval',
-  'Springbok','Springhare','Steenbok','Tsessebe','Warthog','Waterbuck','Wild Cat',
-  'Wildebeest (Blue)','Wildebeest (Black)','Wildebeest (Golden)','Zebra','Zebra (Cape)',
-  'Vervet Monkey','Other',
+  'Baboon','Blesbok','Bontebok','Buffalo','Bushbuck','Bushpig','Caracal','Civet','Crocodile',
+  'Duiker','Eland','Elephant','Fallow Deer','Gemsbok','Genet Cat','Giraffe','Grysbok',
+  'Hartebeest','Hippo','Hyena','Impala','Jackal','Klipspringer','Kudu','Lechwe','Leopard',
+  'Lion','Nguni','Nyala','Oribi','Ostrich','Reedbuck (Common)','Reedbuck (Mountain)',
+  'Reedbuck (Vaal)','Sable','Serval','Springbok','Steenbok','Tsessebe','Warthog','Waterbuck',
+  'Wild Cat','Wildebeest (Black)','Wildebeest (Blue)','Vervet Monkey','Zebra','Other',
 ];
 
 const MOUNT_TYPES = [
@@ -38,24 +39,28 @@ const MOUNT_TYPES = [
 
 const CONDITIONS = ['salted','frozen','fresh','wet_salted','cape_only','other'];
 
-const PRICE_DATA: Record<string, Record<string, number>> = {
+// 2026 Export USD prices — from SA Price List 2026.xlsx (Export Prices folder)
+const EXPORT_PRICE_DATA: Record<string, Record<string, number>> = {
   'Baboon':              { shoulder: 695,  offset_shoulder: 800,  pedestal: 830,  full_mount: 1500,  euro_skull: 210, bleach_only: 130 },
   'Blesbok':             { shoulder: 755,  offset_shoulder: 870,  pedestal: 900,  full_mount: 2540,  euro_skull: 235, bleach_only: 130 },
   'Buffalo':             { shoulder: 1390, offset_shoulder: 1595, pedestal: 1665, full_mount: 0,     euro_skull: 395, bleach_only: 230 },
   'Bushbuck':            { shoulder: 695,  offset_shoulder: 800,  pedestal: 830,  full_mount: 1620,  euro_skull: 235, bleach_only: 130 },
   'Bushpig':             { shoulder: 695,  offset_shoulder: 800,  pedestal: 725,  full_mount: 1620,  euro_skull: 315, bleach_only: 200 },
-  'Caracal':             { shoulder: 1130, offset_shoulder: 0,    pedestal: 0,    full_mount: 0,     euro_skull: 175, bleach_only: 95  },
+  'Caracal':             { shoulder: 0,    offset_shoulder: 0,    pedestal: 0,    full_mount: 1130,  euro_skull: 175, bleach_only: 95  },
+  'Civet':               { shoulder: 0,    offset_shoulder: 0,    pedestal: 0,    full_mount: 925,   euro_skull: 175, bleach_only: 95  },
   'Duiker':              { shoulder: 555,  offset_shoulder: 640,  pedestal: 585,  full_mount: 1130,  euro_skull: 175, bleach_only: 95  },
   'Eland':               { shoulder: 1155, offset_shoulder: 1330, pedestal: 1390, full_mount: 13860, euro_skull: 355, bleach_only: 210 },
-  'Elephant':            { shoulder: 15750,offset_shoulder: 0,    pedestal: 0,    full_mount: 0,     euro_skull: 925, bleach_only: 0   },
+  'Elephant':            { shoulder: 15750,offset_shoulder: 0,    pedestal: 0,    full_mount: 0,     euro_skull: 0,   bleach_only: 925 },
   'Fallow Deer':         { shoulder: 695,  offset_shoulder: 800,  pedestal: 830,  full_mount: 2890,  euro_skull: 235, bleach_only: 130 },
   'Gemsbok':             { shoulder: 1040, offset_shoulder: 1195, pedestal: 1250, full_mount: 3700,  euro_skull: 335, bleach_only: 210 },
+  'Genet Cat':           { shoulder: 0,    offset_shoulder: 0,    pedestal: 0,    full_mount: 870,   euro_skull: 160, bleach_only: 95  },
   'Giraffe':             { shoulder: 4850, offset_shoulder: 5580, pedestal: 5820, full_mount: 0,     euro_skull: 415, bleach_only: 255 },
   'Grysbok':             { shoulder: 440,  offset_shoulder: 505,  pedestal: 530,  full_mount: 750,   euro_skull: 160, bleach_only: 95  },
   'Hartebeest':          { shoulder: 925,  offset_shoulder: 1060, pedestal: 1110, full_mount: 3696,  euro_skull: 310, bleach_only: 185 },
   'Hippo':               { shoulder: 4465, offset_shoulder: 0,    pedestal: 0,    full_mount: 0,     euro_skull: 750, bleach_only: 390 },
   'Hyena':               { shoulder: 695,  offset_shoulder: 800,  pedestal: 830,  full_mount: 2890,  euro_skull: 290, bleach_only: 185 },
   'Impala':              { shoulder: 750,  offset_shoulder: 865,  pedestal: 900,  full_mount: 1620,  euro_skull: 235, bleach_only: 130 },
+  'Bontebok':            { shoulder: 750,  offset_shoulder: 865,  pedestal: 900,  full_mount: 1620,  euro_skull: 235, bleach_only: 130 },
   'Jackal':              { shoulder: 555,  offset_shoulder: 640,  pedestal: 665,  full_mount: 1075,  euro_skull: 175, bleach_only: 95  },
   'Klipspringer':        { shoulder: 555,  offset_shoulder: 640,  pedestal: 665,  full_mount: 1130,  euro_skull: 175, bleach_only: 95  },
   'Kudu':                { shoulder: 1040, offset_shoulder: 1195, pedestal: 1250, full_mount: 5200,  euro_skull: 290, bleach_only: 185 },
@@ -67,19 +72,71 @@ const PRICE_DATA: Record<string, Record<string, number>> = {
   'Reedbuck (Mountain)': { shoulder: 635,  offset_shoulder: 730,  pedestal: 765,  full_mount: 1100,  euro_skull: 175, bleach_only: 95  },
   'Reedbuck (Vaal)':     { shoulder: 580,  offset_shoulder: 665,  pedestal: 695,  full_mount: 980,   euro_skull: 175, bleach_only: 95  },
   'Sable':               { shoulder: 1040, offset_shoulder: 1195, pedestal: 1250, full_mount: 4390,  euro_skull: 310, bleach_only: 185 },
+  'Serval':              { shoulder: 0,    offset_shoulder: 0,    pedestal: 0,    full_mount: 1215,  euro_skull: 175, bleach_only: 95  },
   'Springbok':           { shoulder: 695,  offset_shoulder: 800,  pedestal: 830,  full_mount: 2020,  euro_skull: 235, bleach_only: 130 },
   'Steenbok':            { shoulder: 555,  offset_shoulder: 640,  pedestal: 585,  full_mount: 1130,  euro_skull: 175, bleach_only: 95  },
   'Tsessebe':            { shoulder: 810,  offset_shoulder: 930,  pedestal: 970,  full_mount: 2080,  euro_skull: 290, bleach_only: 185 },
   'Warthog':             { shoulder: 695,  offset_shoulder: 800,  pedestal: 830,  full_mount: 1620,  euro_skull: 315, bleach_only: 200 },
   'Waterbuck':           { shoulder: 1040, offset_shoulder: 1195, pedestal: 1250, full_mount: 4045,  euro_skull: 290, bleach_only: 185 },
-  'Wildebeest (Blue)':   { shoulder: 980,  offset_shoulder: 1130, pedestal: 1180, full_mount: 4045,  euro_skull: 310, bleach_only: 185 },
+  'Wild Cat':            { shoulder: 0,    offset_shoulder: 0,    pedestal: 0,    full_mount: 780,   euro_skull: 160, bleach_only: 95  },
   'Wildebeest (Black)':  { shoulder: 810,  offset_shoulder: 930,  pedestal: 970,  full_mount: 3240,  euro_skull: 290, bleach_only: 185 },
+  'Wildebeest (Blue)':   { shoulder: 980,  offset_shoulder: 1130, pedestal: 1180, full_mount: 4045,  euro_skull: 310, bleach_only: 185 },
+  'Vervet Monkey':       { shoulder: 0,    offset_shoulder: 0,    pedestal: 0,    full_mount: 665,   euro_skull: 160, bleach_only: 95  },
   'Zebra':               { shoulder: 1100, offset_shoulder: 1265, pedestal: 1315, full_mount: 4390,  euro_skull: 355, bleach_only: 210 },
+};
+
+// 2026 Local ZAR prices (VAT exclusive) — from Colletts_Local_Pricelists_2025-2029_FINAL2.xlsx
+const LOCAL_PRICE_DATA: Record<string, Record<string, number>> = {
+  'Baboon':              { shoulder: 4585,  pedestal: 5566,  full_mount: 11485, euro_skull: 1880, bleach_only: 1547 },
+  'Blesbok':             { shoulder: 6595,  pedestal: 8004,  full_mount: 19489, euro_skull: 1891, bleach_only: 1346 },
+  'Buffalo':             { shoulder: 14079, pedestal: 17075, full_mount: 104497,euro_skull: 4033, bleach_only: 3396 },
+  'Bushbuck':            { shoulder: 6595,  pedestal: 8004,  full_mount: 19871, euro_skull: 1681, bleach_only: 1346 },
+  'Bushpig':             { shoulder: 6295,  pedestal: 7647,  full_mount: 17810, euro_skull: 2389, bleach_only: 1577 },
+  'Caracal':             { shoulder: 0,     pedestal: 0,     full_mount: 12128, euro_skull: 1413, bleach_only: 1213 },
+  'Civet':               { shoulder: 0,     pedestal: 0,     full_mount: 11472, euro_skull: 1413, bleach_only: 1213 },
+  'Crocodile':           { shoulder: 0,     pedestal: 0,     full_mount: 1844,  euro_skull: 4627, bleach_only: 3924 },
+  'Duiker':              { shoulder: 4886,  pedestal: 6059,  full_mount: 11848, euro_skull: 1413, bleach_only: 1110 },
+  'Eland':               { shoulder: 11804, pedestal: 15748, full_mount: 104497,euro_skull: 3015, bleach_only: 2699 },
+  'Elephant':            { shoulder: 114484,pedestal: 138848,full_mount: 809832,euro_skull: 0,    bleach_only: 0    },
+  'Fallow Deer':         { shoulder: 6595,  pedestal: 8004,  full_mount: 19476, euro_skull: 1891, bleach_only: 1552 },
+  'Gemsbok':             { shoulder: 8547,  pedestal: 10369, full_mount: 41100, euro_skull: 2498, bleach_only: 2231 },
+  'Genet Cat':           { shoulder: 0,     pedestal: 0,     full_mount: 8538,  euro_skull: 1256, bleach_only: 1110 },
+  'Giraffe':             { shoulder: 25179, pedestal: 30537, full_mount: 130177,euro_skull: 4766, bleach_only: 4191 },
+  'Grysbok':             { shoulder: 4678,  pedestal: 5670,  full_mount: 10830, euro_skull: 1413, bleach_only: 1110 },
+  'Hartebeest':          { shoulder: 7866,  pedestal: 9539,  full_mount: 36177, euro_skull: 2498, bleach_only: 1547 },
+  'Hippo':               { shoulder: 33206, pedestal: 40276, full_mount: 185109,euro_skull: 8526, bleach_only: 5525 },
+  'Hyena':               { shoulder: 10314, pedestal: 12516, full_mount: 26561, euro_skull: 2881, bleach_only: 2244 },
+  'Impala':              { shoulder: 6595,  pedestal: 8004,  full_mount: 19489, euro_skull: 1891, bleach_only: 1552 },
+  'Bontebok':            { shoulder: 6595,  pedestal: 8004,  full_mount: 19489, euro_skull: 1891, bleach_only: 1552 },
+  'Jackal':              { shoulder: 4585,  pedestal: 5566,  full_mount: 12625, euro_skull: 1413, bleach_only: 1110 },
+  'Klipspringer':        { shoulder: 4886,  pedestal: 5937,  full_mount: 11837, euro_skull: 1413, bleach_only: 1110 },
+  'Kudu':                { shoulder: 10614, pedestal: 12874, full_mount: 48668, euro_skull: 2498, bleach_only: 2231 },
+  'Lechwe':              { shoulder: 8547,  pedestal: 10369, full_mount: 36177, euro_skull: 2498, bleach_only: 1547 },
+  'Leopard':             { shoulder: 12370, pedestal: 15009, full_mount: 40464, euro_skull: 3311, bleach_only: 2881 },
+  'Lion':                { shoulder: 17510, pedestal: 21235, full_mount: 58830, euro_skull: 4712, bleach_only: 4184 },
+  'Nyala':               { shoulder: 8547,  pedestal: 10369, full_mount: 35607, euro_skull: 2498, bleach_only: 1547 },
+  'Oribi':               { shoulder: 5486,  pedestal: 6658,  full_mount: 13098, euro_skull: 1413, bleach_only: 1110 },
+  'Ostrich':             { shoulder: 5532,  pedestal: 6713,  full_mount: 31617, euro_skull: 1413, bleach_only: 609  },
+  'Reedbuck (Common)':   { shoulder: 7473,  pedestal: 9071,  full_mount: 32763, euro_skull: 1891, bleach_only: 1547 },
+  'Reedbuck (Mountain)': { shoulder: 5486,  pedestal: 6658,  full_mount: 13098, euro_skull: 1565, bleach_only: 1346 },
+  'Reedbuck (Vaal)':     { shoulder: 5486,  pedestal: 6658,  full_mount: 13098, euro_skull: 1413, bleach_only: 1110 },
+  'Sable':               { shoulder: 10614, pedestal: 12874, full_mount: 48668, euro_skull: 2881, bleach_only: 2578 },
+  'Serval':              { shoulder: 0,     pedestal: 0,     full_mount: 12874, euro_skull: 1413, bleach_only: 1110 },
+  'Springbok':           { shoulder: 5486,  pedestal: 6658,  full_mount: 14415, euro_skull: 1680, bleach_only: 1110 },
+  'Steenbok':            { shoulder: 4886,  pedestal: 5937,  full_mount: 11837, euro_skull: 1413, bleach_only: 1110 },
+  'Tsessebe':            { shoulder: 6849,  pedestal: 8314,  full_mount: 19786, euro_skull: 2498, bleach_only: 1547 },
+  'Warthog':             { shoulder: 5775,  pedestal: 7005,  full_mount: 15051, euro_skull: 2498, bleach_only: 1547 },
+  'Waterbuck':           { shoulder: 9009,  pedestal: 10927, full_mount: 41100, euro_skull: 2498, bleach_only: 2226 },
+  'Wild Cat':            { shoulder: 0,     pedestal: 0,     full_mount: 7951,  euro_skull: 1413, bleach_only: 1110 },
+  'Wildebeest (Black)':  { shoulder: 8547,  pedestal: 10369, full_mount: 36183, euro_skull: 2498, bleach_only: 2226 },
+  'Wildebeest (Blue)':   { shoulder: 9009,  pedestal: 10927, full_mount: 41100, euro_skull: 2615, bleach_only: 2226 },
+  'Vervet Monkey':       { shoulder: 0,     pedestal: 0,     full_mount: 7951,  euro_skull: 1413, bleach_only: 1110 },
+  'Zebra':               { shoulder: 8709,  pedestal: 10563, full_mount: 40731, euro_skull: 2692, bleach_only: 2226 },
 };
 
 const MOUNT_PRICE_KEY: Record<string, string> = {
   'Shoulder Mount': 'shoulder',
-  'Offset Shoulder Mount': 'offset_shoulder',
+  'Offset Shoulder Mount': 'shoulder',
   'Pedestal Mount': 'pedestal',
   'Full Mount': 'full_mount',
   'Euro Skull': 'euro_skull',
@@ -93,10 +150,11 @@ const SPECIES_EMOJI: Record<string, string> = {
 };
 const speciesEmoji = (s: string) => SPECIES_EMOJI[s] ?? '🎯';
 
-function getAutoPrice(species: string, mountType: string): number | null {
+function getAutoPrice(species: string, mountType: string, clientType: string): number | null {
   const priceKey = MOUNT_PRICE_KEY[mountType];
   if (!priceKey) return null;
-  const row = PRICE_DATA[species];
+  const table = clientType === 'local' ? LOCAL_PRICE_DATA : EXPORT_PRICE_DATA;
+  const row = table[species];
   if (!row) return null;
   const val = row[priceKey];
   return val && val > 0 ? val : null;
@@ -114,6 +172,7 @@ interface Trophy {
   priceOverride: string;
   photos: File[];
   photoPreviews: string[];
+  parts: TrophyPart[];  // physical parts for this trophy
 }
 
 function emptyTrophy(seq: number): Trophy {
@@ -129,6 +188,7 @@ function emptyTrophy(seq: number): Trophy {
     priceOverride: '',
     photos: [],
     photoPreviews: [],
+    parts: [],
   };
 }
 
@@ -139,6 +199,9 @@ export function ArrivalCheckIn({ onComplete }: ArrivalCheckInProps) {
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [showLabels, setShowLabels] = useState(false);
+  const [savedClientNumber, setSavedClientNumber] = useState('');
+  const [savedHuntYear, setSavedHuntYear] = useState(new Date().getFullYear());
 
   // Step 1 — client
   const [clientMode, setClientMode] = useState<'search' | 'new'>('search');
@@ -154,18 +217,50 @@ export function ArrivalCheckIn({ onComplete }: ArrivalCheckInProps) {
 
   const selectedClient = clients.find(c => c.id === selectedClientId);
   const clientType = clientMode === 'search' ? (selectedClient as any)?.client_type ?? 'export' : newClient.client_type;
+  const clientNumber = clientMode === 'search' ? (selectedClient as any)?.client_number ?? '' : '';
+  const clientName = clientMode === 'search' ? (selectedClient?.full_name ?? '') : newClient.full_name;
   const currency = clientType === 'local' ? 'ZAR' : 'USD';
+
+  // Recalculate prices when client type switches between local/export
+  useEffect(() => {
+    setTrophies(prev => prev.map(t => {
+      if (!t.species || !t.mountType || t.priceOverride) return t;
+      const auto = getAutoPrice(t.species, t.mountType, clientType);
+      return { ...t, priceUsd: auto };
+    }));
+  }, [clientType]);
 
   function updateTrophy(id: string, patch: Partial<Trophy>) {
     setTrophies(prev => prev.map(t => {
       if (t.id !== id) return t;
       const updated = { ...t, ...patch };
       if (patch.species !== undefined || patch.mountType !== undefined) {
-        const auto = getAutoPrice(updated.species, updated.mountType);
+        const auto = getAutoPrice(updated.species, updated.mountType, clientType);
         updated.priceUsd = auto;
         if (auto !== null) updated.priceOverride = '';
+        // Recalculate parts whenever species or mount type changes
+        if (updated.species && updated.mountType) {
+          updated.parts = getPartsForTrophy(updated.species, updated.mountType);
+        }
       }
       return updated;
+    }));
+  }
+
+  function togglePart(trophyId: string, partCode: string) {
+    setTrophies(prev => prev.map(t => {
+      if (t.id !== trophyId) return t;
+      const exists = t.parts.some(p => p.code === partCode);
+      if (exists) {
+        // Only allow removing optional parts
+        return { ...t, parts: t.parts.filter(p => p.code !== partCode || p.required) };
+      } else {
+        // Add back an optional part (re-derive from full list and pick the one matching)
+        const allParts = getPartsForTrophy(t.species, t.mountType);
+        const part = allParts.find(p => p.code === partCode);
+        if (!part) return t;
+        return { ...t, parts: [...t.parts, part] };
+      }
     }));
   }
 
@@ -250,6 +345,19 @@ export function ArrivalCheckIn({ onComplete }: ArrivalCheckInProps) {
         }
 
         const priceUsd = trophy.priceOverride ? parseFloat(trophy.priceOverride) : trophy.priceUsd;
+        const trophyIdx = trophies.indexOf(trophy) + 1;
+        // Generate part tags using client number (may be empty for new clients — will be assigned by DB trigger)
+        const resolvedClientNum = clientMode === 'search'
+          ? ((selectedClient as any)?.client_number ?? `T${trophyIdx}`)
+          : 'NEW'; // will be updated after we know the assigned number
+
+        const partTags = trophy.parts.map(p => ({
+          code: p.code,
+          label: p.label,
+          required: p.required,
+          leather_option: p.leatherOption,
+          tag: makePartTag(resolvedClientNum, trophy.species, trophyIdx, p.code),
+        }));
 
         await (supabase as any)
           .from('hunt_documents')
@@ -267,9 +375,20 @@ export function ArrivalCheckIn({ onComplete }: ArrivalCheckInProps) {
               instructions: trophy.instructions,
               price_usd: priceUsd,
               reference_photo_paths: photoPaths,
+              parts: partTags,
             },
           });
       }
+
+      // Capture client number for label printing
+      let finalClientNumber = clientNumber;
+      if (clientMode === 'new' && clientId) {
+        const { data: newClientData } = await (supabase as any)
+          .from('clients').select('client_number').eq('id', clientId).single();
+        finalClientNumber = newClientData?.client_number ?? 'NEW';
+      }
+      setSavedClientNumber(finalClientNumber);
+      setSavedHuntYear(new Date().getFullYear());
 
       setDone(true);
       toast.success(`Check-in complete — ${trophies.length} trophy job card${trophies.length > 1 ? 's' : ''} created`);
@@ -285,18 +404,46 @@ export function ArrivalCheckIn({ onComplete }: ArrivalCheckInProps) {
   );
 
   if (done) {
+    const labelTrophies = trophies.map((t, idx) => ({
+      trophyIndex: idx + 1,
+      species: t.species,
+      mountType: t.mountType,
+      tagNumber: t.tagNumber,
+      parts: t.parts,
+    }));
+
     return (
-      <div className="flex flex-col items-center justify-center py-24 gap-6">
-        <CheckCircle2 className="w-16 h-16 text-green-500" />
-        <h2 className="text-2xl font-bold text-white">Check-in Complete</h2>
-        <p className="text-slate-400">{trophies.length} job card{trophies.length > 1 ? 's' : ''} created successfully.</p>
-        <div className="flex gap-3">
-          <Button variant="outline" onClick={onComplete}>Back to Dashboard</Button>
-          <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => { setDone(false); setStep(1); setTrophies([emptyTrophy(1)]); setSelectedClientId(null); setClientSearch(''); setClientMode('search'); }}>
-            New Check-in
-          </Button>
+      <>
+        {showLabels && (
+          <TrophyLabels
+            clientNumber={savedClientNumber || (clientType === 'local' ? 'L-???' : 'E-???')}
+            clientName={clientName}
+            huntYear={savedHuntYear}
+            trophies={labelTrophies}
+            onClose={() => setShowLabels(false)}
+          />
+        )}
+        <div className="flex flex-col items-center justify-center py-24 gap-6">
+          <CheckCircle2 className="w-16 h-16 text-green-500" />
+          <h2 className="text-2xl font-bold text-white">Check-in Complete</h2>
+          <p className="text-slate-400">{trophies.length} trophy{trophies.length > 1 ? ' trophies' : ''} · {trophies.reduce((n, t) => n + t.parts.length, 0)} parts tagged</p>
+          {savedClientNumber && (
+            <div className="bg-slate-800 rounded-xl px-6 py-3 text-center">
+              <p className="text-xs text-slate-400 mb-1">Client Number</p>
+              <p className="text-3xl font-mono font-bold text-white tracking-widest">{savedClientNumber}</p>
+            </div>
+          )}
+          <div className="flex gap-3 flex-wrap justify-center">
+            <Button className="bg-blue-600 hover:bg-blue-700 gap-2" onClick={() => setShowLabels(true)}>
+              <Upload className="w-4 h-4" /> Print QR Labels
+            </Button>
+            <Button variant="outline" onClick={onComplete}>Go to Receiving</Button>
+            <Button variant="ghost" onClick={() => { setDone(false); setStep(1); setTrophies([emptyTrophy(1)]); setSelectedClientId(null); setClientSearch(''); setClientMode('search'); }}>
+              New Check-in
+            </Button>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
@@ -415,7 +562,7 @@ export function ArrivalCheckIn({ onComplete }: ArrivalCheckInProps) {
             </div>
 
             {trophies.map((t, idx) => {
-              const autoPrice = getAutoPrice(t.species, t.mountType);
+              const autoPrice = getAutoPrice(t.species, t.mountType, clientType);
               const displayPrice = t.priceOverride ? parseFloat(t.priceOverride) : autoPrice;
               const specFilter = speciesSearch[t.id] ?? t.species;
               const filteredSpecies = SPECIES_LIST.filter(s => s.toLowerCase().includes((speciesSearch[t.id] ?? '').toLowerCase()));
@@ -508,6 +655,37 @@ export function ArrivalCheckIn({ onComplete }: ArrivalCheckInProps) {
                       </div>
                     </div>
                   </div>
+
+                  {/* Trophy Parts */}
+                  {t.parts.length > 0 && (
+                    <div className="space-y-1.5">
+                      <Label className="text-slate-400 text-xs">Trophy Parts ({t.parts.length})</Label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {getPartsForTrophy(t.species, t.mountType).map(p => {
+                          const active = t.parts.some(tp => tp.code === p.code);
+                          return (
+                            <button
+                              key={p.code}
+                              onClick={() => !p.required && togglePart(t.id, p.code)}
+                              title={p.description}
+                              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                                active
+                                  ? p.leatherOption && active
+                                    ? 'bg-amber-600 text-white border-amber-600'
+                                    : 'bg-green-700 text-white border-green-600'
+                                  : 'border-slate-600 text-slate-500 line-through opacity-50'
+                              } ${p.required ? 'cursor-default' : 'cursor-pointer hover:opacity-80'}`}
+                            >
+                              {p.label}
+                              {p.leatherOption && active && <span className="ml-1 text-amber-200 text-[10px]">leather</span>}
+                              {p.required && <span className="ml-1 text-[10px] opacity-60">req</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="text-slate-500 text-[11px]">Tap optional parts to include/exclude. Amber = leather work available.</p>
+                    </div>
+                  )}
 
                   {/* Instructions */}
                   <div className="space-y-1">

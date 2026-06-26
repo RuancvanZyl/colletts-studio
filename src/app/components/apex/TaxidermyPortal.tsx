@@ -3,6 +3,7 @@ import { WorkshopDashboard } from './taxidermy/WorkshopDashboard';
 import { SummarySheet } from './taxidermy/SummarySheet';
 import { PartScanningStation } from './taxidermy/PartScanningStation';
 import { ArrivalCheckIn } from './taxidermy/ArrivalCheckIn';
+import { ReceivingSheet } from './taxidermy/ReceivingSheet';
 import { SkinProcessing } from './taxidermy/SkinProcessing';
 import { SkullProcessing } from './taxidermy/SkullProcessing';
 import { StorageManagement } from './taxidermy/StorageManagement';
@@ -22,7 +23,7 @@ import {
   LayoutDashboard, Scan, ClipboardCheck, Droplet, Skull,
   Warehouse, Scissors, Paintbrush, CheckCircle2, Package,
   List, Settings, Search, LogOut, Menu, X, Moon, Sun,
-  Users, FileText, ChevronRight, BarChart3,
+  Users, FileText, ChevronRight, BarChart3, ClipboardList,
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 
@@ -31,6 +32,7 @@ type TaxidermyView =
   | 'dashboard'
   | 'scan'
   | 'arrival'
+  | 'receiving'
   | 'skin-processing'
   | 'skull-processing'
   | 'storage'
@@ -87,8 +89,9 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     {
       heading: 'Intake',
       items: [
-        { view: 'scan',    icon: Scan,          label: 'Scan Parts' },
-        { view: 'arrival', icon: ClipboardCheck, label: 'Arrival Check-In' },
+        { view: 'scan',      icon: Scan,          label: 'Scan Parts' },
+        { view: 'arrival',   icon: ClipboardCheck, label: 'Arrival Check-In' },
+        { view: 'receiving', icon: ClipboardList,  label: 'Receiving Sheet' },
       ],
     },
     {
@@ -131,7 +134,8 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'summary':         return <SummarySheet onNavigate={navigate} />;
       case 'dashboard':       return <WorkshopDashboard onNavigate={navigate} />;
       case 'scan':            return <PartScanningStation />;
-      case 'arrival':         return <ArrivalCheckIn onComplete={() => navigate('summary')} />;
+      case 'arrival':         return <ArrivalCheckIn onComplete={() => navigate('receiving')} />;
+      case 'receiving':       return <ReceivingSheet onNavigate={navigate} />;
       case 'skin-processing': return <SkinProcessing />;
       case 'skull-processing':return <SkullProcessing />;
       case 'storage':         return <StorageManagement />;
