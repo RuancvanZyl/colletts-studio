@@ -4,7 +4,7 @@ import { Button } from '../../ui/button';
 import { Badge } from '../../ui/badge';
 import { toast } from 'sonner';
 import { supabase } from '../../../../lib/supabase';
-import { Scan, QrCode, Keyboard, CheckCircle2, X, AlertTriangle, ChevronRight, Tag } from 'lucide-react';
+import { Scan, QrCode, Keyboard, CheckCircle2, X, AlertTriangle, ChevronRight, Tag, FolderOpen } from 'lucide-react';
 
 const DEPT_COLORS: Record<string, string> = {
   cleaning_bleach: 'bg-purple-600',
@@ -35,6 +35,7 @@ const STATUS_NEXT: Record<string, string> = {
 interface ScannedDoc {
   docId: string;
   huntId: string;
+  clientId: string;
   clientName: string;
   clientNumber: string;
   species: string;
@@ -45,11 +46,11 @@ interface ScannedDoc {
   status: string;
   condition: string;
   instructions: string;
-  matchedPartTag?: string;   // which QR part tag was scanned
+  matchedPartTag?: string;
   matchedPartLabel?: string;
 }
 
-export function PartScanningStation() {
+export function PartScanningStation({ onNavigate }: { onNavigate?: (view: string, clientId?: string) => void } = {}) {
   const [scanInput, setScanInput] = useState('');
   const [scanMode, setScanMode] = useState<'qr' | 'manual'>('manual');
   const [scanning, setScanning] = useState(false);
@@ -101,6 +102,7 @@ export function PartScanningStation() {
               setScanned(prev => [...prev, {
                 docId:          doc.id,
                 huntId:         doc.hunt_id,
+                clientId:       client.id,
                 clientName:     client.full_name,
                 clientNumber:   client.client_number ?? '',
                 species:        fd.species ?? '',
@@ -174,6 +176,7 @@ export function PartScanningStation() {
       setScanned(prev => [...prev, {
         docId:            doc.id,
         huntId:           doc.hunt_id,
+        clientId:         hunt?.client_id ?? '',
         clientName:       client?.full_name ?? 'Unknown',
         clientNumber:     client?.client_number ?? '',
         species:          fd.species ?? '',
@@ -360,6 +363,15 @@ export function PartScanningStation() {
                       >
                         Move <ChevronRight className="w-3.5 h-3.5" />
                       </button>
+                      {onNavigate && s.clientId && (
+                        <button
+                          onClick={() => onNavigate('clients', s.clientId)}
+                          title="View client file"
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-sm text-indigo-700 dark:text-indigo-300 transition-colors"
+                        >
+                          <FolderOpen className="w-3.5 h-3.5" /> File
+                        </button>
+                      )}
                       <button onClick={() => setScanned(prev => prev.filter(x => x.docId !== s.docId))}>
                         <X className="w-4 h-4 text-slate-400 hover:text-red-500 transition-colors" />
                       </button>
