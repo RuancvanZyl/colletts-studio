@@ -59,15 +59,79 @@ export function PartScanningStation() {
 
   async function handleScan(e: React.FormEvent) {
     e.preventDefault();
-    const tag = scanInput.trim().toUpperCase();
-    if (!tag) { toast.error('Enter a tag or scan a QR code'); return; }
-    if (scanned.find(s => s.tagNumber === tag || s.matchedPartTag === tag)) {
-      toast.info('Already in the list'); setScanInput(''); return;
-    }
+    const raw = scanInput.trim();
+    if (!raw) { toast.error('Enter a name, tag or scan a QR code'); return; }
+    const tag = raw.toUpperCase();
 
     setScanning(true);
     try {
-      // 1. Try matching the tag_number field in form_data (e.g. "A-0001")
+      // ── 1. Client name or client number search ────────────────────────────
+      // If input looks like a name (no dashes or alphanumeric only ≥3 chars not matching tag patterns)
+      const looksLikeTag = /^[A-Z0-9]+-/.test(tag) || /^[A-Z]-\d+$/.test(tag);
+      if (!looksLikeTag && raw.length >= 2) {
+        // Search clients by name or client_number
+        const { data: matchedClients } = await (supabase as any)
+          .from('clients')
+          .select('id, full_name, client_number')
+          .or(`full_name.ilike.%${raw}%,client_number.ilike.%${raw}%`)
+          .limit(5);
+
+        if (matchedClients?.length) {
+          let added = 0;
+          for (const client of matchedClients) {
+            // Get all hunts for this client
+            const { data: hunts } = await (supabase as any)
+              .from('client_hunts')
+              .select('id')
+              .eq('client_id', client.id);
+
+            if (!hunts?.length) continue;
+            const huntIds = hunts.map((h: any) => h.id);
+
+            // Get all job cards across those hunts
+            const { data: docs } = await (supabase as any)
+              .from('hunt_documents')
+              .select('id, hunt_id, status, form_data')
+              .eq('doc_type', 'job_card')
+              .in('hunt_id', huntIds);
+
+            for (const doc of docs ?? []) {
+              if (scanned.find(s => s.docId === doc.id)) continue;
+              const fd = doc.form_data ?? {};
+              setScanned(prev => [...prev, {
+                docId:          doc.id,
+                huntId:         doc.hunt_id,
+                clientName:     client.full_name,
+                clientNumber:   client.client_number ?? '',
+                species:        fd.species ?? '',
+                mountType:      fd.mount_type ?? '',
+                tagNumber:      fd.tag_number ?? '',
+                department:     fd.department ?? '',
+                departmentLead: fd.department_lead ?? '',
+                status:         doc.status,
+                condition:      fd.condition ?? '',
+                instructions:   fd.instructions ?? '',
+              }]);
+              added++;
+            }
+          }
+          if (added > 0) {
+            toast.success(`Loaded ${added} trophy${added !== 1 ? ' parts' : ''} for "${raw}"`);
+          } else {
+            toast.info(`No trophies found for "${raw}"`);
+          }
+          setScanInput('');
+          setScanning(false);
+          inputRef.current?.focus();
+          return;
+        }
+      }
+
+      // ── 2. Exact tag_number match (e.g. "A-0001") ─────────────────────────
+      if (scanned.find(s => s.tagNumber === tag || s.matchedPartTag === tag)) {
+        toast.info('Already in the list'); setScanInput(''); setScanning(false); return;
+      }
+
       const { data: byTag } = await (supabase as any)
         .from('hunt_documents')
         .select('id, hunt_id, status, form_data')
@@ -76,7 +140,7 @@ export function PartScanningStation() {
         .limit(1)
         .maybeSingle();
 
-      // 2. Try matching a part tag inside form_data.parts[].tag (e.g. "E042-ZEB-T1-CAPE")
+      // ── 3. QR part tag inside form_data.parts[].tag ───────────────────────
       let byPartTag: any = null;
       let matchedPart: any = null;
       if (!byTag) {
@@ -96,14 +160,11 @@ export function PartScanningStation() {
       }
 
       const doc = byTag ?? byPartTag;
-      if (!doc) { toast.error(`No trophy found for tag: ${tag}`); setScanInput(''); setScanning(false); return; }
+      if (!doc) { toast.error(`Nothing found for "${raw}"`); setScanInput(''); setScanning(false); return; }
 
       // Load hunt + client info
       const { data: hunt } = await (supabase as any)
-        .from('client_hunts')
-        .select('id, client_id')
-        .eq('id', doc.hunt_id)
-        .single();
+        .from('client_hunts').select('id, client_id').eq('id', doc.hunt_id).single();
 
       const { data: client } = hunt
         ? await (supabase as any).from('clients').select('full_name, client_number').eq('id', hunt.client_id).single()
