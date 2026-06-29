@@ -126,167 +126,121 @@ export function LoginScreen({
   const PortalIcon = config.icon;
 
   return (
-    <div className={`min-h-screen bg-gradient-to-br ${config.bgGradient} flex items-center justify-center p-4 relative overflow-hidden`}>
-      {/* Subtle Background Pattern */}
-      <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiMwMDAwMDAiIGZpbGwtb3BhY2l0eT0iMC4wMiI+PHBhdGggZD0iTTM2IDM0djItaDJWMzRoLTJ6bTAtNHYyaDJ2LTJoLTJ6bTAtNHYyaDJ2LTJoLTJ6bTAtNHYyaDJ2LTJoLTJ6bTAtNHYyaDJ2LTJoLTJ6bTItMTRoMnYyaC0ydi0yem0wIDRoMnYyaC0ydi0yem0wIDRoMnYyaC0ydi0yem0wIDRoMnYyaC0ydi0yem0wIDRoMnYyaC0ydi0yeiIvPjwvZz48L2c+PC9zdmc+')] opacity-30"></div>
+    <div className="min-h-screen bg-[#080C0C] flex items-center justify-center p-4 relative overflow-hidden">
 
-      <div className="relative z-10 max-w-md w-full space-y-6">
-        {/* Top Actions */}
-        <div className="flex items-center justify-between">
-          <Button 
-            variant="ghost" 
-            onClick={onBack}
-            className="gap-2"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleTheme}
-            className="rounded-full"
-          >
-            {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
-          </Button>
-        </div>
+      {/* Subtle teal glow behind logo */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-[#3AAECC]/5 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-0 left-1/4 w-[300px] h-[300px] bg-[#1E7A96]/5 rounded-full blur-[80px] pointer-events-none" />
 
-        {/* Header */}
+      <div className="relative z-10 w-full max-w-sm space-y-8">
+
+        {/* Logo + wordmark */}
         <div className="text-center wildtrack-animate-fade">
-          <div className={`w-20 h-20 bg-gradient-to-br ${config.gradient} rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-2xl`}>
-            <PortalIcon className="w-10 h-10 text-white" />
-          </div>
-          <h1 className="text-3xl text-slate-900 dark:text-white mb-2">
-            Welcome to Apex Trophy Solutions
-          </h1>
-          <p className="text-slate-600 dark:text-slate-400">
-            Please sign in to access your portal
-          </p>
+          <img
+            src="/apex-logo.png"
+            alt="Apex Trophy Solutions"
+            className="w-28 h-28 object-contain mx-auto mb-5 drop-shadow-[0_0_30px_rgba(58,174,204,0.3)]"
+          />
+          <h1 className="text-2xl font-bold tracking-[0.25em] text-white mb-1">APEX</h1>
+          <p className="text-[#3AAECC] text-xs tracking-[0.3em] uppercase">Trophy Solutions</p>
+          <p className="text-[#7AADB8] text-sm mt-3">Sign in to your workspace</p>
         </div>
-        
+
         {/* Login Card */}
-        <Card className={`p-8 bg-white/90 dark:bg-stone-900/90 backdrop-blur-lg border-2 ${config.borderColor} shadow-2xl wildtrack-animate-slide wildtrack-animate-delay-1`}>
-          <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="bg-[#0F1A1C] border border-[rgba(58,174,204,0.2)] rounded-2xl p-7 shadow-2xl wildtrack-animate-slide wildtrack-animate-delay-1">
+          <form onSubmit={handleSubmit} className="space-y-5">
+
             {/* Portal Selector */}
             {onPortalChange && (
-              <div className="space-y-2">
-                <Label htmlFor="portal">Select Portal</Label>
-                <Select
-                  value={portalType}
-                  onValueChange={(value) => onPortalChange(value as any)}
-                >
-                  <SelectTrigger id="portal">
+              <div className="space-y-1.5">
+                <Label className="text-[#7AADB8] text-xs uppercase tracking-wider">Portal</Label>
+                <Select value={portalType} onValueChange={(value) => onPortalChange(value as any)}>
+                  <SelectTrigger className="bg-[#142028] border-[rgba(58,174,204,0.2)] text-[#EDF6F9] h-11">
                     <SelectValue placeholder="Select portal" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-[#0F1A1C] border-[rgba(58,174,204,0.2)]">
                     <SelectItem value="hunter">Hunter Portal</SelectItem>
                     <SelectItem value="outfitter">Outfitter Portal</SelectItem>
-                    <SelectItem value="taxidermy">Taxidermy Portal</SelectItem>
+                    <SelectItem value="taxidermy">Staff / Taxidermy</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             )}
 
             {/* Email */}
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+            <div className="space-y-1.5">
+              <Label className="text-[#7AADB8] text-xs uppercase tracking-wider">Email</Label>
               <Input
                 id="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="your.email@example.com"
-                className="h-12"
+                placeholder="your@email.com"
+                className="h-11 bg-[#142028] border-[rgba(58,174,204,0.2)] text-[#EDF6F9] placeholder:text-[#4a7a8a] focus:border-[#3AAECC]"
                 required
               />
             </div>
 
             {/* Password */}
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+            <div className="space-y-1.5">
+              <Label className="text-[#7AADB8] text-xs uppercase tracking-wider">Password</Label>
               <Input
                 id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="h-12"
+                className="h-11 bg-[#142028] border-[rgba(58,174,204,0.2)] text-[#EDF6F9] placeholder:text-[#4a7a8a] focus:border-[#3AAECC]"
                 required
               />
             </div>
 
-            {/* Remember Me & Forgot Password */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Checkbox 
-                  id="remember" 
-                  checked={rememberMe}
-                  onCheckedChange={(checked) => setRememberMe(checked as boolean)}
-                />
-                <Label 
-                  htmlFor="remember" 
-                  className="text-sm cursor-pointer"
-                >
-                  Remember me
-                </Label>
-              </div>
-              <Button variant="link" type="button" className="text-sm p-0 h-auto">
-                Forgot password?
-              </Button>
-            </div>
-
-            {/* Login Button */}
-            <Button
+            {/* Sign In Button */}
+            <button
               type="submit"
               disabled={submitting}
-              className={`w-full h-12 bg-gradient-to-r ${config.gradient} hover:${config.hoverGradient} text-white shadow-lg hover:shadow-xl transition-all`}
-              size="lg"
+              className="w-full h-11 rounded-lg bg-[#3AAECC] hover:bg-[#2E9EB8] text-[#080C0C] font-bold text-sm tracking-wider transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(58,174,204,0.3)] hover:shadow-[0_0_30px_rgba(58,174,204,0.4)]"
             >
-              {submitting ? 'Signing in…' : 'Sign In'}
-            </Button>
+              {submitting ? 'Signing in…' : 'SIGN IN'}
+            </button>
 
             {/* Register Link */}
             {onRegister && (
-              <div className="text-center pt-4 border-t border-stone-200 dark:border-stone-700">
-                <p className="text-sm text-slate-600 dark:text-slate-400">
-                  Don't have an account?{' '}
-                  <Button 
-                    variant="link" 
-                    type="button" 
-                    onClick={onRegister}
-                    className="p-0 h-auto"
-                  >
-                    Register here
-                  </Button>
-                </p>
-              </div>
+              <p className="text-center text-xs text-[#7AADB8] pt-2">
+                Don't have an account?{' '}
+                <button type="button" onClick={onRegister} className="text-[#3AAECC] hover:underline font-medium">
+                  Register here
+                </button>
+              </p>
             )}
           </form>
-        </Card>
+        </div>
 
-        {/* Footer — hidden master key trigger on the lock dot */}
-        <p className="text-center text-xs text-slate-500 dark:text-slate-500">
-          Protected by Apex Trophy Solutions secure authentication
-          {/* invisible trigger — single px dot */}
-          <span
-            onClick={handleMasterKey}
-            className="ml-1 inline-block w-1 h-1 rounded-full bg-transparent cursor-default select-none"
-            aria-hidden="true"
-          />
-        </p>
+        {/* Back + footer */}
+        <div className="flex items-center justify-between">
+          <button onClick={onBack} className="flex items-center gap-1.5 text-[#7AADB8] hover:text-[#EDF6F9] text-sm transition-colors">
+            <ArrowLeft className="w-4 h-4" />
+            Back
+          </button>
+          <p className="text-[#4a6a75] text-xs">
+            Secure authentication
+            <span
+              onClick={handleMasterKey}
+              className="ml-1 inline-block w-1 h-1 rounded-full bg-transparent cursor-default select-none"
+              aria-hidden="true"
+            />
+          </p>
+        </div>
 
         {/* PIN modal */}
         {mkOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className="bg-white dark:bg-[#1c2b3a] rounded-2xl shadow-2xl p-8 w-80 space-y-5">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+            <div className="bg-[#0F1A1C] border border-[rgba(58,174,204,0.25)] rounded-2xl shadow-2xl p-8 w-80 space-y-5">
               <div className="text-center">
-                <div className="w-12 h-12 rounded-full bg-[#0073ea]/10 flex items-center justify-center mx-auto mb-3">
-                  <span className="text-2xl">🔑</span>
-                </div>
-                <h3 className="font-semibold text-slate-900 dark:text-white text-lg">Master Access</h3>
-                <p className="text-xs text-slate-500 mt-1">Authorised personnel only</p>
+                <img src="/apex-logo.png" alt="" className="w-12 h-12 object-contain mx-auto mb-3 opacity-80" />
+                <h3 className="font-bold text-[#EDF6F9] text-lg tracking-wide">Master Access</h3>
+                <p className="text-xs text-[#7AADB8] mt-1">Authorised personnel only</p>
               </div>
-
               <input
                 ref={mkInputRef}
                 type="password"
@@ -296,25 +250,21 @@ export function LoginScreen({
                 onChange={e => { setMkPin(e.target.value.replace(/\D/g, '')); setMkError(false); }}
                 onKeyDown={e => { if (e.key === 'Enter') submitMasterKey(); if (e.key === 'Escape') setMkOpen(false); }}
                 placeholder="Enter PIN"
-                className={`w-full text-center text-2xl tracking-[0.5em] border-2 rounded-xl px-4 py-3 bg-slate-50 dark:bg-[#0e1621] dark:text-white outline-none transition-colors ${
-                  mkError ? 'border-red-500 animate-shake' : 'border-slate-200 dark:border-slate-600 focus:border-[#0073ea]'
+                className={`w-full text-center text-2xl tracking-[0.5em] border-2 rounded-xl px-4 py-3 bg-[#142028] text-white outline-none transition-colors ${
+                  mkError ? 'border-red-500' : 'border-[rgba(58,174,204,0.3)] focus:border-[#3AAECC]'
                 }`}
               />
-
-              {mkError && (
-                <p className="text-center text-xs text-red-500 font-medium">Incorrect PIN — access denied</p>
-              )}
-
+              {mkError && <p className="text-center text-xs text-red-400 font-medium">Incorrect PIN — access denied</p>}
               <div className="flex gap-3">
                 <button
                   onClick={() => setMkOpen(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                  className="flex-1 py-2.5 rounded-xl border border-[rgba(58,174,204,0.2)] text-sm text-[#7AADB8] hover:bg-[rgba(58,174,204,0.07)] transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={submitMasterKey}
-                  className="flex-1 py-2.5 rounded-xl bg-[#0073ea] hover:bg-[#0063cc] text-white text-sm font-semibold transition-colors"
+                  className="flex-1 py-2.5 rounded-xl bg-[#3AAECC] hover:bg-[#2E9EB8] text-[#080C0C] text-sm font-bold transition-colors"
                 >
                   Unlock
                 </button>

@@ -78,6 +78,7 @@ export function TrophySelection({ onBack, onComplete }: TrophySelectionProps) {
     setCurrentStep('animal');
     setCurrentAnimalIds([]);
     setCurrentAnimalIndex(0);
+    setSelections([]);
   };
 
   const handleBackFromSummary = () => {

@@ -5,9 +5,10 @@ import { Card } from '../../../ui/card';
 import { Button } from '../../../ui/button';
 import { Checkbox } from '../../../ui/checkbox';
 import { Textarea } from '../../../ui/textarea';
-import { ArrowLeft, Grid3x3, List, Upload } from 'lucide-react';
+import { ArrowLeft, Upload, Info, Loader2 } from 'lucide-react';
 import { ImageWithFallback } from '../../../figma/ImageWithFallback';
 import { Label } from '../../../ui/label';
+import { useTrophyTypeImages } from '../../../../../lib/hooks/useTrophyTypeImages';
 import {
   Select,
   SelectContent,
@@ -32,12 +33,18 @@ interface TrophyTypeSelectionProps {
   totalAnimals: number;
 }
 
-type SelectionMode = 'checklist' | 'dropdown' | 'visual';
+// Images loaded from Supabase Storage (admin-uploaded) with Unsplash fallback
+// Use the hook below — this constant is kept only for type reference
+const _unusedRef = null;
 
-const trophyTypeImages: Record<string, string> = {
-  'shoulder-mount': 'https://images.unsplash.com/photo-1715532176267-9f62e4650c9e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzaG91bGRlciUyMG1vdW50JTIwdGF4aWRlcm15fGVufDF8fHx8MTc2MjI1Mjk1Nnww&ixlib=rb-4.1.0&q=80&w=1080',
-  'euro-mount': 'https://images.unsplash.com/photo-1577964723545-2ee160c50431?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxhbmltYWwlMjBza3VsbCUyMGV1cm8lMjBtb3VudHxlbnwxfHx8fDE3NjIyNTI5NTd8MA&ixlib=rb-4.1.0&q=80&w=1080',
-  'tan-to-fur': 'https://images.unsplash.com/photo-1713860752281-9bc6ba194346?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxhbmltYWwlMjBza2luJTIwcnVnfGVufDF8fHx8MTc2MjI1Mjk1N3ww&ixlib=rb-4.1.0&q=80&w=1080',
+// Emoji icons for checklist/dropdown modes
+const trophyTypeEmojis: Record<string, string> = {
+  'shoulder-mount': '🦌',
+  'full-body-mount': '🦁',
+  'pedestal-mount': '🏛️',
+  'euro-mount': '💀',
+  'tan-to-fur': '🧸',
+  'custom-design': '✨',
 };
 
 export function TrophyTypeSelection({
@@ -47,7 +54,9 @@ export function TrophyTypeSelection({
   currentIndex,
   totalAnimals,
 }: TrophyTypeSelectionProps) {
-  const [selectionMode, setSelectionMode] = useState<SelectionMode>('checklist');
+  const { images: trophyTypeImages, loading: imagesLoading } = useTrophyTypeImages();
+  // Default to visual — most intuitive for first-time clients
+  const [selectionMode, setSelectionMode] = useState<'checklist' | 'dropdown' | 'visual'>('visual');
   const [selectedType, setSelectedType] = useState<TrophyType | ''>('');
   const [showCustomDialog, setShowCustomDialog] = useState(false);
   const [customDescription, setCustomDescription] = useState('');
@@ -58,36 +67,39 @@ export function TrophyTypeSelection({
 
   const handleTypeSelect = (type: TrophyType) => {
     if (type === 'custom-design') {
-      setShowCustomDialog(true);
       setSelectedType(type);
+      setShowCustomDialog(true);
     } else {
       setSelectedType(type);
     }
   };
 
-  const handleSave = () => {
-    if (selectedType && selectedType !== '') {
-      const selection: TrophySelection = {
-        id: `${animalId}-${Date.now()}`,
-        animal,
-        trophyType: selectedType,
-        customDescription: selectedType === 'custom-design' ? customDescription : undefined,
-      };
-      onComplete(selection);
-    }
+  const handleCustomSave = () => {
+    const selection: TrophySelection = {
+      id: `${animalId}-${Date.now()}`,
+      animal,
+      trophyType: 'custom-design',
+      customDescription,
+    };
+    setShowCustomDialog(false);
+    onComplete(selection);
   };
 
-  const handleCustomSave = () => {
-    if (selectedType === 'custom-design') {
-      const selection: TrophySelection = {
-        id: `${animalId}-${Date.now()}`,
-        animal,
-        trophyType: selectedType,
-        customDescription,
-      };
-      setShowCustomDialog(false);
-      onComplete(selection);
-    }
+  const handleCustomCancel = () => {
+    setShowCustomDialog(false);
+    // Reset so the button stays disabled until they pick something else
+    setSelectedType('');
+  };
+
+  const handleSave = () => {
+    if (!selectedType || selectedType === '') return;
+    const selection: TrophySelection = {
+      id: `${animalId}-${Date.now()}`,
+      animal,
+      trophyType: selectedType,
+      customDescription: selectedType === 'custom-design' ? customDescription : undefined,
+    };
+    onComplete(selection);
   };
 
   return (
@@ -95,20 +107,15 @@ export function TrophyTypeSelection({
       {/* Header */}
       <div>
         <div className="flex items-center gap-2 mb-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onBack}
-            className="rounded-full"
-          >
+          <Button variant="ghost" size="icon" onClick={onBack} className="rounded-full">
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <h2 className="text-slate-900 dark:text-slate-100">
-            Select Trophy Type for {animal.name}
+            Choose Trophy Type for {animal.name}
           </h2>
         </div>
         <p className="text-slate-600 dark:text-slate-400 ml-12">
-          Animal {currentIndex} of {totalAnimals}
+          Animal {currentIndex} of {totalAnimals} — tap a picture to select
         </p>
       </div>
 
@@ -131,15 +138,22 @@ export function TrophyTypeSelection({
         </div>
       </Card>
 
-      {/* Selection Mode Toggle */}
-      <div className="flex gap-2 flex-wrap">
+      {/* View Mode Toggle */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-slate-500 dark:text-slate-400 mr-1">View as:</span>
+        <Button
+          variant={selectionMode === 'visual' ? 'default' : 'outline'}
+          onClick={() => setSelectionMode('visual')}
+          size="sm"
+        >
+          📷 Pictures
+        </Button>
         <Button
           variant={selectionMode === 'checklist' ? 'default' : 'outline'}
           onClick={() => setSelectionMode('checklist')}
           size="sm"
         >
-          <List className="w-4 h-4 mr-2" />
-          Checklist
+          ☑️ List
         </Button>
         <Button
           variant={selectionMode === 'dropdown' ? 'default' : 'outline'}
@@ -148,36 +162,83 @@ export function TrophyTypeSelection({
         >
           Dropdown
         </Button>
-        <Button
-          variant={selectionMode === 'visual' ? 'default' : 'outline'}
-          onClick={() => setSelectionMode('visual')}
-          size="sm"
-        >
-          <Grid3x3 className="w-4 h-4 mr-2" />
-          Visual
-        </Button>
       </div>
+
+      {/* Visual Mode — default, most client-friendly */}
+      {selectionMode === 'visual' && imagesLoading && (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-green-600" />
+        </div>
+      )}
+      {selectionMode === 'visual' && !imagesLoading && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {trophyTypeOptions.map(option => {
+            const isSelected = selectedType === option.value;
+            return (
+              <Card
+                key={option.value}
+                className={`cursor-pointer transition-all hover:shadow-lg overflow-hidden ${
+                  isSelected
+                    ? 'ring-2 ring-green-600 dark:ring-green-500'
+                    : 'hover:border-green-400 dark:hover:border-green-600'
+                }`}
+                onClick={() => handleTypeSelect(option.value as TrophyType)}
+              >
+                <div className="aspect-[4/3] overflow-hidden bg-stone-100 dark:bg-stone-800 relative">
+                  <ImageWithFallback
+                    src={trophyTypeImages[option.value] ?? ''}
+                    alt={option.label}
+                    className="w-full h-full object-cover"
+                  />
+                  {isSelected && (
+                    <div className="absolute inset-0 bg-green-600/20 flex items-center justify-center">
+                      <div className="bg-green-600 text-white rounded-full w-10 h-10 flex items-center justify-center text-xl font-bold shadow-lg">
+                        ✓
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className={`p-3 ${isSelected ? 'bg-green-50 dark:bg-green-950/30' : ''}`}>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100 mb-1">
+                    {trophyTypeEmojis[option.value]} {option.label}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-snug">
+                    {option.description}
+                  </p>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
 
       {/* Checklist Mode */}
       {selectionMode === 'checklist' && (
-        <Card className="p-6 space-y-4">
+        <Card className="p-6 space-y-3">
           {trophyTypeOptions.map(option => (
-            <div key={option.value} className="flex items-center space-x-3">
+            <div
+              key={option.value}
+              className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
+                selectedType === option.value
+                  ? 'bg-green-50 dark:bg-green-950/30 border border-green-300 dark:border-green-700'
+                  : 'hover:bg-stone-50 dark:hover:bg-stone-800/50'
+              }`}
+              onClick={() => handleTypeSelect(option.value as TrophyType)}
+            >
               <Checkbox
                 id={option.value}
                 checked={selectedType === option.value}
                 onCheckedChange={(checked) => {
-                  if (checked) {
-                    handleTypeSelect(option.value as TrophyType);
-                  }
+                  if (checked) handleTypeSelect(option.value as TrophyType);
                 }}
+                className="mt-0.5"
               />
-              <Label
-                htmlFor={option.value}
-                className="text-slate-900 dark:text-slate-100 cursor-pointer"
-              >
-                {option.label}
-              </Label>
+              <div className="flex-1">
+                <Label htmlFor={option.value} className="text-slate-900 dark:text-slate-100 cursor-pointer font-medium">
+                  {trophyTypeEmojis[option.value]} {option.label}
+                </Label>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{option.description}</p>
+              </div>
             </div>
           ))}
         </Card>
@@ -185,86 +246,68 @@ export function TrophyTypeSelection({
 
       {/* Dropdown Mode */}
       {selectionMode === 'dropdown' && (
-        <Card className="p-6">
-          <Label className="mb-2 block">Trophy Type</Label>
-          <Select
-            value={selectedType}
-            onValueChange={(value) => handleTypeSelect(value as TrophyType)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select trophy type..." />
-            </SelectTrigger>
-            <SelectContent>
-              {trophyTypeOptions.map(option => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <Card className="p-6 space-y-4">
+          <div>
+            <Label className="mb-2 block">Select Trophy Type</Label>
+            <Select
+              value={selectedType}
+              onValueChange={(value) => handleTypeSelect(value as TrophyType)}
+            >
+              <SelectTrigger className="h-12">
+                <SelectValue placeholder="Tap here to choose..." />
+              </SelectTrigger>
+              <SelectContent>
+                {trophyTypeOptions.map(option => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {trophyTypeEmojis[option.value]} {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {/* Show description of selected type */}
+          {selectedType && selectedType !== '' && (
+            <div className="flex items-start gap-2 p-3 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
+              <Info className="w-4 h-4 text-green-700 dark:text-green-400 mt-0.5 flex-shrink-0" />
+              <p className="text-sm text-green-800 dark:text-green-300">
+                {trophyTypeOptions.find(o => o.value === selectedType)?.description}
+              </p>
+            </div>
+          )}
         </Card>
       )}
 
-      {/* Visual Mode */}
-      {selectionMode === 'visual' && (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {trophyTypeOptions.map(option => (
-            <Card
-              key={option.value}
-              className={`cursor-pointer transition-all hover:shadow-lg overflow-hidden ${
-                selectedType === option.value
-                  ? 'ring-2 ring-green-600 dark:ring-green-500 bg-green-50 dark:bg-green-950/30'
-                  : 'hover:border-green-500 dark:hover:border-green-600'
-              }`}
-              onClick={() => handleTypeSelect(option.value as TrophyType)}
-            >
-              {trophyTypeImages[option.value] && (
-                <div className="aspect-video overflow-hidden bg-stone-100 dark:bg-stone-800">
-                  <ImageWithFallback
-                    src={trophyTypeImages[option.value]}
-                    alt={option.label}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              )}
-              <div className="p-4">
-                <p className="text-slate-900 dark:text-slate-100">{option.label}</p>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
-
       {/* Action Buttons */}
-      <div className="flex justify-end gap-3 pt-4 border-t border-stone-200 dark:border-stone-800">
-        <Button variant="outline" onClick={onBack}>
+      <div className="flex flex-col sm:flex-row justify-between gap-3 pt-4 border-t border-stone-200 dark:border-stone-800">
+        <Button variant="outline" onClick={onBack} className="gap-2">
+          <ArrowLeft className="w-4 h-4" />
           Back to Animals
         </Button>
         <Button
           size="lg"
           onClick={handleSave}
-          disabled={!selectedType}
-          className="min-w-48"
+          disabled={!selectedType || selectedType === ''}
+          className="min-w-48 bg-green-600 hover:bg-green-700 text-white"
         >
-          {currentIndex < totalAnimals ? 'Next Animal' : 'Review Selections'}
+          {currentIndex < totalAnimals ? 'Next Animal →' : 'Review Selections →'}
         </Button>
       </div>
 
       {/* Custom Design Dialog */}
-      <Dialog open={showCustomDialog} onOpenChange={setShowCustomDialog}>
+      <Dialog open={showCustomDialog} onOpenChange={(open) => { if (!open) handleCustomCancel(); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Custom Design</DialogTitle>
+            <DialogTitle>✨ Custom Design</DialogTitle>
             <DialogDescription>
-              Describe your custom trophy mount idea for {animal.name}
+              Describe your custom trophy mount idea for {animal.name}. Our team will contact you to discuss options and pricing.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
-              <Label htmlFor="description">Description</Label>
+              <Label htmlFor="description">Describe Your Idea *</Label>
               <Textarea
                 id="description"
-                placeholder="Describe your custom idea..."
+                placeholder="E.g. I'd like a wall panel with the horns mounted above a carved wooden plaque..."
                 value={customDescription}
                 onChange={(e) => setCustomDescription(e.target.value)}
                 rows={4}
@@ -272,20 +315,20 @@ export function TrophyTypeSelection({
               />
             </div>
             <div>
-              <Label>Upload Sketches/Photos (Optional)</Label>
-              <div className="mt-2 border-2 border-dashed border-stone-300 dark:border-stone-700 rounded-lg p-8 text-center hover:border-green-500 dark:hover:border-green-600 transition-colors cursor-pointer">
+              <Label>Upload Inspiration Photos (Optional)</Label>
+              <div className="mt-2 border-2 border-dashed border-stone-300 dark:border-stone-700 rounded-lg p-6 text-center hover:border-green-500 dark:hover:border-green-600 transition-colors cursor-pointer">
                 <Upload className="w-8 h-8 mx-auto mb-2 text-stone-400" />
                 <p className="text-sm text-slate-600 dark:text-slate-400">
                   Click to upload or drag and drop
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">
-                  Max 5 files
+                  JPG, PNG up to 10MB each
                 </p>
               </div>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCustomDialog(false)}>
+            <Button variant="outline" onClick={handleCustomCancel}>
               Cancel
             </Button>
             <Button onClick={handleCustomSave} disabled={!customDescription.trim()}>

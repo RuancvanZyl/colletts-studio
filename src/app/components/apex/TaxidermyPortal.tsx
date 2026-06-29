@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../../../lib/supabase';
+import { getStaffDepartments } from '../../../lib/pipeline';
 import { MyTasks } from './taxidermy/MyTasks';
 import { WorkshopDashboard } from './taxidermy/WorkshopDashboard';
 import { SummarySheet } from './taxidermy/SummarySheet';
@@ -64,12 +66,27 @@ interface TaxidermyPortalProps {
 }
 
 export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
-  const [currentView, setCurrentView] = useState<TaxidermyView>('summary');
+  const [currentView, setCurrentView] = useState<TaxidermyView>('tasks');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [navClientId, setNavClientId] = useState<string | undefined>(undefined);
+  const [myTaskCount, setMyTaskCount] = useState<number | null>(null);
   const { theme, toggleTheme } = useTheme();
   const { profile } = useAuth();
+
+  // Live task count badge for the sidebar
+  useEffect(() => {
+    if (!profile?.full_name) return;
+    const depts = getStaffDepartments(profile.full_name);
+    if (!depts.length) return;
+    (supabase as any)
+      .from('hunt_documents')
+      .select('id', { count: 'exact', head: true })
+      .eq('doc_type', 'job_card')
+      .in('current_department', depts)
+      .neq('status', 'complete')
+      .then(({ count }: { count: number | null }) => setMyTaskCount(count ?? 0));
+  }, [profile?.full_name]);
 
   const navigate = (view: string, clientId?: string) => {
     setCurrentView(view as TaxidermyView);
@@ -86,7 +103,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     {
       heading: 'Overview',
       items: [
-        { view: 'tasks',     icon: ListTodo,        label: 'My Tasks' },
+        { view: 'tasks',     icon: ListTodo,        label: 'My Tasks', badge: myTaskCount },
         { view: 'summary',   icon: BarChart3,       label: 'Summary' },
         { view: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
       ],
@@ -158,26 +175,25 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
   };
 
   return (
-    <div className="min-h-screen bg-[#f6f7fb] dark:bg-[#0e1621] flex">
+    <div className="min-h-screen bg-[#080C0C] dark:bg-[#080C0C] flex">
 
       {/* ── Sidebar ─────────────────────────────────────── */}
       <aside className={`
-        fixed inset-y-0 left-0 z-40 w-56 bg-[#1c2b3a] flex flex-col
+        fixed inset-y-0 left-0 z-40 w-60 flex flex-col
+        bg-[#060A0A] border-r border-[rgba(58,174,204,0.12)]
         transition-transform duration-300 ease-in-out
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
 
         {/* Logo */}
-        <div className="flex items-center gap-3 px-4 h-14 border-b border-[#2c3d5b] flex-shrink-0">
-          <div className="w-8 h-8 bg-[#0073ea] rounded-lg flex items-center justify-center flex-shrink-0">
-            <Package className="w-4 h-4 text-white" />
-          </div>
+        <div className="flex items-center gap-3 px-4 pt-5 pb-4 border-b border-[rgba(58,174,204,0.12)] flex-shrink-0">
+          <img src="/apex-logo.png" alt="Apex Trophy Solutions" className="w-10 h-10 object-contain flex-shrink-0" />
           <div className="min-w-0">
-            <p className="text-white text-xs font-bold leading-tight truncate">APEX</p>
-            <p className="text-[#8ea0b4] text-[10px] leading-tight">Trophy Solutions</p>
+            <p className="text-white text-sm font-bold tracking-widest leading-tight">APEX</p>
+            <p className="text-[#3AAECC] text-[10px] tracking-[0.2em] uppercase leading-tight">Trophy Solutions</p>
           </div>
           <button
-            className="ml-auto lg:hidden text-[#8ea0b4] hover:text-white"
+            className="ml-auto lg:hidden text-[#7AADB8] hover:text-white"
             onClick={() => setSidebarOpen(false)}
           >
             <X className="w-4 h-4" />
@@ -185,10 +201,10 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-4">
+        <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-5">
           {navGroups.map(group => (
             <div key={group.heading}>
-              <p className="text-[10px] font-semibold text-[#5b7a99] uppercase tracking-wider px-2 mb-1">
+              <p className="text-[9px] font-bold text-[#3AAECC]/50 uppercase tracking-[0.18em] px-3 mb-1.5">
                 {group.heading}
               </p>
               {group.items.map(item => {
@@ -197,14 +213,14 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
                   <button
                     key={item.view}
                     onClick={() => navigate(item.view)}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
                       active
-                        ? 'bg-[#0073ea] text-white'
-                        : 'text-[#c5cfe0] hover:bg-[#2c3d5b] hover:text-white'
+                        ? 'bg-[rgba(58,174,204,0.15)] text-[#3AAECC] border border-[rgba(58,174,204,0.3)]'
+                        : 'text-[#7AADB8] hover:bg-[rgba(58,174,204,0.07)] hover:text-[#EDF6F9]'
                     }`}
                   >
-                    <item.icon className="w-4 h-4 flex-shrink-0" />
-                    <span className="truncate">{item.label}</span>
+                    <item.icon className={`w-4 h-4 flex-shrink-0 ${active ? 'text-[#3AAECC]' : ''}`} />
+                    <span className="truncate font-medium">{item.label}</span>
                     {item.badge != null && item.badge > 0 && (
                       <span className="ml-auto bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center flex-shrink-0">
                         {item.badge > 9 ? '9+' : item.badge}
@@ -218,21 +234,21 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
         </nav>
 
         {/* User */}
-        <div className="flex-shrink-0 border-t border-[#2c3d5b] px-3 py-3">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-[#0073ea] flex items-center justify-center flex-shrink-0">
-              <span className="text-white text-xs font-bold">
+        <div className="flex-shrink-0 border-t border-[rgba(58,174,204,0.12)] px-3 py-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full bg-[rgba(58,174,204,0.2)] border border-[rgba(58,174,204,0.4)] flex items-center justify-center flex-shrink-0">
+              <span className="text-[#3AAECC] text-xs font-bold">
                 {profile?.full_name?.charAt(0) ?? '?'}
               </span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-white text-xs font-medium truncate">{profile?.full_name ?? 'Staff'}</p>
-              <p className="text-[#5b7a99] text-[10px] truncate">{profile?.role?.replace(/_/g, ' ')}</p>
+              <p className="text-[#EDF6F9] text-xs font-semibold truncate">{profile?.full_name ?? 'Staff'}</p>
+              <p className="text-[#7AADB8] text-[10px] truncate capitalize">{profile?.role?.replace(/_/g, ' ')}</p>
             </div>
             <button
               onClick={onLogout}
               title="Log out"
-              className="text-[#5b7a99] hover:text-red-400 transition-colors"
+              className="text-[#7AADB8] hover:text-red-400 transition-colors p-1"
             >
               <LogOut className="w-4 h-4" />
             </button>
@@ -243,29 +259,29 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       {/* Backdrop mobile */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+          className="fixed inset-0 bg-black/60 z-30 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
       {/* ── Main area ───────────────────────────────────── */}
-      <div className="flex-1 flex flex-col lg:ml-56 min-h-screen">
+      <div className="flex-1 flex flex-col lg:ml-60 min-h-screen">
 
         {/* Top bar */}
-        <header className="h-14 bg-white dark:bg-[#1c2b3a] border-b border-slate-200 dark:border-[#2c3d5b] flex items-center px-4 gap-3 sticky top-0 z-30 flex-shrink-0">
+        <header className="h-14 bg-[#0F1A1C] border-b border-[rgba(58,174,204,0.12)] flex items-center px-4 gap-3 sticky top-0 z-30 flex-shrink-0">
           {/* Hamburger */}
           <button
-            className="lg:hidden text-slate-500 hover:text-slate-700"
+            className="lg:hidden text-[#7AADB8] hover:text-white"
             onClick={() => setSidebarOpen(true)}
           >
             <Menu className="w-5 h-5" />
           </button>
 
           {/* Breadcrumb */}
-          <div className="hidden sm:flex items-center gap-1 text-sm text-slate-400">
+          <div className="hidden sm:flex items-center gap-1 text-sm text-[#7AADB8]">
             <span>Workshop</span>
             <ChevronRight className="w-3.5 h-3.5" />
-            <span className="text-slate-700 dark:text-slate-200 font-medium capitalize">
+            <span className="text-[#EDF6F9] font-medium capitalize">
               {currentView.replace(/-/g, ' ')}
             </span>
           </div>
@@ -277,24 +293,21 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
 
           {/* Right controls */}
           <div className="ml-auto flex items-center gap-1">
-            {/* Notice board */}
             <NoticeBoard onNavigate={navigate} />
-
-            {/* Theme */}
             <button
               onClick={toggleTheme}
-              className="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-slate-100 dark:hover:bg-[#2c3d5b] transition-colors"
+              className="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-[rgba(58,174,204,0.1)] transition-colors"
             >
               {theme === 'light'
-                ? <Moon className="w-4 h-4 text-slate-500" />
-                : <Sun className="w-4 h-4 text-[#c5cfe0]" />
+                ? <Moon className="w-4 h-4 text-[#7AADB8]" />
+                : <Sun className="w-4 h-4 text-[#7AADB8]" />
               }
             </button>
           </div>
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-4 md:p-6 overflow-auto">
+        <main className="flex-1 p-4 md:p-6 overflow-auto bg-[#080C0C]">
           {renderView()}
         </main>
       </div>

@@ -2,7 +2,7 @@ import { Trophy } from '../types';
 import { Card } from '../../ui/card';
 import { Button } from '../../ui/button';
 import { ProgressRing } from '../ProgressRing';
-import { ArrowRight, Plus } from 'lucide-react';
+import { ArrowRight, Plus, Award } from 'lucide-react';
 
 interface HunterHomeProps {
   trophies: Trophy[];
@@ -45,12 +45,28 @@ export function HunterHome({ trophies, onViewTrophy, onAddTrophy, hunterName }: 
         <Card className="p-4 bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-950/50 dark:to-yellow-950/50 border-amber-300 dark:border-amber-800">
           <div className="text-stone-600 dark:text-stone-400 mb-1">Avg. Progress</div>
           <div className="text-amber-800 dark:text-amber-400">
-            {Math.round(trophies.reduce((sum, t) => sum + t.progress, 0) / trophies.length)}%
+            {trophies.length > 0 ? Math.round(trophies.reduce((sum, t) => sum + t.progress, 0) / trophies.length) : 0}%
           </div>
         </Card>
       </div>
 
+      {/* Empty state */}
+      {trophies.length === 0 && (
+        <Card className="p-12 text-center border-dashed border-2 border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20">
+          <Award className="w-16 h-16 text-green-300 dark:text-green-700 mx-auto mb-4" />
+          <h3 className="text-slate-700 dark:text-slate-300 mb-2">No trophies yet</h3>
+          <p className="text-slate-500 dark:text-slate-500 mb-6 max-w-sm mx-auto">
+            Once your trophies are checked in at the workshop, they will appear here so you can track their progress.
+          </p>
+          <Button onClick={onAddTrophy} className="gap-2">
+            <Plus className="w-4 h-4" />
+            Select Your Trophy Types
+          </Button>
+        </Card>
+      )}
+
       {/* Active Trophies */}
+      {activeTrophies.length > 0 && (
       <div>
         <h2 className="text-slate-900 mb-4">Active Trophies</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -84,6 +100,7 @@ export function HunterHome({ trophies, onViewTrophy, onAddTrophy, hunterName }: 
           ))}
         </div>
       </div>
+      )}
 
       {/* Completed Trophies */}
       {completedTrophies.length > 0 && (

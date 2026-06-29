@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
@@ -8,7 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
-import { Settings, Users, Building2, Plus, Edit2, RefreshCw, Loader2, Shield, QrCode, Printer } from 'lucide-react';
+import { Settings, Users, Building2, Plus, Edit2, RefreshCw, Loader2, Shield, QrCode, Printer, ImageIcon, Upload } from 'lucide-react';
+import { useTrophyTypeImages } from '../../../../lib/hooks/useTrophyTypeImages';
+import { trophyTypeOptions } from '../mockAnimalData';
 import { supabase } from '../../../../lib/supabase';
 import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
@@ -38,6 +40,23 @@ export function AdminConfiguration() {
 
   const [staffForm, setStaffForm] = useState({ full_name: '', role: 'department_staff' as StaffRole, department_id: '' });
   const [deptForm, setDeptForm] = useState({ name: '', sort_order: '' });
+
+  // Trophy type reference images (admin-uploadable)
+  const { images: trophyImages, uploading: trophyUploading, uploadImage } = useTrophyTypeImages();
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  async function handleTrophyImageUpload(typeId: string, e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      await uploadImage(typeId, file);
+      toast.success('Image updated — clients will see it immediately');
+    } catch (err: any) {
+      toast.error('Upload failed: ' + (err.message ?? 'Unknown error'));
+    }
+    // Reset input so same file can be re-uploaded
+    if (fileInputRefs.current[typeId]) fileInputRefs.current[typeId]!.value = '';
+  }
 
   async function load() {
     setLoading(true);
@@ -133,6 +152,7 @@ export function AdminConfiguration() {
           <TabsTrigger value="staff"><Users className="w-4 h-4 mr-2" />Staff ({staff.length})</TabsTrigger>
           <TabsTrigger value="departments"><Building2 className="w-4 h-4 mr-2" />Departments ({departments.length})</TabsTrigger>
           <TabsTrigger value="roles"><Shield className="w-4 h-4 mr-2" />Roles</TabsTrigger>
+          <TabsTrigger value="trophy-images"><ImageIcon className="w-4 h-4 mr-2" />Trophy Photos</TabsTrigger>
         </TabsList>
 
         {/* STAFF */}
@@ -235,6 +255,78 @@ export function AdminConfiguration() {
                   </div>
                 ))}
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Trophy Type Reference Photos */}
+        <TabsContent value="trophy-images" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ImageIcon className="w-5 h-5 text-teal-500" />
+                Trophy Type Reference Photos
+              </CardTitle>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Upload reference photos for each trophy type. Clients see these images when selecting their mount style.
+                Photos are stored securely and update instantly.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {trophyTypeOptions.map(option => {
+                  const isUploading = trophyUploading === option.value;
+                  return (
+                    <div key={option.value} className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+                      {/* Current image */}
+                      <div className="aspect-[4/3] bg-slate-100 dark:bg-slate-800 relative overflow-hidden">
+                        {trophyImages[option.value] ? (
+                          <img
+                            src={trophyImages[option.value]}
+                            alt={option.label}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-4xl">
+                            🖼️
+                          </div>
+                        )}
+                        {isUploading && (
+                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                            <Loader2 className="w-8 h-8 text-white animate-spin" />
+                          </div>
+                        )}
+                      </div>
+                      {/* Info + upload */}
+                      <div className="p-3 space-y-2">
+                        <p className="font-semibold text-sm text-slate-900 dark:text-slate-100">{option.label}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 leading-snug">{option.description}</p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full gap-2"
+                          disabled={isUploading}
+                          onClick={() => fileInputRefs.current[option.value]?.click()}
+                        >
+                          <Upload className="w-4 h-4" />
+                          {isUploading ? 'Uploading…' : 'Upload Photo'}
+                        </Button>
+                        <input
+                          ref={el => { fileInputRefs.current[option.value] = el; }}
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={(e) => handleTrophyImageUpload(option.value, e)}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-slate-400 mt-4">
+                Tip: Use high-quality photos of actual finished work. JPG/PNG, recommended 1200×900px or larger.
+                If no photo is uploaded, a reference image is shown instead.
+              </p>
             </CardContent>
           </Card>
         </TabsContent>

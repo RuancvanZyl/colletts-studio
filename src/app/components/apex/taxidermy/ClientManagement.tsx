@@ -398,7 +398,7 @@ function ClientDetailPanel({ client, onEdit, onBack }: { client: Client; onEdit:
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
-export function ClientManagement() {
+export function ClientManagement({ initialClientId }: { initialClientId?: string } = {}) {
   const { clients, loading, error, createClient, updateClient, refresh } = useClients();
   const { jobs } = useJobs();
   const [search, setSearch] = useState('');
@@ -407,6 +407,14 @@ export function ClientManagement() {
   const [editOpen, setEditOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+
+  // Auto-open a specific client when navigated from Scan Parts
+  useEffect(() => {
+    if (initialClientId && clients.length > 0 && !selected) {
+      const client = clients.find(c => c.id === initialClientId);
+      if (client) setSelected(client);
+    }
+  }, [initialClientId, clients]);
 
   const filtered = clients.filter(c => {
     const q = search.toLowerCase();

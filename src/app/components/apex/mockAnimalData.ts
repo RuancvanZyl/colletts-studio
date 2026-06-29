@@ -76,10 +76,34 @@ export const mockAnimals: AnimalSpecies[] = [
 ];
 
 export const trophyTypeOptions = [
-  { value: 'shoulder-mount', label: 'Shoulder Mount' },
-  { value: 'full-body-mount', label: 'Full Body Mount' },
-  { value: 'pedestal-mount', label: 'Pedestal Mount' },
-  { value: 'euro-mount', label: 'Euro Mount (Skull)' },
-  { value: 'tan-to-fur', label: 'Tan to Fur (Rug)' },
-  { value: 'custom-design', label: 'Custom Design' },
+  {
+    value: 'shoulder-mount',
+    label: 'Shoulder Mount',
+    description: 'Head and shoulders mounted on a plaque or panel — the most popular and traditional choice.',
+  },
+  {
+    value: 'full-body-mount',
+    label: 'Full Body Mount',
+    description: 'The entire animal preserved in a lifelike pose — the ultimate display piece.',
+  },
+  {
+    value: 'pedestal-mount',
+    label: 'Pedestal Mount',
+    description: 'Upper body mounted on a decorative base — dramatic and free-standing.',
+  },
+  {
+    value: 'euro-mount',
+    label: 'Euro Mount (Skull)',
+    description: 'Cleaned and whitened skull only — clean, modern look that highlights the horns.',
+  },
+  {
+    value: 'tan-to-fur',
+    label: 'Tan to Fur (Rug / Skin)',
+    description: 'Full hide preserved and tanned — displayed as a wall hanging or floor rug.',
+  },
+  {
+    value: 'custom-design',
+    label: 'Custom Design',
+    description: 'Your unique vision — describe your idea and our team will make it happen.',
+  },
 ];
