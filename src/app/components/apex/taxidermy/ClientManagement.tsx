@@ -173,21 +173,21 @@ function PassportUploadSection({ clientId }: { clientId: string | null }) {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploaded, setUploaded] = useState(false);
-  const [existing, setExisting] = useState<string | null>(null);
+  const [existing, setExisting] = useState<{ file_name: string; storage_path: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!clientId) return;
     (supabase as any).from('client_documents')
-      .select('id, file_name')
+      .select('id, file_name, storage_path')
       .eq('client_id', clientId)
       .eq('doc_type', 'passport')
       .limit(1)
-      .then(({ data }: any) => { if (data?.[0]) setExisting(data[0].file_name); });
+      .then(({ data }: any) => { if (data?.[0]) setExisting(data[0]); });
   }, [clientId]);
 
   async function handleUpload(f: File) {
-    if (!clientId) { setFile(f); return; } // will upload after client created
+    if (!clientId) { setFile(f); return; }
     setUploading(true);
     const ext = f.name.split('.').pop() ?? 'pdf';
     const path = `passports/${clientId}/passport-${Date.now()}.${ext}`;
@@ -196,7 +196,7 @@ function PassportUploadSection({ clientId }: { clientId: string | null }) {
       await (supabase as any).from('client_documents').upsert({
         client_id: clientId, doc_type: 'passport', storage_path: path, file_name: f.name,
       }, { onConflict: 'client_id,doc_type' });
-      setExisting(f.name);
+      setExisting({ file_name: f.name, storage_path: path });
       setUploaded(true);
       toast.success('Passport document saved');
     } else {
@@ -205,27 +205,36 @@ function PassportUploadSection({ clientId }: { clientId: string | null }) {
     setUploading(false);
   }
 
+  async function handleView() {
+    if (!existing) return;
+    const { data } = await supabase.storage
+      .from('client-documents')
+      .createSignedUrl(existing.storage_path, 3600);
+    if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+    else toast.error('Could not open document');
+  }
+
   return (
     <div>
       <Label className="text-xs">
         Passport / ID Document <span className="text-slate-400">(photo or scan)</span>
       </Label>
-      <div
-        className={`mt-1 border-2 border-dashed rounded-lg p-4 flex items-center gap-3 cursor-pointer transition-colors ${
-          uploaded || existing
-            ? 'border-green-400 bg-green-50 dark:bg-green-900/10'
-            : 'border-slate-200 dark:border-slate-600 hover:border-blue-400'
-        }`}
-        onClick={() => inputRef.current?.click()}
-      >
+      <div className={`mt-1 border-2 border-dashed rounded-lg p-4 flex items-center gap-3 transition-colors ${
+        uploaded || existing
+          ? 'border-green-400 bg-green-50 dark:bg-green-900/10'
+          : 'border-slate-200 dark:border-slate-600 hover:border-blue-400'
+      }`}>
         {uploaded || existing ? (
           <>
             <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-green-700 dark:text-green-400 truncate">
-                {existing ?? file?.name ?? 'Document uploaded'}
+                {existing?.file_name ?? file?.name ?? 'Document uploaded'}
               </p>
-              <p className="text-xs text-slate-500">Click to replace</p>
+              <div className="flex gap-3 mt-0.5">
+                <button onClick={handleView} className="text-xs text-[#0073ea] hover:underline">View</button>
+                <button onClick={() => inputRef.current?.click()} className="text-xs text-slate-400 hover:underline">Replace</button>
+              </div>
             </div>
           </>
         ) : file ? (
@@ -237,15 +246,15 @@ function PassportUploadSection({ clientId }: { clientId: string | null }) {
             </div>
           </>
         ) : (
-          <>
+          <div className="cursor-pointer flex items-center gap-3 w-full" onClick={() => inputRef.current?.click()}>
             <Upload className="w-5 h-5 text-slate-400 shrink-0" />
             <div>
               <p className="text-sm text-slate-600 dark:text-slate-400">Upload passport or ID</p>
               <p className="text-xs text-slate-400">JPG, PNG or PDF · max 10 MB</p>
             </div>
-          </>
+          </div>
         )}
-        {uploading && <Loader2 className="w-4 h-4 text-blue-500 animate-spin shrink-0" />}
+        {uploading && <Loader2 className="w-4 h-4 text-blue-500 animate-spin shrink-0 ml-auto" />}
       </div>
       <input
         ref={inputRef}
@@ -530,6 +539,16 @@ export function ClientManagement({ initialClientId }: { initialClientId?: string
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Client list — collapses on mobile when detail is open */}
         <div className={`lg:col-span-2 space-y-3 ${showDetail ? 'hidden lg:block' : ''}`}>
+          {/* Sticky "currently viewing" strip — visible while scrolling the list */}
+          {selected && (
+            <div className="sticky top-16 z-10 flex items-center gap-2 px-3 py-1.5 bg-[#0073ea] text-white rounded-lg shadow-sm text-xs font-medium">
+              <span className="opacity-80">Viewing:</span>
+              <span className="truncate font-semibold">{selected.full_name}</span>
+              <button onClick={() => setSelected(null)} className="ml-auto opacity-70 hover:opacity-100 flex-shrink-0">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <Input
@@ -562,24 +581,34 @@ export function ClientManagement({ initialClientId }: { initialClientId?: string
                 <div className="divide-y divide-slate-100 dark:divide-slate-800">
                   {filtered.map(client => {
                     const ct = (client as any).client_type ?? 'export';
+                    const isSelected = selected?.id === client.id;
+                    const clientNum = (client as any).client_number as string | null;
                     return (
                       <div
                         key={client.id}
-                        onClick={() => setSelected(selected?.id === client.id ? null : client)}
-                        className={`flex items-center gap-3 p-3 hover:bg-slate-50 dark:hover:bg-slate-900 cursor-pointer transition-colors ${selected?.id === client.id ? 'bg-blue-50 dark:bg-blue-950/30' : ''}`}
+                        onClick={() => setSelected(isSelected ? null : client)}
+                        className={`flex items-center gap-3 p-3 cursor-pointer transition-colors border-l-3 ${
+                          isSelected
+                            ? 'bg-blue-50 dark:bg-blue-950/30 border-l-[#0073ea]'
+                            : 'hover:bg-slate-50 dark:hover:bg-slate-900 border-l-transparent'
+                        }`}
+                        style={{ borderLeftWidth: '3px', borderLeftStyle: 'solid', borderLeftColor: isSelected ? '#0073ea' : 'transparent' }}
                       >
-                        <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-white text-sm font-bold"
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-white text-sm font-bold ${isSelected ? 'ring-2 ring-[#0073ea] ring-offset-1' : ''}`}
                           style={{ background: ct === 'local' ? '#16a34a' : '#0073ea' }}>
                           {client.full_name.charAt(0)}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm text-slate-900 dark:text-slate-100 truncate">{client.full_name}</p>
+                          <div className="flex items-center gap-1.5">
+                            <p className={`font-medium text-sm truncate ${isSelected ? 'text-[#0073ea]' : 'text-slate-900 dark:text-slate-100'}`}>{client.full_name}</p>
+                            {isSelected && <span className="text-[10px] bg-[#0073ea] text-white px-1 rounded shrink-0">Open</span>}
+                          </div>
                           <div className="flex items-center gap-2 mt-0.5">
+                            {clientNum && <span className="text-[10px] font-mono text-slate-500">{clientNum}</span>}
                             {client.country && <span className="text-xs text-slate-400 truncate">{client.country}</span>}
-                            {client.email   && <span className="text-xs text-slate-400 truncate hidden sm:block">{client.email}</span>}
                           </div>
                         </div>
-                        <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                        <ChevronRight className={`w-4 h-4 flex-shrink-0 transition-transform ${isSelected ? 'text-[#0073ea] rotate-90' : 'text-slate-400'}`} />
                       </div>
                     );
                   })}

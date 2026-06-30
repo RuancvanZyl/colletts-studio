@@ -10,6 +10,7 @@ import {
   CheckCircle2, AlertCircle, Clock, ExternalLink, Trash2,
 } from 'lucide-react';
 import { useClientHunts, type ClientHunt, type HuntDocument } from '../../../../lib/hooks/useClientHunts';
+import { supabase } from '../../../../lib/supabase';
 import { toast } from 'sonner';
 
 // ── Doc type metadata ───────────────────────────────────────────────────────
@@ -229,9 +230,19 @@ function StaffDocDialog({ hunt, docType, onSaved, onClose }: {
     packing_list: 'Packing List',
   };
 
-  const [formData, setFormData] = useState<Record<string, string>>(
-    existingDoc?.form_data ?? { ref_number: hunt.ref_number, operator: hunt.operator ?? '', ph_name: hunt.ph ?? '' }
-  );
+  const [formData, setFormData] = useState<Record<string, string>>(() => {
+    const base = existingDoc?.form_data ?? {};
+    const defaults = { ref_number: hunt.ref_number, operator: hunt.operator ?? '', ph_name: hunt.ph ?? '' };
+    // ArrivalCheckIn saves different key names — map them so the form shows populated data
+    const mapped: Record<string, string> = { ...defaults, ...base };
+    if (!mapped.condition_notes && base.condition) mapped.condition_notes = String(base.condition);
+    if (!mapped.special_instructions && base.instructions) mapped.special_instructions = String(base.instructions);
+    if (!mapped.items_received && base.species) {
+      const qty = base.quantity ? `x${base.quantity} ` : '';
+      mapped.items_received = `${qty}${base.species}${base.mount_type ? ` (${base.mount_type})` : ''}`;
+    }
+    return mapped;
+  });
 
   function set(key: string, val: string) {
     setFormData(p => ({ ...p, [key]: val }));
@@ -341,10 +352,11 @@ function HuntCard({ hunt, onRefresh }: { hunt: ClientHunt; onRefresh: () => void
 
   async function openDoc(doc: HuntDocument) {
     if (doc.storage_path) {
-      const { data } = await (await import('../../../../lib/supabase')).supabase.storage
+      const { data } = await supabase.storage
         .from('client-photos')
         .createSignedUrl(doc.storage_path, 300);
       if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+      else toast.error('Could not open file — ensure the storage bucket exists in Supabase');
     } else if (doc.dropbox_path) {
       window.open(dropboxUrl(doc.dropbox_path), '_blank');
     }
@@ -385,7 +397,15 @@ function HuntCard({ hunt, onRefresh }: { hunt: ClientHunt; onRefresh: () => void
                 <FolderOpen className="w-3 h-3" /> Dropbox
               </a>
             )}
-            <span className="text-xs text-slate-400">{hunt.documents.length} docs</span>
+            {hunt.documents.length > 0 && (
+              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                hunt.documents.filter(d => d.status === 'complete').length === hunt.documents.length
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-amber-100 text-amber-700'
+              }`}>
+                {hunt.documents.filter(d => d.status === 'complete').length}/{hunt.documents.length} docs
+              </span>
+            )}
             {open ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
           </div>
         </button>
