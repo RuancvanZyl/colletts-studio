@@ -18,6 +18,7 @@ import { InventoryView } from './taxidermy/InventoryView';
 import { ClientManagement } from './taxidermy/ClientManagement';
 import { InvoiceManagement } from './taxidermy/InvoiceManagement';
 import { AdminConfiguration } from './taxidermy/AdminConfiguration';
+import { QuickJobEntry } from './taxidermy/QuickJobEntry';
 import { NoticeBoard } from './shared/NoticeBoard';
 import { GlobalSearch } from './shared/GlobalSearch';
 import { useAuth } from '../../../lib/auth';
@@ -37,6 +38,7 @@ type TaxidermyView =
   | 'scan'
   | 'arrival'
   | 'receiving'
+  | 'quick-entry'
   | 'skin-processing'
   | 'skull-processing'
   | 'storage'
@@ -111,9 +113,10 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     {
       heading: 'Intake',
       items: [
-        { view: 'scan',      icon: Scan,          label: 'Scan Parts' },
-        { view: 'arrival',   icon: ClipboardCheck, label: 'Arrival Check-In' },
-        { view: 'receiving', icon: ClipboardList,  label: 'Receiving Sheet' },
+        { view: 'scan',        icon: Scan,          label: 'Scan Parts' },
+        { view: 'arrival',     icon: ClipboardCheck, label: 'Arrival Check-In' },
+        { view: 'receiving',   icon: ClipboardList,  label: 'Receiving Sheet' },
+        { view: 'quick-entry', icon: ClipboardList,  label: 'Quick Job Entry' },
       ],
     },
     {
@@ -159,6 +162,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'scan':            return <PartScanningStation onNavigate={navigate} />;
       case 'arrival':         return <ArrivalCheckIn onComplete={() => navigate('receiving')} />;
       case 'receiving':       return <ReceivingSheet onNavigate={navigate} />;
+      case 'quick-entry':    return <QuickJobEntry onDone={() => navigate('tasks')} />;
       case 'skin-processing': return <SkinProcessing />;
       case 'skull-processing':return <SkullProcessing />;
       case 'storage':         return <StorageManagement />;
