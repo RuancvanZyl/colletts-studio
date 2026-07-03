@@ -14,11 +14,22 @@ import { MountingStation } from './taxidermy/MountingStation';
 import { FinishingStation } from './taxidermy/FinishingStation';
 import { QualityInspection } from './taxidermy/QualityInspection';
 import { PackingShipping } from './taxidermy/PackingShipping';
-import { InventoryView } from './taxidermy/InventoryView';
+import { JobTracker } from './taxidermy/JobTracker';
 import { ClientManagement } from './taxidermy/ClientManagement';
 import { InvoiceManagement } from './taxidermy/InvoiceManagement';
 import { AdminConfiguration } from './taxidermy/AdminConfiguration';
 import { QuickJobEntry } from './taxidermy/QuickJobEntry';
+import { DropboxImport } from './taxidermy/DropboxImport';
+import { SkinningStation } from './taxidermy/SkinningStation';
+import { SaltingStation } from './taxidermy/SaltingStation';
+import { DipPackStation } from './taxidermy/DipPackStation';
+import { PackingStation } from './taxidermy/PackingStation';
+import { TanneryStation } from './taxidermy/TanneryStation';
+import { ReadyToShip } from './taxidermy/ReadyToShip';
+import { ClientInbox } from './taxidermy/ClientInbox';
+import { WorkshopInstructions } from './taxidermy/WorkshopInstructions';
+import { PaymentConfirmation } from './taxidermy/PaymentConfirmation';
+import { DailyTodoList } from './taxidermy/DailyTodoList';
 import { NoticeBoard } from './shared/NoticeBoard';
 import { GlobalSearch } from './shared/GlobalSearch';
 import { useAuth } from '../../../lib/auth';
@@ -27,18 +38,24 @@ import {
   LayoutDashboard, Scan, ClipboardCheck, Droplet, Skull,
   Warehouse, Scissors, Paintbrush, CheckCircle2, Package,
   List, Settings, Search, LogOut, Menu, X, Moon, Sun,
-  Users, FileText, ChevronRight, BarChart3, ClipboardList, ListTodo,
+  Users, FileText, ChevronRight, BarChart3, ClipboardList, ListTodo, FolderOpen, CreditCard, Calendar, MessageCircle,
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 
 type TaxidermyView =
   | 'summary'
   | 'dashboard'
+  | 'daily-todo'
   | 'tasks'
   | 'scan'
   | 'arrival'
   | 'receiving'
   | 'quick-entry'
+  | 'dropbox-import'
+  | 'skinning'
+  | 'salting'
+  | 'tannery'
+  | 'dip-pack'
   | 'skin-processing'
   | 'skull-processing'
   | 'storage'
@@ -46,6 +63,11 @@ type TaxidermyView =
   | 'finishing'
   | 'quality'
   | 'packing'
+  | 'photos-admin'
+  | 'ready-to-ship'
+  | 'client-inbox'
+  | 'workshop-brief'
+  | 'payment-confirmation'
   | 'inventory'
   | 'clients'
   | 'invoices'
@@ -105,6 +127,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     {
       heading: 'Overview',
       items: [
+        { view: 'daily-todo', icon: Calendar,        label: 'Daily Tasks' },
         { view: 'tasks',     icon: ListTodo,        label: 'My Tasks', badge: myTaskCount },
         { view: 'summary',   icon: BarChart3,       label: 'Summary' },
         { view: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -116,14 +139,19 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
         { view: 'scan',        icon: Scan,          label: 'Scan Parts' },
         { view: 'arrival',     icon: ClipboardCheck, label: 'Arrival Check-In' },
         { view: 'receiving',   icon: ClipboardList,  label: 'Receiving Sheet' },
-        { view: 'quick-entry', icon: ClipboardList,  label: 'Quick Job Entry' },
+        { view: 'quick-entry',    icon: ClipboardList,  label: 'Quick Job Entry' },
+        { view: 'dropbox-import', icon: FolderOpen,     label: 'Dropbox Import' },
       ],
     },
     {
       heading: 'Processing',
       items: [
-        { view: 'skin-processing',  icon: Droplet,   label: 'Skin Processing' },
+        { view: 'skinning',         icon: Scissors,  label: 'Skinning' },
+        { view: 'salting',          icon: Droplet,   label: 'Salting' },
+        { view: 'tannery',          icon: Droplet,   label: 'Tannery' },
+        { view: 'skin-processing',  icon: Droplet,   label: 'Cleaning & Bleach' },
         { view: 'skull-processing', icon: Skull,     label: 'Skull Processing' },
+        { view: 'dip-pack',         icon: Package,   label: 'Dip & Pack' },
         { view: 'storage',          icon: Warehouse, label: 'Storage' },
       ],
     },
@@ -138,14 +166,19 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     {
       heading: 'Logistics',
       items: [
-        { view: 'packing',   icon: Package, label: 'Packing & Shipping' },
-        { view: 'inventory', icon: List,    label: 'Job Tracker' },
-        { view: 'clients',   icon: Users,   label: 'Clients' },
+        { view: 'workshop-brief', icon: ClipboardList, label: 'Workshop Instructions' },
+        { view: 'packing',       icon: Package, label: 'Packing & Crating' },
+        { view: 'photos-admin',  icon: FileText, label: 'Photos & Dispatch' },
+        { view: 'ready-to-ship', icon: Package, label: 'Ready to Ship' },
+        { view: 'inventory',     icon: List,    label: 'Job Tracker' },
+        { view: 'clients',      icon: Users,   label: 'Clients' },
       ],
     },
     ...(canSeeBusiness ? [{
       heading: 'Business',
       items: [
+        { view: 'client-inbox' as TaxidermyView, icon: MessageCircle, label: 'Client Messages' },
+        { view: 'payment-confirmation' as TaxidermyView, icon: CreditCard, label: 'Payments' },
         { view: 'invoices' as TaxidermyView, icon: FileText, label: 'Invoicing' },
         ...(isAdmin ? [{ view: 'admin' as TaxidermyView, icon: Settings, label: 'Admin' }] : []),
       ],
@@ -156,21 +189,32 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
 
   const renderView = () => {
     switch (currentView) {
+      case 'daily-todo':      return <DailyTodoList onNavigateDept={navigate} />;
       case 'tasks':           return <MyTasks />;
       case 'summary':         return <SummarySheet onNavigate={navigate} />;
       case 'dashboard':       return <WorkshopDashboard onNavigate={navigate} />;
       case 'scan':            return <PartScanningStation onNavigate={navigate} />;
       case 'arrival':         return <ArrivalCheckIn onComplete={() => navigate('receiving')} />;
       case 'receiving':       return <ReceivingSheet onNavigate={navigate} />;
-      case 'quick-entry':    return <QuickJobEntry onDone={() => navigate('tasks')} />;
+      case 'quick-entry':     return <QuickJobEntry onDone={() => navigate('tasks')} />;
+      case 'dropbox-import':  return <DropboxImport />;
+      case 'skinning':        return <SkinningStation />;
+      case 'salting':         return <SaltingStation />;
+      case 'tannery':         return <TanneryStation />;
+      case 'dip-pack':        return <DipPackStation />;
       case 'skin-processing': return <SkinProcessing />;
       case 'skull-processing':return <SkullProcessing />;
       case 'storage':         return <StorageManagement />;
       case 'mounting':        return <MountingStation />;
       case 'finishing':       return <FinishingStation />;
       case 'quality':         return <QualityInspection />;
-      case 'packing':         return <PackingShipping />;
-      case 'inventory':       return <InventoryView />;
+      case 'workshop-brief':         return <WorkshopInstructions />;
+      case 'packing':                return <PackingStation />;
+      case 'photos-admin':           return <PackingShipping />;
+      case 'ready-to-ship':          return <ReadyToShip />;
+      case 'client-inbox':           return <ClientInbox />;
+      case 'payment-confirmation':   return <PaymentConfirmation />;
+      case 'inventory':              return <JobTracker />;
       case 'clients':         return <ClientManagement initialClientId={navClientId} />;
       case 'invoices':        return <InvoiceManagement />;
       case 'admin':           return <AdminConfiguration />;

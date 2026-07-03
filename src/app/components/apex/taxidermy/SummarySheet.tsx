@@ -1,67 +1,40 @@
-import { useEffect, useState } from 'react';
 import { Badge } from '../../ui/badge';
 import { Button } from '../../ui/button';
 import {
   RefreshCw, TrendingUp, AlertTriangle, Clock, Package,
-  CheckCircle2, Users, DollarSign, ArrowRight, Loader2,
+  CheckCircle2, Users, ArrowRight, Loader2,
   BarChart3, Activity, Plane, MapPin, FolderOpen, FileText,
-  ClipboardList, ShieldCheck,
+  ClipboardList, ShieldCheck, CreditCard, Timer, UserCheck,
 } from 'lucide-react';
-import { useDashboard } from '../../../../lib/hooks/useDashboard';
-import { useJobs } from '../../../../lib/hooks/useJobs';
-import { useInvoices } from '../../../../lib/hooks/useInvoices';
+import { useWorkshopStats } from '../../../../lib/hooks/useWorkshopStats';
 import { useHuntDashboard } from '../../../../lib/hooks/useHuntDashboard';
-import { PHASE_LABELS } from '../shared/PhaseAdvanceDialog';
-import type { JobPhase } from '../../../../lib/database.types';
-
-const PHASE_SEQUENCE: { phase: JobPhase; label: string; color: string; bg: string }[] = [
-  { phase: 'intake',          label: 'Intake',         color: '#f59e0b', bg: '#fef3c7' },
-  { phase: 'skin_processing', label: 'Skin',           color: '#3b82f6', bg: '#dbeafe' },
-  { phase: 'skull_processing',label: 'Skull',          color: '#f97316', bg: '#ffedd5' },
-  { phase: 'storage_pre',     label: 'Storage (Pre)',  color: '#8b5cf6', bg: '#ede9fe' },
-  { phase: 'tannery',         label: 'Tannery',        color: '#7c3aed', bg: '#ddd6fe' },
-  { phase: 'storage_post',    label: 'Storage (Post)', color: '#6366f1', bg: '#e0e7ff' },
-  { phase: 'mounting',        label: 'Mounting',       color: '#0ea5e9', bg: '#e0f2fe' },
-  { phase: 'finishing',       label: 'Finishing',      color: '#10b981', bg: '#d1fae5' },
-  { phase: 'quality_check',   label: 'QC',             color: '#059669', bg: '#a7f3d0' },
-  { phase: 'packing',         label: 'Packing',        color: '#06b6d4', bg: '#cffafe' },
-  { phase: 'shipped',         label: 'Shipped',        color: '#64748b', bg: '#f1f5f9' },
-];
+import { useFloorTime } from '../../../../lib/hooks/useFloorTime';
+import { DEPT_COLORS } from '../../../../lib/pipeline';
 
 interface SummarySheetProps {
   onNavigate: (view: string) => void;
 }
 
+function timeAgo(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 2)  return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
 export function SummarySheet({ onNavigate }: SummarySheetProps) {
-  const { summary, alerts, recentActivity, loading: dashLoading, refresh } = useDashboard();
-  const { jobs, loading: jobsLoading } = useJobs();
-  const { invoices, loading: invLoading } = useInvoices();
+  const { stats, loading, refresh } = useWorkshopStats();
   const { stats: huntStats, loading: huntLoading } = useHuntDashboard();
-
-  const loading = dashLoading || jobsLoading;
-
-  // Phase counts
-  const phaseCounts = PHASE_SEQUENCE.map(p => ({
-    ...p,
-    count: jobs.filter(j => j.current_phase === p.phase).length,
-  }));
-
-  // Financial summary
-  const totalInvoiced = invoices.reduce((s, inv) => s + inv.invoice_line_items.reduce((ls, li) => ls + li.line_total, 0), 0);
-  const totalPaid = invoices.reduce((s, inv) => s + inv.payments.reduce((ps, p) => ps + p.amount, 0), 0);
-  const outstanding = totalInvoiced - totalPaid;
-  const overdueInvoices = invoices.filter(i => i.status === 'overdue').length;
-
-  // Rush jobs
-  const rushJobs = jobs.filter(j => j.rush && !['shipped', 'delivered'].includes(j.current_phase));
+  const { data: floorTime, loading: floorLoading } = useFloorTime();
 
   const kpiCards = [
-    { label: 'Total Active Jobs', value: summary?.jobs_in_progress ?? jobs.length, icon: TrendingUp, color: '#0ea5e9', trend: null },
-    { label: 'Overdue / Paid', value: summary?.jobs_overdue ?? 0, icon: AlertTriangle, color: summary?.jobs_overdue ? '#ef4444' : '#10b981', trend: null },
-    { label: 'Stalled Jobs', value: summary?.jobs_stalled ?? 0, icon: Clock, color: summary?.jobs_stalled ? '#f59e0b' : '#10b981', trend: null },
-    { label: 'Rush Jobs', value: rushJobs.length, icon: Zap, color: rushJobs.length ? '#ef4444' : '#10b981', trend: null },
-    { label: 'Received Today', value: summary?.specimens_received_today ?? 0, icon: Package, color: '#10b981', trend: null },
-    { label: 'Shipping Today', value: summary?.shipments_today ?? 0, icon: CheckCircle2, color: '#0ea5e9', trend: null },
+    { label: 'Active Job Cards',    value: stats?.totalActive        ?? 0, icon: TrendingUp,  color: '#0073ea' },
+    { label: 'Completed This Month',value: stats?.completedThisMonth ?? 0, icon: CheckCircle2,color: '#10b981' },
+    { label: 'Awaiting Payment',    value: stats?.pendingPayment     ?? 0, icon: CreditCard,  color: '#f59e0b' },
+    { label: 'Critically Stalled',  value: stats?.stalledRed         ?? 0, icon: AlertTriangle, color: stats?.stalledRed ? '#ef4444' : '#10b981' },
   ];
 
   return (
@@ -74,18 +47,13 @@ export function SummarySheet({ onNavigate }: SummarySheetProps) {
             {new Date().toLocaleDateString('en-ZA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={refresh} disabled={loading}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />Refresh
-          </Button>
-          <Button size="sm" onClick={() => onNavigate('arrival')} className="bg-[#0073ea] hover:bg-[#0060c0] text-white">
-            <Package className="w-4 h-4 mr-2" />New Check-In
-          </Button>
-        </div>
+        <Button variant="outline" size="sm" onClick={refresh} disabled={loading}>
+          <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />Refresh
+        </Button>
       </div>
 
       {/* KPI row */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {kpiCards.map((kpi, i) => (
           <div key={i} className="bg-white dark:bg-[#1c2b3a] rounded-xl border border-slate-200 dark:border-slate-700 p-4 flex flex-col gap-2">
             <div className="flex items-center justify-between">
@@ -102,7 +70,61 @@ export function SummarySheet({ onNavigate }: SummarySheetProps) {
         ))}
       </div>
 
-      {/* ── Hunt & Client Summary ─────────────────────────────────────── */}
+      {/* Dept pipeline board */}
+      <div className="bg-white dark:bg-[#1c2b3a] rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 dark:border-slate-700">
+          <h2 className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-[#0073ea]" />Pipeline by Department
+          </h2>
+          <span className="text-xs text-slate-400">{stats?.totalActive ?? 0} active job cards</span>
+        </div>
+        <div className="p-5">
+          {loading ? (
+            <div className="flex gap-2">{[...Array(6)].map((_, i) => <div key={i} className="flex-1 h-20 bg-slate-100 dark:bg-slate-800 rounded-lg animate-pulse" />)}</div>
+          ) : (stats?.byDept.length ?? 0) === 0 ? (
+            <p className="text-center text-sm text-slate-400 py-4">No active jobs in production</p>
+          ) : (
+            <>
+              <div className="flex gap-2 overflow-x-auto pb-2">
+                {(stats?.byDept ?? []).map(d => {
+                  const color = DEPT_COLORS[d.dept] ?? '#64748b';
+                  return (
+                    <button
+                      key={d.dept}
+                      onClick={() => onNavigate(d.dept.replace('_', '-'))}
+                      className="flex-shrink-0 flex flex-col items-center gap-1 px-4 py-3 rounded-lg border-2 hover:shadow-md transition-all min-w-[88px]"
+                      style={{ borderColor: color, backgroundColor: color + '15' }}
+                    >
+                      <span className="text-2xl font-bold" style={{ color }}>{d.count}</span>
+                      <span className="text-xs text-center leading-tight text-slate-600 dark:text-slate-400">{d.label}</span>
+                      {d.stalled > 0 && (
+                        <span className="text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded-full">{d.stalled} stalled</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-4 space-y-1.5">
+                {(stats?.byDept ?? []).map(d => {
+                  const color = DEPT_COLORS[d.dept] ?? '#64748b';
+                  const max = Math.max(...(stats?.byDept.map(x => x.count) ?? [1]), 1);
+                  return (
+                    <div key={d.dept} className="flex items-center gap-2">
+                      <span className="text-xs text-slate-500 w-28 text-right flex-shrink-0 truncate">{d.label}</span>
+                      <div className="flex-1 h-4 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full transition-all duration-700" style={{ width: `${(d.count / max) * 100}%`, backgroundColor: color }} />
+                      </div>
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300 w-6">{d.count}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Hunt & Client Summary */}
       <div className="bg-white dark:bg-[#1c2b3a] rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 dark:border-slate-700">
           <h2 className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
@@ -119,13 +141,12 @@ export function SummarySheet({ onNavigate }: SummarySheetProps) {
             </div>
           ) : (
             <>
-              {/* Top row: client + hunt totals */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
                 {[
-                  { label: 'Total Clients',    value: huntStats?.total_clients ?? 0,  icon: Users,       color: '#0073ea' },
-                  { label: 'Export Clients',   value: huntStats?.export_clients ?? 0, icon: Plane,       color: '#6366f1' },
-                  { label: 'Local Clients',    value: huntStats?.local_clients ?? 0,  icon: MapPin,      color: '#10b981' },
-                  { label: 'Total Hunts',      value: huntStats?.total_hunts ?? 0,    icon: FolderOpen,  color: '#f59e0b' },
+                  { label: 'Total Clients',  value: huntStats?.total_clients  ?? 0, icon: Users,      color: '#0073ea' },
+                  { label: 'Export Clients', value: huntStats?.export_clients ?? 0, icon: Plane,      color: '#6366f1' },
+                  { label: 'Local Clients',  value: huntStats?.local_clients  ?? 0, icon: MapPin,     color: '#10b981' },
+                  { label: 'Total Hunts',    value: huntStats?.total_hunts    ?? 0, icon: FolderOpen, color: '#f59e0b' },
                 ].map(card => (
                   <div key={card.label} className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
                     <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: card.color + '20' }}>
@@ -139,13 +160,12 @@ export function SummarySheet({ onNavigate }: SummarySheetProps) {
                 ))}
               </div>
 
-              {/* Document completeness */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
                 {[
-                  { label: 'Trophies Received',  value: huntStats?.hunts_with_receiving ?? 0, icon: Package,      color: '#10b981', total: huntStats?.total_hunts },
-                  { label: 'Job Cards Done',      value: huntStats?.hunts_with_job_card ?? 0,  icon: ClipboardList,color: '#0073ea', total: huntStats?.total_hunts },
-                  { label: 'Invoiced',            value: huntStats?.hunts_with_invoice ?? 0,   icon: FileText,     color: '#f59e0b', total: huntStats?.total_hunts },
-                  { label: 'Permits Filed',       value: huntStats?.hunts_with_permit ?? 0,    icon: ShieldCheck,  color: '#6366f1', total: huntStats?.total_hunts },
+                  { label: 'Trophies Received', value: huntStats?.hunts_with_receiving ?? 0, icon: Package,       color: '#10b981', total: huntStats?.total_hunts ?? 0 },
+                  { label: 'Job Cards Created',  value: huntStats?.hunts_with_job_card  ?? 0, icon: ClipboardList, color: '#0073ea', total: huntStats?.total_hunts ?? 0 },
+                  { label: 'Invoiced',           value: huntStats?.hunts_with_invoice   ?? 0, icon: FileText,      color: '#f59e0b', total: huntStats?.total_hunts ?? 0 },
+                  { label: 'Permits Filed',      value: huntStats?.hunts_with_permit    ?? 0, icon: ShieldCheck,   color: '#6366f1', total: huntStats?.total_hunts ?? 0 },
                 ].map(card => {
                   const pct = card.total ? Math.round((card.value / card.total) * 100) : 0;
                   return (
@@ -164,31 +184,8 @@ export function SummarySheet({ onNavigate }: SummarySheetProps) {
                 })}
               </div>
 
-              {/* Missing docs alerts */}
-              {((huntStats?.hunts_missing_receiving ?? 0) > 0 || (huntStats?.hunts_missing_job_card ?? 0) > 0) && (
-                <div className="flex flex-wrap gap-2">
-                  {(huntStats?.hunts_missing_receiving ?? 0) > 0 && (
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-full">
-                      <AlertTriangle className="w-3 h-3 text-amber-500" />
-                      <span className="text-xs text-amber-700 dark:text-amber-300">
-                        {huntStats!.hunts_missing_receiving} active hunts missing receiving sheet
-                      </span>
-                    </div>
-                  )}
-                  {(huntStats?.hunts_missing_job_card ?? 0) > 0 && (
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-full">
-                      <AlertTriangle className="w-3 h-3 text-red-500" />
-                      <span className="text-xs text-red-700 dark:text-red-300">
-                        {huntStats!.hunts_missing_job_card} active hunts missing job card
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Year bar chart */}
               {huntStats?.hunts_by_year && Object.keys(huntStats.hunts_by_year).length > 0 && (
-                <div className="mt-4">
+                <div className="mt-2">
                   <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Hunts by Year</p>
                   <div className="flex items-end gap-1.5 h-14">
                     {Object.entries(huntStats.hunts_by_year)
@@ -207,132 +204,74 @@ export function SummarySheet({ onNavigate }: SummarySheetProps) {
                   </div>
                 </div>
               )}
+
+              {((huntStats?.hunts_missing_receiving ?? 0) > 0 || (huntStats?.hunts_missing_job_card ?? 0) > 0) && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {(huntStats?.hunts_missing_receiving ?? 0) > 0 && (
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-full">
+                      <AlertTriangle className="w-3 h-3 text-amber-500" />
+                      <span className="text-xs text-amber-700 dark:text-amber-300">
+                        {huntStats!.hunts_missing_receiving} active hunts missing receiving sheet
+                      </span>
+                    </div>
+                  )}
+                  {(huntStats?.hunts_missing_job_card ?? 0) > 0 && (
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-full">
+                      <AlertTriangle className="w-3 h-3 text-red-500" />
+                      <span className="text-xs text-red-700 dark:text-red-300">
+                        {huntStats!.hunts_missing_job_card} active hunts missing job card
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
       </div>
 
-      {/* Pipeline board */}
-      <div className="bg-white dark:bg-[#1c2b3a] rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 dark:border-slate-700">
-          <h2 className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-            <BarChart3 className="w-4 h-4 text-[#0073ea]" />Pipeline
-          </h2>
-          <span className="text-xs text-slate-400">{phaseCounts.filter(p => p.count > 0).reduce((s, p) => s + p.count, 0)} jobs in production</span>
-        </div>
-        <div className="p-5">
-          <div className="flex gap-2 overflow-x-auto pb-2">
-            {phaseCounts.map(p => (
-              <button
-                key={p.phase}
-                onClick={() => {
-                  if (['skin_processing', 'skull_processing'].includes(p.phase)) onNavigate(p.phase === 'skin_processing' ? 'skin-processing' : 'skull-processing');
-                  else if (p.phase === 'storage_pre' || p.phase === 'storage_post') onNavigate('storage');
-                  else if (p.phase === 'mounting') onNavigate('mounting');
-                  else if (p.phase === 'finishing') onNavigate('finishing');
-                  else if (p.phase === 'quality_check') onNavigate('quality');
-                  else if (p.phase === 'packing' || p.phase === 'shipped') onNavigate('packing');
-                  else onNavigate('inventory');
-                }}
-                className="flex-shrink-0 flex flex-col items-center gap-2 px-4 py-3 rounded-lg border-2 hover:shadow-md transition-all min-w-[80px]"
-                style={{ borderColor: p.count > 0 ? p.color : '#e2e8f0', backgroundColor: p.count > 0 ? p.bg : 'transparent' }}
-              >
-                <span className="text-2xl font-bold" style={{ color: p.count > 0 ? p.color : '#94a3b8' }}>{loading ? '—' : p.count}</span>
-                <span className="text-xs text-center leading-tight text-slate-600 dark:text-slate-400">{p.label}</span>
-              </button>
-            ))}
-          </div>
+      {/* Stalled alerts + Recent activity */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-          {/* Simple bar chart */}
-          {!loading && phaseCounts.some(p => p.count > 0) && (
-            <div className="mt-4 space-y-1.5">
-              {phaseCounts.filter(p => p.count > 0).map(p => {
-                const max = Math.max(...phaseCounts.map(p => p.count), 1);
-                return (
-                  <div key={p.phase} className="flex items-center gap-2">
-                    <span className="text-xs text-slate-500 w-24 text-right flex-shrink-0">{p.label}</span>
-                    <div className="flex-1 h-4 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-700"
-                        style={{ width: `${(p.count / max) * 100}%`, backgroundColor: p.color }}
-                      />
-                    </div>
-                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300 w-6">{p.count}</span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* 3-column grid: Alerts · Financials · Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
-        {/* Alerts */}
+        {/* Stalled */}
         <div className="bg-white dark:bg-[#1c2b3a] rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100 dark:border-slate-700">
             <AlertTriangle className="w-4 h-4 text-red-500" />
-            <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">Needs Attention</h3>
-            {alerts.length > 0 && <Badge className="bg-red-500 ml-auto text-xs">{alerts.length}</Badge>}
+            <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">Stalled Jobs</h3>
+            {(stats?.stalledRed ?? 0) > 0 && (
+              <Badge className="bg-red-500 ml-auto text-xs">{stats!.stalledRed} critical</Badge>
+            )}
+            {(stats?.stalledYellow ?? 0) > 0 && (
+              <Badge className="bg-amber-500 ml-auto text-xs">{stats!.stalledYellow} warning</Badge>
+            )}
           </div>
-          <div className="divide-y divide-slate-50 dark:divide-slate-800 max-h-72 overflow-y-auto">
+          <div className="p-4">
             {loading ? (
-              <div className="p-4 space-y-2">{[...Array(3)].map((_, i) => <div key={i} className="h-10 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />)}</div>
-            ) : alerts.length === 0 ? (
-              <div className="py-8 text-center">
+              <div className="space-y-2">{[...Array(3)].map((_, i) => <div key={i} className="h-10 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />)}</div>
+            ) : (stats?.stalledRed ?? 0) === 0 && (stats?.stalledYellow ?? 0) === 0 ? (
+              <div className="py-6 text-center">
                 <CheckCircle2 className="w-8 h-8 text-green-400 mx-auto mb-2" />
                 <p className="text-xs text-slate-400">All jobs on track</p>
               </div>
-            ) : alerts.map((a, i) => (
-              <div key={i} className="px-4 py-3 flex items-start gap-2.5">
-                <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${a.is_overdue_paid ? 'bg-red-500' : 'bg-amber-500'}`} />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">{a.client_name}</p>
-                  <p className="text-xs text-slate-500">{a.species_name ?? 'Trophy'} · {a.current_phase?.replace(/_/g, ' ')}</p>
-                  {a.due_date && <p className="text-xs text-red-500 mt-0.5">Due {new Date(a.due_date).toLocaleDateString()}</p>}
-                </div>
-              </div>
-            ))}
-          </div>
-          {alerts.length > 0 && (
-            <div className="px-4 py-2.5 border-t border-slate-100 dark:border-slate-700">
-              <button onClick={() => onNavigate('inventory')} className="text-xs text-[#0073ea] hover:underline flex items-center gap-1">
-                View all jobs <ArrowRight className="w-3 h-3" />
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Financials */}
-        <div className="bg-white dark:bg-[#1c2b3a] rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100 dark:border-slate-700">
-            <DollarSign className="w-4 h-4 text-green-500" />
-            <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">Financials</h3>
-            <Badge variant="outline" className="ml-auto text-xs">Xero</Badge>
-          </div>
-          <div className="p-4 space-y-3">
-            {invLoading ? (
-              <div className="space-y-2">{[...Array(4)].map((_, i) => <div key={i} className="h-8 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />)}</div>
             ) : (
-              <>
-                {[
-                  { label: 'Total Invoiced', value: `R ${totalInvoiced.toLocaleString()}`, color: 'text-slate-900 dark:text-slate-100' },
-                  { label: 'Total Collected', value: `R ${totalPaid.toLocaleString()}`, color: 'text-green-600' },
-                  { label: 'Outstanding', value: `R ${outstanding.toLocaleString()}`, color: outstanding > 0 ? 'text-amber-600 font-bold' : 'text-green-600' },
-                  { label: 'Overdue Invoices', value: overdueInvoices, color: overdueInvoices > 0 ? 'text-red-600 font-bold' : 'text-slate-500' },
-                ].map(f => (
-                  <div key={f.label} className="flex justify-between items-center py-1.5 border-b border-slate-50 dark:border-slate-800 last:border-0">
-                    <span className="text-xs text-slate-500">{f.label}</span>
-                    <span className={`text-sm ${f.color}`}>{f.value}</span>
+              <div className="space-y-2">
+                {(stats?.byDept ?? []).filter(d => d.stalled > 0).map(d => (
+                  <div key={d.dept} className="flex items-center justify-between p-2.5 bg-red-50 dark:bg-red-950/20 rounded-lg border border-red-100 dark:border-red-900">
+                    <div>
+                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{d.label}</p>
+                      <p className="text-xs text-slate-500">{d.count} total · {d.stalled} stalled</p>
+                    </div>
+                    <button onClick={() => onNavigate(d.dept.replace('_', '-'))} className="text-xs text-red-600 hover:underline flex items-center gap-1">
+                      View <ArrowRight className="w-3 h-3" />
+                    </button>
                   </div>
                 ))}
-              </>
+              </div>
             )}
           </div>
           <div className="px-4 py-2.5 border-t border-slate-100 dark:border-slate-700">
-            <button onClick={() => onNavigate('invoices')} className="text-xs text-[#0073ea] hover:underline flex items-center gap-1">
-              Open invoicing <ArrowRight className="w-3 h-3" />
+            <button onClick={() => onNavigate('inventory')} className="text-xs text-[#0073ea] hover:underline flex items-center gap-1">
+              View all jobs <ArrowRight className="w-3 h-3" />
             </button>
           </div>
         </div>
@@ -344,19 +283,21 @@ export function SummarySheet({ onNavigate }: SummarySheetProps) {
             <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">Recent Activity</h3>
           </div>
           <div className="divide-y divide-slate-50 dark:divide-slate-800 max-h-72 overflow-y-auto">
-            {dashLoading ? (
+            {loading ? (
               <div className="p-4 space-y-2">{[...Array(5)].map((_, i) => <div key={i} className="h-9 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />)}</div>
-            ) : recentActivity.length === 0 ? (
+            ) : (stats?.recentActivity.length ?? 0) === 0 ? (
               <div className="py-8 text-center">
                 <Activity className="w-8 h-8 text-slate-200 mx-auto mb-2" />
                 <p className="text-xs text-slate-400">No activity yet</p>
               </div>
-            ) : recentActivity.map(a => (
-              <div key={a.id} className="px-4 py-2.5 flex items-start gap-2.5">
+            ) : (stats?.recentActivity ?? []).map((a, i) => (
+              <div key={i} className="px-4 py-2.5 flex items-start gap-2.5">
                 <div className="w-1.5 h-1.5 rounded-full bg-[#0073ea] mt-2 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-slate-700 dark:text-slate-300 leading-snug">{a.text}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">{a.time}</p>
+                  <p className="text-xs text-slate-700 dark:text-slate-300 leading-snug truncate">
+                    {a.title}{a.clientName ? ` · ${a.clientName}` : ''}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-0.5">{a.dept} · {timeAgo(a.movedAt)}</p>
                 </div>
               </div>
             ))}
@@ -365,41 +306,106 @@ export function SummarySheet({ onNavigate }: SummarySheetProps) {
 
       </div>
 
-      {/* Rush jobs banner */}
-      {rushJobs.length > 0 && (
-        <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-xl p-4">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 bg-red-100 dark:bg-red-900 rounded-lg flex items-center justify-center flex-shrink-0">
-              <AlertTriangle className="w-4 h-4 text-red-600" />
-            </div>
-            <div className="flex-1">
-              <p className="font-semibold text-red-900 dark:text-red-100 text-sm">
-                {rushJobs.length} RUSH job{rushJobs.length !== 1 ? 's' : ''} in production
-              </p>
-              <div className="flex flex-wrap gap-2 mt-2">
-                {rushJobs.slice(0, 6).map(j => (
-                  <span key={j.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 text-xs rounded-full">
-                    {j.specimens?.tag_number ?? j.id.slice(0, 6)} · {PHASE_LABELS[j.current_phase as JobPhase]}
-                  </span>
-                ))}
-                {rushJobs.length > 6 && <span className="text-xs text-red-600">+{rushJobs.length - 6} more</span>}
+      {/* ── Floor Time Tracking ─────────────────────────── */}
+      <div className="bg-white dark:bg-[#1c2b3a] rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-100 dark:border-slate-700">
+          <Timer className="w-4 h-4 text-[#0073ea]" />
+          <h2 className="font-semibold text-slate-900 dark:text-slate-100">Floor Time Tracking</h2>
+          <span className="text-xs text-slate-400 ml-auto">Time per department — from job cards marked done</span>
+        </div>
+
+        {floorLoading ? (
+          <div className="p-5 space-y-2">
+            {[...Array(5)].map((_, i) => <div key={i} className="h-10 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />)}
+          </div>
+        ) : !floorTime || floorTime.byDept.length === 0 ? (
+          <div className="py-10 text-center">
+            <Clock className="w-8 h-8 text-slate-200 dark:text-slate-700 mx-auto mb-2" />
+            <p className="text-sm text-slate-400">No completions recorded yet</p>
+            <p className="text-xs text-slate-400 mt-1">Time data appears once staff mark job cards done</p>
+          </div>
+        ) : (
+          <div className="p-5 space-y-6">
+
+            {/* Avg time per department */}
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Average Time per Department</p>
+              <div className="space-y-2">
+                {floorTime.byDept.map(d => {
+                  const color = DEPT_COLORS[d.dept] ?? '#64748b';
+                  const maxMins = Math.max(...floorTime.byDept.map(x => x.avgMins), 1);
+                  return (
+                    <div key={d.dept} className="flex items-center gap-3">
+                      <span className="text-xs text-slate-500 w-28 text-right flex-shrink-0 truncate">{d.label}</span>
+                      <div className="flex-1 h-5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full flex items-center justify-end pr-2 transition-all duration-700"
+                          style={{ width: `${Math.max((d.avgMins / maxMins) * 100, 4)}%`, backgroundColor: color }}
+                        >
+                          <span className="text-[10px] text-white font-bold">{fmtMins(d.avgMins)}</span>
+                        </div>
+                      </div>
+                      <span className="text-xs text-slate-400 w-10 flex-shrink-0">{d.count} done</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-            <button onClick={() => onNavigate('inventory')} className="text-xs text-red-600 hover:underline flex items-center gap-1 flex-shrink-0">
-              View all <ArrowRight className="w-3 h-3" />
-            </button>
+
+            {/* Staff throughput */}
+            {floorTime.byStaff.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                  <UserCheck className="w-3.5 h-3.5" />Staff Throughput — completions this month
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {floorTime.byStaff.map(s => (
+                    <div key={s.name} className="flex items-center gap-2.5 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700">
+                      <div className="w-8 h-8 rounded-full bg-[#0073ea]/10 border border-[#0073ea]/20 flex items-center justify-center flex-shrink-0">
+                        <span className="text-[#0073ea] text-xs font-bold">{s.name.charAt(0)}</span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">{s.name}</p>
+                        <p className="text-xs text-slate-400">{s.count} completed · avg {fmtMins(s.avgMins)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Slowest in progress */}
+            {floorTime.slowest.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-amber-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5" />Longest Active — trophies still in progress
+                </p>
+                <div className="space-y-2">
+                  {floorTime.slowest.map(t => (
+                    <div key={t.docId} className="flex items-center justify-between px-3 py-2.5 bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900 rounded-xl">
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{t.species}</p>
+                        <p className="text-xs text-slate-500">{t.clientNumber} · {t.dept.replace(/_/g, ' ')}</p>
+                      </div>
+                      <span className="text-sm font-bold text-amber-600 dark:text-amber-400 flex-shrink-0 ml-3">
+                        {fmtMins(t.ageMins)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
           </div>
-        </div>
-      )}
+        )}
+      </div>
+
     </div>
   );
 }
 
-// Fix missing Zap import
-function Zap({ className, style }: { className?: string; style?: React.CSSProperties }) {
-  return (
-    <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-    </svg>
-  );
+function fmtMins(mins: number): string {
+  if (mins < 60)   return `${Math.round(mins)}m`;
+  if (mins < 1440) return `${(mins / 60).toFixed(1)}h`;
+  return `${(mins / 1440).toFixed(1)}d`;
 }

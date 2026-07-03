@@ -1,39 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '../../ui/button';
-import { Input } from '../../ui/input';
-import { Label } from '../../ui/label';
 import { Textarea } from '../../ui/textarea';
 import { Badge } from '../../ui/badge';
 import { toast } from 'sonner';
 import { supabase } from '../../../../lib/supabase';
+import { useAuth } from '../../../../lib/auth';
+import { getPipeline, DEPT_LABELS } from '../../../../lib/pipeline';
 import {
-  ClipboardList, CheckCircle2, Camera, ArrowLeft, User,
-  AlertTriangle, Package, Clock, ChevronRight, Printer,
+  ClipboardList, CheckCircle2, Camera, User, AlertTriangle,
+  Package, Clock, ChevronRight, XCircle, Loader2, RefreshCw,
+  X, Upload,
 } from 'lucide-react';
-
-// ── Department config ─────────────────────────────────────────────────────────
-
-const DEPARTMENTS: Record<string, { label: string; leads: string[]; color: string }> = {
-  receiving:       { label: 'Receiving',        leads: ['Abri','Steve','Vince','Ruan'],    color: 'bg-blue-600' },
-  cleaning_bleach: { label: 'Cleaning & Bleach',leads: ['Vince'],                          color: 'bg-purple-600' },
-  storage:         { label: 'Storage',          leads: ['Vince'],                          color: 'bg-slate-600' },
-  tannery:         { label: 'Tannery',          leads: ['Divine'],                         color: 'bg-amber-600' },
-  mounting:        { label: 'Mounting',         leads: ['Emanuel'],                        color: 'bg-green-600' },
-  finishing:       { label: 'Finishing',        leads: ['Kyle'],                           color: 'bg-orange-600' },
-  quality_check:   { label: 'Quality Check',   leads: ['Abri','Steve'],                   color: 'bg-red-600' },
-  photos:          { label: 'Photos',           leads: ['Ruan','Steve'],                   color: 'bg-cyan-600' },
-  administration:  { label: 'Administration',  leads: ['Abri','Cecilia'],                 color: 'bg-indigo-600' },
-};
-
-// Auto-route trophy to primary department based on mount type
-function primaryDept(mountType: string): string {
-  const mt = mountType.toLowerCase();
-  if (mt.includes('euro') || mt.includes('bleach')) return 'cleaning_bleach';
-  if (mt.includes('full') || mt.includes('shoulder') || mt.includes('pedestal') || mt.includes('half')) return 'mounting';
-  if (mt.includes('tan')) return 'tannery';
-  if (mt.includes('rug') || mt.includes('skin')) return 'tannery';
-  return 'mounting';
-}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -42,27 +19,15 @@ interface PendingHunt {
   year: number;
   client_type: string;
   client_name: string;
+  client_number: string | null;
   client_email: string | null;
-  trophy_count: number;
+  operator: string | null;
   checked_in_at: string;
 }
 
-interface TrophyDoc {
-  id: string;
-  title: string;
-  form_data: {
-    species: string;
-    mount_type: string;
-    quantity: number;
-    tag_number: string;
-    condition: string;
-    instructions: string;
-    price_usd: number | null;
-    reference_photo_paths: string[];
-  };
-}
+type CheckStatus = 'pending' | 'ok' | 'issue';
 
-interface ReceivingLine {
+interface TrophyLine {
   docId: string;
   species: string;
   mountType: string;
@@ -70,173 +35,156 @@ interface ReceivingLine {
   tagNumber: string;
   expectedCondition: string;
   instructions: string;
-  // receiving fields
-  actualCondition: string;
+  // receiving decision
+  status: CheckStatus;
   conditionNotes: string;
-  departmentLead: string;
-  department: string;
   intakePhotos: File[];
   photoPreviews: string[];
-  confirmed: boolean;
 }
 
-interface ReceivingSheetProps {
-  onNavigate: (view: string) => void;
-}
+// ── Hunt selection list ───────────────────────────────────────────────────────
 
-// ── List view ─────────────────────────────────────────────────────────────────
+export function ReceivingSheet({ onNavigate }: { onNavigate: (v: string) => void }) {
+  const [hunts, setHunts]         = useState<PendingHunt[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [activeId, setActiveId]   = useState<string | null>(null);
+  const [tab, setTab]             = useState<'pending' | 'received'>('pending');
+  const [received, setReceived]   = useState<PendingHunt[]>([]);
 
-export function ReceivingSheet({ onNavigate }: ReceivingSheetProps) {
-  const [pendingHunts, setPendingHunts] = useState<PendingHunt[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [activeHuntId, setActiveHuntId] = useState<string | null>(null);
-  const [receivedHunts, setReceivedHunts] = useState<PendingHunt[]>([]);
-  const [tab, setTab] = useState<'pending' | 'received'>('pending');
-
-  useEffect(() => { loadHunts(); }, []);
+  useEffect(() => { loadHunts(); }, [tab]);
 
   async function loadHunts() {
     setLoading(true);
-    const { data: hunts } = await (supabase as any)
-      .from('client_hunts')
-      .select('id, year, status, client_type, client_id, created_at')
-      .eq('status', 'active')
-      .order('created_at', { ascending: false });
+    const column = tab === 'pending' ? 'checked_in_at' : 'received_at';
+    const { data } = await (supabase as any)
+      .from('v_recent_checkins')
+      .select('*')
+      .order('checked_in_at', { ascending: false })
+      .limit(50)
+      .catch(() => ({ data: null }));
 
-    if (!hunts?.length) { setLoading(false); return; }
+    // fallback: query via hunt_documents to get only activated (in_progress) hunts
+    if (!data) {
+      // Get hunt_ids that have at least one in_progress job card at receiving
+      const { data: activeDocs } = await (supabase as any)
+        .from('hunt_documents')
+        .select('hunt_id')
+        .eq('doc_type', 'job_card')
+        .eq('status', 'in_progress')
+        .eq('current_department', 'receiving');
 
-    const huntIds = hunts.map((h: any) => h.id);
+      const activeHuntIds = [...new Set((activeDocs ?? []).map((d: any) => d.hunt_id))];
 
-    const [clientsRes, docsRes] = await Promise.all([
-      (supabase as any).from('clients').select('id, full_name, email'),
-      (supabase as any).from('hunt_documents').select('hunt_id, doc_type, status').in('hunt_id', huntIds),
-    ]);
+      // Get hunt_ids that have passed receiving
+      const { data: pastReceiving } = await (supabase as any)
+        .from('hunt_documents')
+        .select('hunt_id')
+        .eq('doc_type', 'job_card')
+        .eq('status', 'in_progress')
+        .neq('current_department', 'receiving');
 
-    const clientMap = Object.fromEntries((clientsRes.data ?? []).map((c: any) => [c.id, c]));
-    const docs: any[] = docsRes.data ?? [];
+      const pastSet = new Set((pastReceiving ?? []).map((d: any) => d.hunt_id));
 
-    const pending: PendingHunt[] = [];
-    const received: PendingHunt[] = [];
+      if (activeHuntIds.length === 0 && tab === 'pending') {
+        setHunts([]);
+        setLoading(false);
+        return;
+      }
 
-    for (const h of hunts) {
-      const huntDocs = docs.filter((d: any) => d.hunt_id === h.id);
-      const jobCards = huntDocs.filter((d: any) => d.doc_type === 'job_card');
-      const hasReceiving = huntDocs.some((d: any) => d.doc_type === 'receiving_sheet');
-      if (!jobCards.length) continue;
+      const idsToFetch = tab === 'pending' ? activeHuntIds : [...pastSet];
+      if (idsToFetch.length === 0) {
+        if (tab === 'pending') setHunts([]);
+        else setReceived([]);
+        setLoading(false);
+        return;
+      }
 
-      const client = clientMap[h.client_id];
-      const entry: PendingHunt = {
-        id: h.id,
-        year: h.year,
-        client_type: h.client_type ?? 'export',
-        client_name: client?.full_name ?? 'Unknown Client',
-        client_email: client?.email ?? null,
-        trophy_count: jobCards.length,
-        checked_in_at: h.created_at,
-      };
-      (hasReceiving ? received : pending).push(entry);
+      const { data: raw } = await (supabase as any)
+        .from('client_hunts')
+        .select(`
+          id, year, client_type, operator, created_at,
+          clients!inner(full_name, client_number, email)
+        `)
+        .in('id', idsToFetch)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      const mapped: PendingHunt[] = (raw ?? []).map((r: any) => ({
+        id:             r.id,
+        year:           r.year,
+        client_type:    r.client_type ?? 'export',
+        client_name:    r.clients?.full_name ?? 'Unknown',
+        client_number:  r.clients?.client_number ?? null,
+        client_email:   r.clients?.email ?? null,
+        operator:       r.operator ?? null,
+        checked_in_at:  r.created_at,
+      }));
+
+      if (tab === 'pending') setHunts(mapped);
+      else setReceived(mapped);
+    } else {
+      if (tab === 'pending') setHunts(data);
+      else setReceived(data);
     }
-
-    setPendingHunts(pending);
-    setReceivedHunts(received);
     setLoading(false);
   }
 
-  if (activeHuntId) {
-    return (
-      <ReceivingForm
-        huntId={activeHuntId}
-        onBack={() => { setActiveHuntId(null); loadHunts(); }}
-      />
-    );
+  if (activeId) {
+    return <ReceivingChecklist huntId={activeId} onBack={() => { setActiveId(null); loadHunts(); }} />;
   }
 
-  const list = tab === 'pending' ? pendingHunts : receivedHunts;
+  const list = tab === 'pending' ? hunts : received;
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
-      {/* Header */}
+    <div className="space-y-5 max-w-2xl">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <ClipboardList className="w-6 h-6 text-blue-500" />
-            Receiving
+          <h1 className="text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <ClipboardList className="w-5 h-5 text-blue-500" /> Receiving
           </h1>
-          <p className="text-slate-500 text-sm mt-1">Confirm trophy intake and generate job cards</p>
+          <p className="text-slate-500 text-sm mt-0.5">Select a hunt to check in trophies</p>
         </div>
-        <Button variant="outline" onClick={() => onNavigate('arrival')}>
-          + New Check-In
-        </Button>
+        <Button variant="ghost" size="icon" onClick={loadHunts}><RefreshCw className="w-4 h-4" /></Button>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-slate-200 dark:border-slate-700">
+      <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg w-fit">
         {(['pending','received'] as const).map(t => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              tab === t
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-            }`}
-          >
-            {t === 'pending' ? 'Awaiting Receipt' : 'Received'}
-            <span className={`ml-2 px-1.5 py-0.5 rounded text-xs ${
-              t === 'pending'
-                ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400'
-                : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
+          <button key={t} onClick={() => setTab(t)}
+            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              tab === t ? 'bg-white dark:bg-slate-700 shadow text-slate-900 dark:text-white' : 'text-slate-500'
             }`}>
-              {t === 'pending' ? pendingHunts.length : receivedHunts.length}
-            </span>
+            {t === 'pending' ? 'Awaiting Receiving' : 'Already Received'}
           </button>
         ))}
       </div>
 
       {loading ? (
-        <div className="text-center py-12 text-slate-400">Loading…</div>
+        <div className="flex items-center gap-2 text-slate-400 py-8"><Loader2 className="w-4 h-4 animate-spin" />Loading…</div>
       ) : list.length === 0 ? (
-        <div className="text-center py-16 text-slate-400">
-          <ClipboardList className="w-12 h-12 mx-auto mb-3 opacity-30" />
-          <p className="font-medium">{tab === 'pending' ? 'No hunts awaiting receipt' : 'No received hunts yet'}</p>
-          {tab === 'pending' && (
-            <p className="text-sm mt-1">Complete an Arrival Check-In first to create a receiving sheet.</p>
-          )}
+        <div className="text-center py-12 text-slate-400">
+          <Package className="w-10 h-10 mx-auto mb-2 opacity-30" />
+          <p>No hunts {tab === 'pending' ? 'waiting to be received' : 'received yet'}</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {list.map(hunt => (
-            <div
-              key={hunt.id}
-              onClick={() => setActiveHuntId(hunt.id)}
-              className="flex items-center gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-blue-400 hover:shadow-md cursor-pointer transition-all group"
-            >
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0 ${
-                tab === 'pending' ? 'bg-orange-500' : 'bg-green-600'
-              }`}>
-                {hunt.trophy_count}
+            <button key={hunt.id} onClick={() => setActiveId(hunt.id)}
+              className="w-full text-left p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-blue-400 hover:shadow-sm transition-all flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center shrink-0">
+                <User className="w-5 h-5 text-blue-500" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-slate-900 dark:text-white truncate">{hunt.client_name}</p>
-                <p className="text-sm text-slate-500">{hunt.year} · {hunt.trophy_count} {hunt.trophy_count === 1 ? 'trophy' : 'trophies'}</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{hunt.client_name}</span>
+                  {hunt.client_number && <span className="text-xs text-slate-400 font-mono">{hunt.client_number}</span>}
+                  <Badge variant="secondary" className="text-[10px]">{hunt.year}</Badge>
+                  {hunt.client_type === 'local' && <Badge className="text-[10px] bg-green-100 text-green-700">Local</Badge>}
+                </div>
+                {hunt.operator && <p className="text-xs text-slate-400">{hunt.operator}</p>}
               </div>
-              <Badge variant="outline" className={hunt.client_type === 'local' ? 'border-green-400 text-green-600' : 'border-blue-400 text-blue-600'}>
-                {hunt.client_type === 'local' ? '🇿🇦 Local' : '✈️ Export'}
-              </Badge>
-              {tab === 'pending' && (
-                <div className="flex items-center gap-1 text-orange-500 text-xs font-medium">
-                  <Clock className="w-3.5 h-3.5" />
-                  Awaiting
-                </div>
-              )}
-              {tab === 'received' && (
-                <div className="flex items-center gap-1 text-green-600 text-xs font-medium">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  Received
-                </div>
-              )}
-              <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-500 transition-colors" />
-            </div>
+              <ChevronRight className="w-4 h-4 text-slate-300 shrink-0" />
+            </button>
           ))}
         </div>
       )}
@@ -244,526 +192,359 @@ export function ReceivingSheet({ onNavigate }: ReceivingSheetProps) {
   );
 }
 
-// ── Receiving Form ────────────────────────────────────────────────────────────
+// ── The actual checklist ──────────────────────────────────────────────────────
 
-function ReceivingForm({ huntId, onBack }: { huntId: string; onBack: () => void }) {
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [done, setDone] = useState(false);
-  const [huntInfo, setHuntInfo] = useState<{ clientName: string; clientType: string; year: number } | null>(null);
-  const [lines, setLines] = useState<ReceivingLine[]>([]);
-  const [receivedBy, setReceivedBy] = useState('');
-  const [generalNotes, setGeneralNotes] = useState('');
-  const photoInputRef = useRef<HTMLInputElement | null>(null);
-  const [activePhotoLineId, setActivePhotoLineId] = useState<string | null>(null);
+function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => void }) {
+  const { profile } = useAuth();
+  const [lines, setLines]       = useState<TrophyLine[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [saving, setSaving]     = useState(false);
+  const [huntInfo, setHuntInfo] = useState<{ client_name: string; client_number: string } | null>(null);
+  const [huntPhotos, setHuntPhotos] = useState<File[]>([]);
+  const [huntPhotoPreviews, setHuntPhotoPreviews] = useState<string[]>([]);
+  const huntPhotoRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { loadSheet(); }, [huntId]);
+  useEffect(() => { loadDocs(); }, [huntId]);
 
-  async function loadSheet() {
+  async function loadDocs() {
     setLoading(true);
-    const [huntRes, docsRes] = await Promise.all([
-      (supabase as any).from('client_hunts').select('id, year, client_type, client_id').eq('id', huntId).single(),
-      (supabase as any).from('hunt_documents').select('id, title, form_data').eq('hunt_id', huntId).eq('doc_type', 'job_card'),
-    ]);
+    // Hunt + client info
+    const { data: hunt } = await (supabase as any)
+      .from('client_hunts')
+      .select('clients!inner(full_name, client_number)')
+      .eq('id', huntId)
+      .single();
+    if (hunt) setHuntInfo({ client_name: hunt.clients?.full_name, client_number: hunt.clients?.client_number });
 
-    const hunt = huntRes.data;
-    if (!hunt) { setLoading(false); return; }
+    // Job cards for this hunt — only in_progress (deposit confirmed)
+    const { data: docs } = await (supabase as any)
+      .from('hunt_documents')
+      .select('id, title, form_data, current_department')
+      .eq('hunt_id', huntId)
+      .eq('doc_type', 'job_card')
+      .eq('status', 'in_progress');
 
-    const clientRes = await (supabase as any).from('clients').select('full_name').eq('id', hunt.client_id).single();
-    setHuntInfo({
-      clientName: clientRes.data?.full_name ?? 'Unknown',
-      clientType: hunt.client_type ?? 'export',
-      year: hunt.year,
+    const mapped: TrophyLine[] = (docs ?? []).map((d: any) => {
+      const fd = d.form_data ?? {};
+      return {
+        docId:             d.id,
+        species:           fd.species ?? 'Unknown',
+        mountType:         fd.mount_type ?? '',
+        quantity:          fd.quantity ?? 1,
+        tagNumber:         fd.tag_number ?? '',
+        expectedCondition: fd.condition ?? 'unknown',
+        instructions:      fd.instructions ?? '',
+        status:            d.current_department !== 'receiving' ? 'ok' : 'pending',
+        conditionNotes:    fd.condition_notes ?? '',
+        intakePhotos:      [],
+        photoPreviews:     [],
+      };
     });
 
-    const docs: TrophyDoc[] = docsRes.data ?? [];
-    setLines(docs.map(doc => {
-      const fd = doc.form_data ?? {};
-      const dept = primaryDept(fd.mount_type ?? '');
-      return {
-        docId: doc.id,
-        species: fd.species ?? '',
-        mountType: fd.mount_type ?? '',
-        quantity: fd.quantity ?? 1,
-        tagNumber: fd.tag_number ?? '',
-        expectedCondition: fd.condition ?? '',
-        instructions: fd.instructions ?? '',
-        actualCondition: fd.condition ?? 'salted',
-        conditionNotes: '',
-        department: dept,
-        departmentLead: DEPARTMENTS[dept]?.leads[0] ?? '',
-        intakePhotos: [],
-        photoPreviews: [],
-        confirmed: false,
-      };
-    }));
+    setLines(mapped);
     setLoading(false);
   }
 
-  function updateLine(docId: string, patch: Partial<ReceivingLine>) {
-    setLines(prev => prev.map(l => l.docId === docId ? { ...l, ...patch } : l));
+  function updateLine(idx: number, patch: Partial<TrophyLine>) {
+    setLines(prev => prev.map((l, i) => i === idx ? { ...l, ...patch } : l));
   }
 
-  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    if (!activePhotoLineId) return;
-    const files = Array.from(e.target.files ?? []);
-    setLines(prev => prev.map(l => {
-      if (l.docId !== activePhotoLineId) return l;
-      const remaining = 5 - l.intakePhotos.length;
-      const toAdd = files.slice(0, remaining);
-      return {
-        ...l,
-        intakePhotos: [...l.intakePhotos, ...toAdd],
-        photoPreviews: [...l.photoPreviews, ...toAdd.map(f => URL.createObjectURL(f))],
-      };
-    }));
-    e.target.value = '';
+  function addPhotos(idx: number, files: FileList | null) {
+    if (!files) return;
+    const newFiles = Array.from(files);
+    const newPreviews = newFiles.map(f => URL.createObjectURL(f));
+    setLines(prev => prev.map((l, i) => i === idx ? {
+      ...l,
+      intakePhotos:  [...l.intakePhotos, ...newFiles],
+      photoPreviews: [...l.photoPreviews, ...newPreviews],
+    } : l));
   }
 
-  const allConfirmed = lines.length > 0 && lines.every(l => l.confirmed);
-  const confirmedCount = lines.filter(l => l.confirmed).length;
+  function removePhoto(lineIdx: number, photoIdx: number) {
+    setLines(prev => prev.map((l, i) => i === lineIdx ? {
+      ...l,
+      intakePhotos:  l.intakePhotos.filter((_, j) => j !== photoIdx),
+      photoPreviews: l.photoPreviews.filter((_, j) => j !== photoIdx),
+    } : l));
+  }
 
-  async function handleComplete() {
-    if (!receivedBy.trim()) { toast.error('Please select who is receiving these trophies'); return; }
-    setSubmitting(true);
+  function addHuntPhotos(files: FileList | null) {
+    if (!files) return;
+    const newFiles = Array.from(files);
+    setHuntPhotos(prev => [...prev, ...newFiles]);
+    setHuntPhotoPreviews(prev => [...prev, ...newFiles.map(f => URL.createObjectURL(f))]);
+  }
+
+  async function saveReceiving() {
+    const unconfirmed = lines.filter(l => l.status === 'pending');
+    if (unconfirmed.length > 0) {
+      toast.error(`${unconfirmed.length} trophies not yet checked — mark each as OK or Issue`);
+      return;
+    }
+
+    setSaving(true);
     try {
-      // 1. Upload intake photos and update each job card doc
+      // Upload hunt-level arrival photos
+      const huntPhotoPaths: string[] = [];
+      for (const file of huntPhotos) {
+        const ext  = file.name.split('.').pop();
+        const path = `hunt-arrivals/${huntId}/${Date.now()}.${ext}`;
+        const { error } = await (supabase as any).storage.from('client-photos').upload(path, file, { upsert: true });
+        if (!error) huntPhotoPaths.push(path);
+      }
+
+      // Process each line
       for (const line of lines) {
+        // Upload per-trophy photos
         const photoPaths: string[] = [];
         for (const file of line.intakePhotos) {
-          const ext = file.name.split('.').pop() ?? 'jpg';
-          const path = `receiving/${huntId}/${line.tagNumber}/${Date.now()}.${ext}`;
-          const { error } = await supabase.storage.from('trophy-references').upload(path, file, { upsert: true });
+          const ext  = file.name.split('.').pop();
+          const path = `trophy-intake/${huntId}/${line.docId}/${Date.now()}.${ext}`;
+          const { error } = await (supabase as any).storage.from('client-photos').upload(path, file, { upsert: true });
           if (!error) photoPaths.push(path);
         }
 
-        // Determine first processing stage after receiving
-        const { getNextDepartment } = await import('../../../../lib/pipeline');
-        const nextDept = getNextDepartment(line.mountType, 'receiving') ?? line.department;
+        // Determine next department from pipeline
+        const { data: doc } = await (supabase as any)
+          .from('hunt_documents').select('form_data').eq('id', line.docId).single();
+        const fd = doc?.form_data ?? {};
+        const pipeline = getPipeline(line.mountType);
+        const nextDept = pipeline[1] ?? 'skinning'; // first dept after receiving
+
+        const historyEntry = {
+          dept:        'receiving',
+          completedBy: profile?.full_name ?? 'Staff',
+          completedAt: new Date().toISOString(),
+          photoPaths,
+          notes:       line.conditionNotes,
+        };
 
         await (supabase as any).from('hunt_documents').update({
-          status: 'in_progress',
-          current_department: nextDept,
+          current_department: line.status === 'issue' ? 'receiving' : nextDept,
+          status:             line.status === 'issue' ? 'flagged' : 'in_progress',
           form_data: {
-            species: line.species,
-            mount_type: line.mountType,
-            quantity: line.quantity,
-            tag_number: line.tagNumber,
-            condition: line.actualCondition,
-            condition_notes: line.conditionNotes,
-            instructions: line.instructions,
-            department: line.department,
-            department_label: DEPARTMENTS[line.department]?.label ?? line.department,
-            department_lead: line.departmentLead,
-            received_by: receivedBy,
-            received_at: new Date().toISOString(),
-            intake_photo_paths: photoPaths,
-            stage_history: [
-              { dept: 'receiving', completedBy: receivedBy, completedAt: new Date().toISOString() },
-            ],
+            ...fd,
+            condition_notes:     line.conditionNotes,
+            intake_photo_paths:  photoPaths,
+            arrival_photo_paths: huntPhotoPaths,
+            received_at:         new Date().toISOString(),
+            received_by:         profile?.full_name ?? '',
+            stage_history:       [...(fd.stage_history ?? []), historyEntry],
           },
         }).eq('id', line.docId);
+
+        // Stage history record
+        await (supabase as any).from('trophy_stage_history').insert({
+          hunt_doc_id:       line.docId,
+          department:        'receiving',
+          completed_by:      profile?.id ?? null,
+          completed_by_name: profile?.full_name ?? null,
+          photo_paths:       photoPaths,
+          notes:             line.conditionNotes || null,
+        });
       }
 
-      // 2. Create the receiving sheet summary doc
-      await (supabase as any).from('hunt_documents').insert({
-        hunt_id: huntId,
-        doc_type: 'receiving_sheet',
-        title: `Receiving Sheet – ${huntInfo?.clientName} (${huntInfo?.year})`,
-        status: 'complete',
-        form_data: {
-          received_by: receivedBy,
-          received_at: new Date().toISOString(),
-          trophy_count: lines.length,
-          general_notes: generalNotes,
-          department_summary: lines.map(l => ({
-            tag: l.tagNumber,
-            species: l.species,
-            mount: l.mountType,
-            dept: DEPARTMENTS[l.department]?.label,
-            lead: l.departmentLead,
-          })),
-        },
-      });
-
-      setDone(true);
-      toast.success('Receiving sheet completed — job cards updated');
+      toast.success('Receiving complete — trophies queued into pipeline');
+      onBack();
     } catch (err: any) {
-      toast.error(err.message ?? 'Failed to complete receiving sheet');
+      toast.error('Save failed: ' + err.message);
     } finally {
-      setSubmitting(false);
+      setSaving(false);
     }
   }
 
-  if (loading) return (
-    <div className="flex items-center justify-center py-24 text-slate-400">Loading receiving sheet…</div>
-  );
+  const okCount     = lines.filter(l => l.status === 'ok').length;
+  const issueCount  = lines.filter(l => l.status === 'issue').length;
+  const pendingCount = lines.filter(l => l.status === 'pending').length;
 
-  if (done) return <ReceivingDone lines={lines} huntInfo={huntInfo} receivedBy={receivedBy} onBack={onBack} />;
-
-  const receivingLeads = DEPARTMENTS.receiving.leads;
+  if (loading) {
+    return <div className="flex items-center gap-2 text-slate-400 py-12"><Loader2 className="w-5 h-5 animate-spin" />Loading job cards…</div>;
+  }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="space-y-5 max-w-2xl">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <button onClick={onBack} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
-          <ArrowLeft className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+        <button onClick={onBack} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
+          ← Back
         </button>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Receiving Sheet</h1>
-          <p className="text-slate-500 text-sm">
-            {huntInfo?.clientName} · {huntInfo?.year} ·{' '}
-            <span className={huntInfo?.clientType === 'local' ? 'text-green-600' : 'text-blue-600'}>
-              {huntInfo?.clientType === 'local' ? '🇿🇦 Local' : '✈️ Export'}
-            </span>
-          </p>
+          <h1 className="text-slate-900 dark:text-slate-100">{huntInfo?.client_name}</h1>
+          {huntInfo?.client_number && <p className="text-xs text-slate-400 font-mono">{huntInfo.client_number}</p>}
         </div>
-        <div className="text-right">
-          <div className="text-2xl font-bold text-slate-900 dark:text-white">{confirmedCount}/{lines.length}</div>
-          <div className="text-xs text-slate-500">confirmed</div>
+        {/* Status counters */}
+        <div className="flex gap-2">
+          {pendingCount > 0 && <Badge className="bg-slate-200 text-slate-700">{pendingCount} pending</Badge>}
+          {okCount > 0      && <Badge className="bg-green-100 text-green-700">{okCount} OK</Badge>}
+          {issueCount > 0   && <Badge className="bg-red-100 text-red-700">{issueCount} issues</Badge>}
         </div>
       </div>
 
-      {/* Progress bar */}
-      <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-        <div
-          className="h-full bg-green-500 transition-all duration-300 rounded-full"
-          style={{ width: `${lines.length ? (confirmedCount / lines.length) * 100 : 0}%` }}
-        />
+      {/* Hunt-level arrival photos */}
+      <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Camera className="w-4 h-4 text-blue-600" />
+          <span className="font-semibold text-blue-900 dark:text-blue-100 text-sm">Arrival photos (vehicle / delivery)</span>
+        </div>
+        <div className="flex gap-2 flex-wrap mb-2">
+          {huntPhotoPreviews.map((src, i) => (
+            <div key={i} className="relative">
+              <img src={src} alt="" className="w-16 h-16 object-cover rounded-lg border" />
+              <button onClick={() => {
+                setHuntPhotos(p => p.filter((_, j) => j !== i));
+                setHuntPhotoPreviews(p => p.filter((_, j) => j !== i));
+              }} className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center">
+                <X className="w-2.5 h-2.5" />
+              </button>
+            </div>
+          ))}
+          <button onClick={() => huntPhotoRef.current?.click()}
+            className="w-16 h-16 border-2 border-dashed border-blue-300 dark:border-blue-700 rounded-lg flex flex-col items-center justify-center text-blue-400 hover:border-blue-500 transition-colors">
+            <Camera className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5">Add</span>
+          </button>
+        </div>
+        <input ref={huntPhotoRef} type="file" accept="image/*" multiple capture="environment"
+          className="hidden" onChange={e => addHuntPhotos(e.target.files)} />
       </div>
 
-      {/* Received by */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-        <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 block">
-          <User className="inline w-4 h-4 mr-1" />Received by *
-        </Label>
-        <div className="flex flex-wrap gap-2">
-          {receivingLeads.map(name => (
-            <button
-              key={name}
-              onClick={() => setReceivedBy(name)}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
-                receivedBy === name
-                  ? 'bg-blue-600 text-white border-blue-600'
-                  : 'border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-blue-400'
-              }`}
-            >
-              {name}
-            </button>
+      {lines.length === 0 ? (
+        <div className="text-center py-10 text-slate-400">
+          <Package className="w-10 h-10 mx-auto mb-2 opacity-30" />
+          <p>No job cards found for this hunt.</p>
+          <p className="text-xs mt-1">Use Arrival Check-In to add trophies first.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {lines.map((line, idx) => (
+            <TrophyCheckCard
+              key={line.docId}
+              line={line}
+              onStatus={s => updateLine(idx, { status: s })}
+              onNotes={n => updateLine(idx, { conditionNotes: n })}
+              onAddPhotos={files => addPhotos(idx, files)}
+              onRemovePhoto={pi => removePhoto(idx, pi)}
+            />
           ))}
         </div>
-      </div>
+      )}
 
-      {/* Trophy lines */}
-      <div className="space-y-4">
-        {lines.map((line, idx) => (
-          <TrophyReceivingCard
-            key={line.docId}
-            line={line}
-            idx={idx}
-            onChange={patch => updateLine(line.docId, patch)}
-            onPhotoClick={() => {
-              setActivePhotoLineId(line.docId);
-              photoInputRef.current?.click();
-            }}
-          />
-        ))}
-      </div>
-
-      {/* General notes */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-2">
-        <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300">General Receiving Notes</Label>
-        <Textarea
-          value={generalNotes}
-          onChange={e => setGeneralNotes(e.target.value)}
-          placeholder="Any overall observations, concerns, or notes about this delivery…"
-          className="resize-none dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-          rows={3}
-        />
-      </div>
-
-      {/* Complete button */}
-      <div className="flex items-center justify-between pt-2">
-        <p className="text-sm text-slate-500">
-          {allConfirmed
-            ? 'All trophies confirmed — ready to complete'
-            : `Confirm all ${lines.length} trophies before completing`}
-        </p>
+      {/* Footer action */}
+      <div className="sticky bottom-4 pt-4">
         <Button
-          onClick={handleComplete}
-          disabled={!allConfirmed || !receivedBy || submitting}
-          className="bg-green-600 hover:bg-green-700 text-white px-8 gap-2 disabled:opacity-40"
+          onClick={saveReceiving}
+          disabled={saving || pendingCount > 0}
+          className={`w-full h-12 text-base font-bold gap-2 ${
+            pendingCount > 0 ? 'bg-slate-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'
+          } text-white`}
         >
-          <CheckCircle2 className="w-4 h-4" />
-          {submitting ? 'Saving…' : 'Complete & Generate Job Cards'}
+          {saving ? <><Loader2 className="w-4 h-4 animate-spin" />Saving…</> :
+            pendingCount > 0
+              ? `Check all ${pendingCount} remaining trophies first`
+              : <><CheckCircle2 className="w-4 h-4" />Complete Receiving & Queue Trophies</>}
         </Button>
       </div>
-
-      <input
-        ref={photoInputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        className="hidden"
-        onChange={handlePhotoChange}
-      />
     </div>
   );
 }
 
-// ── Trophy receiving card ─────────────────────────────────────────────────────
+// ── Single trophy check card ──────────────────────────────────────────────────
 
-function TrophyReceivingCard({
-  line, idx, onChange, onPhotoClick,
+function TrophyCheckCard({
+  line, onStatus, onNotes, onAddPhotos, onRemovePhoto,
 }: {
-  line: ReceivingLine;
-  idx: number;
-  onChange: (patch: Partial<ReceivingLine>) => void;
-  onPhotoClick: () => void;
+  line: TrophyLine;
+  onStatus: (s: CheckStatus) => void;
+  onNotes: (n: string) => void;
+  onAddPhotos: (f: FileList | null) => void;
+  onRemovePhoto: (i: number) => void;
 }) {
-  const dept = DEPARTMENTS[line.department];
-  const CONDITIONS = ['salted','frozen','fresh','wet_salted','cape_only','damaged','other'];
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [expanded, setExpanded] = useState(line.status === 'pending');
+
+  const borderColor =
+    line.status === 'ok'    ? 'border-green-400 bg-green-50 dark:bg-green-950/20' :
+    line.status === 'issue' ? 'border-red-400 bg-red-50 dark:bg-red-950/20' :
+                              'border-slate-200 dark:border-slate-700';
 
   return (
-    <div className={`bg-white dark:bg-slate-800 rounded-xl border-2 transition-all ${
-      line.confirmed
-        ? 'border-green-500 dark:border-green-600'
-        : 'border-slate-200 dark:border-slate-700'
-    }`}>
-      {/* Trophy header */}
-      <div className="flex items-center gap-3 p-4 border-b border-slate-100 dark:border-slate-700">
-        <div className="w-8 h-8 rounded-full bg-slate-700 text-white flex items-center justify-center text-sm font-bold shrink-0">
-          {idx + 1}
-        </div>
+    <div className={`rounded-xl border-2 transition-all overflow-hidden ${borderColor}`}>
+      {/* Trophy header — always visible */}
+      <div className="flex items-center gap-3 p-4">
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-slate-900 dark:text-white">{line.species}</p>
-          <p className="text-sm text-slate-500">{line.mountType} · Tag: <span className="font-mono font-medium text-slate-700 dark:text-slate-300">{line.tagNumber}</span> · Qty: {line.quantity}</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-bold text-slate-900 dark:text-slate-100 text-lg">{line.species}</span>
+            <span className="text-sm text-slate-500">{line.mountType}</span>
+          </div>
+          <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-400 flex-wrap">
+            {line.tagNumber && <span className="font-mono">Tag: {line.tagNumber}</span>}
+            {line.quantity > 1 && <span>Qty: {line.quantity}</span>}
+            <span className="capitalize">Expected: {line.expectedCondition}</span>
+          </div>
+          {line.instructions && (
+            <p className="mt-1 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded px-2 py-0.5">
+              {line.instructions}
+            </p>
+          )}
         </div>
-        <div className={`px-2.5 py-1 rounded-full text-xs font-semibold text-white ${dept?.color ?? 'bg-slate-500'}`}>
-          {dept?.label ?? line.department}
+
+        {/* Big status buttons */}
+        <div className="flex gap-2 shrink-0">
+          <button
+            onClick={() => { onStatus('ok'); setExpanded(false); }}
+            className={`w-14 h-14 rounded-xl flex flex-col items-center justify-center gap-1 font-bold text-xs transition-all ${
+              line.status === 'ok'
+                ? 'bg-green-500 text-white shadow-lg scale-105'
+                : 'bg-green-100 text-green-600 hover:bg-green-200'
+            }`}>
+            <CheckCircle2 className="w-6 h-6" />
+            OK
+          </button>
+          <button
+            onClick={() => { onStatus('issue'); setExpanded(true); }}
+            className={`w-14 h-14 rounded-xl flex flex-col items-center justify-center gap-1 font-bold text-xs transition-all ${
+              line.status === 'issue'
+                ? 'bg-red-500 text-white shadow-lg scale-105'
+                : 'bg-red-100 text-red-600 hover:bg-red-200'
+            }`}>
+            <XCircle className="w-6 h-6" />
+            Issue
+          </button>
         </div>
-        {line.confirmed && (
-          <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
-        )}
       </div>
 
-      <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Client instructions (read-only) */}
-        {line.instructions && (
-          <div className="md:col-span-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-3">
-            <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-1">Client Instructions</p>
-            <p className="text-sm text-amber-800 dark:text-amber-300">{line.instructions}</p>
-          </div>
-        )}
-
-        {/* Actual condition */}
-        <div className="space-y-1.5">
-          <Label className="text-xs text-slate-500">Actual Condition on Arrival</Label>
-          <div className="flex flex-wrap gap-1.5">
-            {CONDITIONS.map(c => (
-              <button
-                key={c}
-                onClick={() => onChange({ actualCondition: c })}
-                className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
-                  line.actualCondition === c
-                    ? c === 'damaged'
-                      ? 'bg-red-600 text-white border-red-600'
-                      : 'bg-blue-600 text-white border-blue-600'
-                    : 'border-slate-200 dark:border-slate-600 text-slate-500 hover:border-blue-400'
-                }`}
-              >
-                {c.replace('_', ' ')}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Condition notes */}
-        <div className="space-y-1.5">
-          <Label className="text-xs text-slate-500">Condition Notes</Label>
-          <Input
+      {/* Expanded section — notes + photos */}
+      {(expanded || line.status !== 'pending') && (
+        <div className="px-4 pb-4 space-y-2 border-t border-slate-200 dark:border-slate-700 pt-3">
+          {/* Notes */}
+          <Textarea
             value={line.conditionNotes}
-            onChange={e => onChange({ conditionNotes: e.target.value })}
-            placeholder="Any damage, missing parts, notes…"
-            className="text-sm dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+            onChange={e => onNotes(e.target.value)}
+            placeholder={line.status === 'issue' ? 'Describe the issue (required)…' : 'Condition notes (optional)…'}
+            className="text-sm h-14 resize-none"
           />
-        </div>
 
-        {/* Department assignment */}
-        <div className="space-y-1.5">
-          <Label className="text-xs text-slate-500">Department</Label>
-          <div className="flex flex-wrap gap-1.5">
-            {Object.entries(DEPARTMENTS)
-              .filter(([key]) => !['receiving','administration','photos','quality_check'].includes(key))
-              .map(([key, d]) => (
-                <button
-                  key={key}
-                  onClick={() => onChange({ department: key, departmentLead: d.leads[0] })}
-                  className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
-                    line.department === key
-                      ? `${d.color} text-white border-transparent`
-                      : 'border-slate-200 dark:border-slate-600 text-slate-500 hover:border-blue-400'
-                  }`}
-                >
-                  {d.label}
-                </button>
-              ))}
-          </div>
-        </div>
-
-        {/* Lead assignment */}
-        <div className="space-y-1.5">
-          <Label className="text-xs text-slate-500">Department Lead</Label>
-          <div className="flex flex-wrap gap-1.5">
-            {(DEPARTMENTS[line.department]?.leads ?? []).map(name => (
-              <button
-                key={name}
-                onClick={() => onChange({ departmentLead: name })}
-                className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                  line.departmentLead === name
-                    ? 'bg-slate-800 dark:bg-white text-white dark:text-slate-900 border-transparent'
-                    : 'border-slate-200 dark:border-slate-600 text-slate-500 hover:border-slate-400'
-                }`}
-              >
-                {name}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Intake photos */}
-        <div className="md:col-span-2 space-y-1.5">
-          <Label className="text-xs text-slate-500">Intake Photos</Label>
-          <div className="flex flex-wrap gap-2">
+          {/* Photos */}
+          <div className="flex gap-2 flex-wrap">
             {line.photoPreviews.map((src, i) => (
-              <img key={i} src={src} alt="" className="w-16 h-16 object-cover rounded-lg border border-slate-200 dark:border-slate-600" />
+              <div key={i} className="relative">
+                <img src={src} alt="" className="w-14 h-14 object-cover rounded-lg border" />
+                <button onClick={() => onRemovePhoto(i)}
+                  className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center">
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </div>
             ))}
-            {line.intakePhotos.length < 5 && (
-              <button
-                onClick={onPhotoClick}
-                className="w-16 h-16 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center hover:border-blue-400 transition-colors"
-              >
-                <Camera className="w-5 h-5 text-slate-400" />
-              </button>
-            )}
+            <button onClick={() => fileRef.current?.click()}
+              className="w-14 h-14 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg flex flex-col items-center justify-center text-slate-400 hover:border-blue-400 hover:text-blue-400 transition-colors">
+              <Camera className="w-4 h-4" />
+              <span className="text-[10px] mt-0.5">Photo</span>
+            </button>
+            <input ref={fileRef} type="file" accept="image/*" multiple capture="environment"
+              className="hidden" onChange={e => onAddPhotos(e.target.files)} />
           </div>
         </div>
-
-        {/* Confirm toggle */}
-        <div className="md:col-span-2 flex justify-end">
-          <button
-            onClick={() => onChange({ confirmed: !line.confirmed })}
-            className={`flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-all ${
-              line.confirmed
-                ? 'bg-green-600 text-white hover:bg-green-700'
-                : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-600'
-            }`}
-          >
-            <CheckCircle2 className="w-4 h-4" />
-            {line.confirmed ? 'Confirmed' : 'Confirm Trophy Received'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Done / Job Card summary ───────────────────────────────────────────────────
-
-function ReceivingDone({
-  lines, huntInfo, receivedBy, onBack,
-}: {
-  lines: ReceivingLine[];
-  huntInfo: { clientName: string; clientType: string; year: number } | null;
-  receivedBy: string;
-  onBack: () => void;
-}) {
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('en-ZA', { day: '2-digit', month: 'long', year: 'numeric' });
-
-  return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
-      {/* Success banner */}
-      <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-xl p-5 flex items-start gap-4">
-        <CheckCircle2 className="w-8 h-8 text-green-600 shrink-0 mt-0.5" />
-        <div>
-          <h2 className="text-lg font-bold text-green-800 dark:text-green-300">Receiving Complete</h2>
-          <p className="text-green-700 dark:text-green-400 text-sm mt-0.5">
-            {lines.length} {lines.length === 1 ? 'trophy' : 'trophies'} received from <strong>{huntInfo?.clientName}</strong> by <strong>{receivedBy}</strong> on {dateStr}.
-            Job cards have been updated and routed to departments.
-          </p>
-        </div>
-      </div>
-
-      {/* Job card summary table */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
-          <h3 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-            <Package className="w-4 h-4 text-blue-500" />
-            Job Cards Issued
-          </h3>
-          <button
-            onClick={() => window.print()}
-            className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
-          >
-            <Printer className="w-4 h-4" />
-            Print
-          </button>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 dark:bg-slate-700/50">
-              <tr>
-                <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Tag</th>
-                <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Species</th>
-                <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Mount</th>
-                <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Condition</th>
-                <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Department</th>
-                <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Lead</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-              {lines.map(line => {
-                const dept = DEPARTMENTS[line.department];
-                return (
-                  <tr key={line.docId} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                    <td className="px-4 py-2.5 font-mono text-slate-700 dark:text-slate-300">{line.tagNumber}</td>
-                    <td className="px-4 py-2.5 font-medium text-slate-900 dark:text-white">{line.species}</td>
-                    <td className="px-4 py-2.5 text-slate-600 dark:text-slate-400">{line.mountType}</td>
-                    <td className="px-4 py-2.5">
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                        line.actualCondition === 'damaged'
-                          ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400'
-                          : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
-                      }`}>
-                        {line.actualCondition.replace('_',' ')}
-                        {line.conditionNotes && <AlertTriangle className="inline w-3 h-3 ml-1" />}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <span className={`px-2 py-0.5 rounded text-xs font-semibold text-white ${dept?.color ?? 'bg-slate-500'}`}>
-                        {dept?.label ?? line.department}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-slate-700 dark:text-slate-300 font-medium">{line.departmentLead}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="flex gap-3">
-        <Button onClick={onBack} className="bg-blue-600 hover:bg-blue-700 text-white">
-          Back to Receiving List
-        </Button>
-        <Button variant="outline" onClick={() => window.print()}>
-          <Printer className="w-4 h-4 mr-2" />
-          Print Job Cards
-        </Button>
-      </div>
+      )}
     </div>
   );
 }

@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { HuntDashboard } from './outfitter/HuntDashboard';
+import { HuntDetailView } from './outfitter/HuntDetailView';
 import { LinkedHunters } from './outfitter/LinkedHunters';
 import { AnimalSummary } from './outfitter/AnimalSummary';
 import { DocumentsCompliance } from './outfitter/DocumentsCompliance';
+import type { OutfitterHunt } from './outfitter/HuntDashboard';
 import { CommunicationPanel } from './outfitter/CommunicationPanel';
 import { PerformanceAnalytics } from './outfitter/PerformanceAnalytics';
 import { OutfitterProfile } from './outfitter/OutfitterProfile';
-import { CreateHunt } from './outfitter/CreateHunt';
+import { HuntCreationWizard } from './outfitter/HuntCreationWizard';
 import { HunterLinkRequests } from './outfitter/HunterLinkRequests';
 import { ActiveLinkedHunts } from './outfitter/ActiveLinkedHunts';
 import { UniversalAIAssistant } from './shared/UniversalAIAssistant';
@@ -42,6 +44,7 @@ interface OutfitterPortalProps {
 type OutfitterView =
   | 'dashboard'
   | 'hunts'
+  | 'hunt-detail'
   | 'create-hunt'
   | 'hunters'
   | 'link-requests'
@@ -52,8 +55,9 @@ type OutfitterView =
   | 'profile';
 
 export function OutfitterPortal({ onLogout }: OutfitterPortalProps) {
-  const [currentView, setCurrentView] = useState<OutfitterView>('dashboard');
+  const [currentView, setCurrentView] = useState<OutfitterView>('hunts');
   const [selectedHunt, setSelectedHunt] = useState<Hunt | null>(null);
+  const [openHunt, setOpenHunt] = useState<OutfitterHunt | null>(null);
   const { theme, toggleTheme } = useTheme();
   const { theme: portalTheme } = usePortalTheme();
 
@@ -63,11 +67,6 @@ export function OutfitterPortal({ onLogout }: OutfitterPortalProps) {
   ).length;
 
   const handleCreateHunt = () => {
-    setCurrentView('create-hunt');
-  };
-
-  const handleEditHunt = (hunt: Hunt) => {
-    setSelectedHunt(hunt);
     setCurrentView('create-hunt');
   };
 
@@ -81,12 +80,20 @@ export function OutfitterPortal({ onLogout }: OutfitterPortalProps) {
       case 'dashboard':
         return <AnimalSummary />;
       case 'hunts':
-        return <HuntDashboard onCreateHunt={handleCreateHunt} onEditHunt={handleEditHunt} />;
+        return (
+          <HuntDashboard
+            onCreateHunt={handleCreateHunt}
+            onOpenHunt={hunt => { setOpenHunt(hunt); setCurrentView('hunt-detail'); }}
+          />
+        );
+      case 'hunt-detail':
+        return openHunt
+          ? <HuntDetailView hunt={openHunt} onBack={() => setCurrentView('hunts')} />
+          : null;
       case 'create-hunt':
         return (
-          <CreateHunt
-            hunt={selectedHunt}
-            onSave={handleHuntSaved}
+          <HuntCreationWizard
+            onDone={handleHuntSaved}
             onCancel={() => {
               setSelectedHunt(null);
               setCurrentView('hunts');

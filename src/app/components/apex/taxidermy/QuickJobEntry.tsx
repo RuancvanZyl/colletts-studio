@@ -458,7 +458,7 @@ export function QuickJobEntry({ onDone }: QuickJobEntryProps) {
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="text-sm text-slate-600 dark:text-slate-400">
               <span className="font-semibold text-slate-900 dark:text-slate-100">{rows.length} trophy{rows.length !== 1 ? 'ies' : ''}</span> will be created as job cards and routed to their departments immediately.
-              {clientName && <span> Client: <strong>{clientName}</strong></span>}
+{clientName && <span> Client: <strong>{clientName}</strong></span>}
             </div>
             <Button onClick={handleSubmit} disabled={saving} className="shrink-0">
               {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating…</> : <>

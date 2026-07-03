@@ -49,11 +49,13 @@ export function useHuntDashboard() {
       byType[t] = (byType[t] ?? 0) + 1;
     });
 
-    const completeDocs = docs.filter((d: any) => d.status === 'complete');
-    const huntsWithJobCard   = new Set(completeDocs.filter((d: any) => d.doc_type === 'job_card').map((d: any) => d.hunt_id));
-    const huntsWithReceiving = new Set(completeDocs.filter((d: any) => d.doc_type === 'receiving_sheet').map((d: any) => d.hunt_id));
-    const huntsWithInvoice   = new Set(completeDocs.filter((d: any) => d.doc_type === 'invoice').map((d: any) => d.hunt_id));
-    const huntsWithPermit    = new Set(completeDocs.filter((d: any) => ['permit','cites','import_permit'].includes(d.doc_type)).map((d: any) => d.hunt_id));
+    // job_card: any status except pending_payment counts as "created"
+    const activeDocs = docs.filter((d: any) => d.status !== 'pending_payment');
+    const completedDocs = docs.filter((d: any) => d.status === 'completed');
+    const huntsWithJobCard   = new Set(activeDocs.filter((d: any) => d.doc_type === 'job_card').map((d: any) => d.hunt_id));
+    const huntsWithReceiving = new Set(docs.filter((d: any) => d.doc_type === 'receiving_sheet').map((d: any) => d.hunt_id));
+    const huntsWithInvoice   = new Set(docs.filter((d: any) => d.doc_type === 'invoice').map((d: any) => d.hunt_id));
+    const huntsWithPermit    = new Set(docs.filter((d: any) => ['permit','cites','import_permit'].includes(d.doc_type)).map((d: any) => d.hunt_id));
     const huntIds            = new Set(hunts.map((h: any) => h.id));
 
     setStats({

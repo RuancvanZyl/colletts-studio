@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import {
   Users, Plus, Search, RefreshCw, Edit2, Phone, Mail, Globe,
   Loader2, ChevronRight, Camera, ImagePlus, Trash2, X, ZoomIn,
-  Plane, MapPin, ArrowLeft, FileText, Upload, CheckCircle2,
+  Plane, MapPin, ArrowLeft, FileText, Upload, CheckCircle2, Send, ShieldCheck,
 } from 'lucide-react';
 import { useClients } from '../../../../lib/hooks/useClients';
 import { useJobs } from '../../../../lib/hooks/useJobs';
@@ -19,6 +19,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
 import { HuntTimeline } from './HuntTimeline';
 import { CommunicationPanel } from './CommunicationPanel';
+import { ClientRegistrationForm } from '../shared/ClientRegistrationForm';
 import type { Database } from '../../../../lib/database.types';
 
 type Client = Database['public']['Tables']['clients']['Row'];
@@ -279,6 +280,20 @@ type DetailTab = 'info' | 'hunts' | 'photos' | 'messages';
 function ClientDetailPanel({ client, onEdit, onBack }: { client: Client; onEdit: () => void; onBack: () => void }) {
   const [tab, setTab] = useState<DetailTab>('hunts');
   const { photos, loading: photosLoading, refresh: refreshPhotos } = useClientPhotos(client.id);
+  const [inviting, setInviting] = useState(false);
+  const hasPortalAccess = !!(client as any).auth_user_id;
+
+  async function inviteToPortal() {
+    if (!client.email) { toast.error('Client has no email address — add one first'); return; }
+    setInviting(true);
+    const { error } = await (supabase as any).auth.signInWithOtp({
+      email: client.email,
+      options: { shouldCreateUser: true },
+    });
+    setInviting(false);
+    if (error) { toast.error('Failed to send invite: ' + error.message); return; }
+    toast.success(`Portal invite sent to ${client.email}`);
+  }
 
   const clientType = (client as any).client_type as 'local' | 'export' | undefined;
 
@@ -360,6 +375,34 @@ function ClientDetailPanel({ client, onEdit, onBack }: { client: Client; onEdit:
               </div>
             )}
             <p className="text-xs text-slate-400">Added {new Date(client.created_at).toLocaleDateString()}</p>
+
+            {/* Hunter Portal access */}
+            <div className={`flex items-center justify-between p-3 rounded-lg border ${
+              hasPortalAccess
+                ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800'
+                : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700'
+            }`}>
+              <div className="flex items-center gap-2">
+                {hasPortalAccess
+                  ? <ShieldCheck className="w-4 h-4 text-green-600 flex-shrink-0" />
+                  : <Send className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                }
+                <div>
+                  <p className="text-xs font-medium text-slate-800 dark:text-slate-200">
+                    {hasPortalAccess ? 'Hunter Portal active' : 'No portal access'}
+                  </p>
+                  <p className="text-[10px] text-slate-500">
+                    {hasPortalAccess ? 'Client can track trophies online' : 'Send a magic-link invite to activate'}
+                  </p>
+                </div>
+              </div>
+              {!hasPortalAccess && client.email && (
+                <Button size="sm" variant="outline" onClick={inviteToPortal} disabled={inviting} className="h-7 text-xs flex-shrink-0">
+                  {inviting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3 mr-1" />}
+                  {inviting ? '' : 'Invite'}
+                </Button>
+              )}
+            </div>
           </>
         )}
 
@@ -414,6 +457,7 @@ export function ClientManagement({ initialClientId }: { initialClientId?: string
   const [typeFilter, setTypeFilter] = useState<ClientType>('all');
   const [selected, setSelected] = useState<Client | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [regOpen, setRegOpen] = useState(false);   // full registration flow
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
 
@@ -493,6 +537,26 @@ export function ClientManagement({ initialClientId }: { initialClientId?: string
 
   const showDetail = selected && !editOpen;
 
+  // Full registration flow — staff creating a new client properly
+  if (regOpen) {
+    return (
+      <div className="max-w-lg mx-auto py-4">
+        <div className="mb-5">
+          <button onClick={() => setRegOpen(false)} className="text-sm text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
+            ← Back to clients
+          </button>
+          <h1 className="mt-2 text-slate-900 dark:text-slate-100">Register New Client</h1>
+          <p className="text-slate-500 text-sm">Fill in the client's full details. A confirmation email will be sent automatically.</p>
+        </div>
+        <ClientRegistrationForm
+          staffMode={true}
+          onBack={() => setRegOpen(false)}
+          onComplete={(_id) => { setRegOpen(false); refresh(); }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -505,7 +569,7 @@ export function ClientManagement({ initialClientId }: { initialClientId?: string
           <Button variant="ghost" size="icon" onClick={refresh} disabled={loading}>
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
-          <Button onClick={openNew}>
+          <Button onClick={() => setRegOpen(true)} className="bg-[#0073ea] hover:bg-[#0060c7] text-white">
             <Plus className="w-4 h-4 mr-2" /> New Client
           </Button>
         </div>

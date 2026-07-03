@@ -1,334 +1,249 @@
+/**
+ * TrophyTrackingDashboard — Hunter's real-time view of all trophies.
+ * Reads from hunt_documents via useHunterHunts. Shows live pipeline stages.
+ */
+
 import { useState } from 'react';
-import { Card } from '../../ui/card';
-import { Button } from '../../ui/button';
+import { useHunterHunts, HunterTrophy, HunterHunt } from '../../../../lib/hooks/useHunterHunts';
+import { DEPT_LABELS, DEPT_COLORS } from '../../../../lib/pipeline';
 import { Badge } from '../../ui/badge';
-import { Progress } from '../../ui/progress';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
-import { Package, MapPin, Clock, CheckCircle2, Truck, Home } from 'lucide-react';
-import { formatDate as format } from '../utils/dateUtils';
+import {
+  Loader2, RefreshCw, ChevronDown, ChevronUp, CheckCircle2,
+  Clock, Trophy, User, Package,
+} from 'lucide-react';
 
-interface Trophy {
-  id: string;
-  species: string;
-  trophyType: string;
-  image: string;
-  status: 'received' | 'tannery' | 'mounting' | 'qa' | 'packed' | 'shipped' | 'delivered';
-  progress: number;
-  timeline: TimelineEvent[];
+function timeAgo(iso: string | null) {
+  if (!iso) return '—';
+  const hrs = Math.floor((Date.now() - new Date(iso).getTime()) / 3_600_000);
+  if (hrs < 1)  return 'just now';
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
 }
 
-interface TimelineEvent {
-  status: string;
-  timestamp: Date;
-  location: string;
-  notes?: string;
-}
+const STATUS_LABEL: Record<string, string> = {
+  pending_payment: 'Awaiting Deposit',
+  in_progress:     'In Progress',
+  completed:       'Complete',
+  flagged:         'Flagged',
+};
 
-interface TrophyTrackingDashboardProps {
-  huntId: string;
-}
+function TrophyCard({ trophy }: { trophy: HunterTrophy }) {
+  const [open, setOpen] = useState(false);
 
-export function TrophyTrackingDashboard({ huntId }: TrophyTrackingDashboardProps) {
-  const [selectedFilter, setSelectedFilter] = useState<'all' | 'process' | 'completed' | 'shipped'>('all');
-  const [selectedTrophy, setSelectedTrophy] = useState<Trophy | null>(null);
-  const [showTimeline, setShowTimeline] = useState(false);
+  const barColor =
+    trophy.status === 'completed'       ? 'bg-green-500' :
+    trophy.status === 'pending_payment' ? 'bg-slate-300 dark:bg-slate-600' :
+    trophy.isStalled                    ? 'bg-red-500' :
+                                          'bg-[#0073ea]';
 
-  // Mock trophy data
-  const [trophies] = useState<Trophy[]>([
-    {
-      id: 'TRP-2025-10234',
-      species: 'Kudu',
-      trophyType: 'Shoulder Mount',
-      image: 'https://images.unsplash.com/photo-1564760055775-d63b17a55c44?w=400',
-      status: 'mounting',
-      progress: 60,
-      timeline: [
-        {
-          status: 'Received at Workshop',
-          timestamp: new Date('2025-01-15T10:30:00'),
-          location: 'Main Reception',
-          notes: 'Trophy checked in, RFID tag applied'
-        },
-        {
-          status: 'Tannery Processing',
-          timestamp: new Date('2025-01-16T14:00:00'),
-          location: 'Tannery Station A',
-        },
-        {
-          status: 'Mounting Started',
-          timestamp: new Date('2025-01-22T09:15:00'),
-          location: 'Mounting Workshop B',
-        },
-      ]
-    },
-    {
-      id: 'TRP-2025-10235',
-      species: 'Springbok',
-      trophyType: 'Euro Mount',
-      image: 'https://images.unsplash.com/photo-1535083783855-76ae62b2914e?w=400',
-      status: 'qa',
-      progress: 85,
-      timeline: [
-        {
-          status: 'Received',
-          timestamp: new Date('2025-01-15T10:35:00'),
-          location: 'Main Reception',
-        },
-        {
-          status: 'Euro Mount Processing',
-          timestamp: new Date('2025-01-17T11:00:00'),
-          location: 'Cleaning Station',
-        },
-        {
-          status: 'Quality Check',
-          timestamp: new Date('2025-01-25T15:30:00'),
-          location: 'QA Department',
-        },
-      ]
-    },
-  ]);
-
-  const getStatusDetails = (status: string) => {
-    const statusMap: Record<string, { label: string; color: string; icon: any }> = {
-      received: { label: 'Received', color: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-400', icon: Package },
-      tannery: { label: 'In Tannery', color: 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-400', icon: Clock },
-      mounting: { label: 'Mounting', color: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-400', icon: Clock },
-      qa: { label: 'Quality Check', color: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-400', icon: CheckCircle2 },
-      packed: { label: 'Packed', color: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-400', icon: Package },
-      shipped: { label: 'Shipped', color: 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-400', icon: Truck },
-      delivered: { label: 'Delivered', color: 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-400', icon: Home },
-    };
-    return statusMap[status] || statusMap.received;
-  };
-
-  const filteredTrophies = trophies.filter(trophy => {
-    if (selectedFilter === 'all') return true;
-    if (selectedFilter === 'process') return !['delivered', 'shipped'].includes(trophy.status);
-    if (selectedFilter === 'completed') return trophy.status === 'delivered';
-    if (selectedFilter === 'shipped') return trophy.status === 'shipped';
-    return true;
-  });
-
-  const viewTimeline = (trophy: Trophy) => {
-    setSelectedTrophy(trophy);
-    setShowTimeline(true);
-  };
+  const deptColor = DEPT_COLORS[trophy.currentDept] ?? 'bg-slate-500';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-stone-50 via-green-50/30 to-stone-100 dark:from-stone-950 dark:via-green-950/20 dark:to-stone-900 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-slate-900 dark:text-white mb-2">My Trophies</h1>
-          <p className="text-slate-600 dark:text-slate-400">
-            Track your trophies through every stage of processing
-          </p>
+    <div className={`border rounded-xl overflow-hidden bg-white dark:bg-slate-900 ${
+      trophy.status === 'completed'       ? 'border-green-200 dark:border-green-800' :
+      trophy.isStalled                    ? 'border-red-200 dark:border-red-800' :
+      trophy.status === 'pending_payment' ? 'border-slate-200 dark:border-slate-700' :
+                                            'border-slate-200 dark:border-slate-700'
+    }`}>
+      <button onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-3 p-4 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+
+        <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-white text-sm font-bold ${
+          trophy.status === 'completed' ? 'bg-green-500' :
+          trophy.status === 'pending_payment' ? 'bg-slate-400' : deptColor
+        }`}>
+          {trophy.status === 'completed'
+            ? <CheckCircle2 className="w-5 h-5" />
+            : trophy.species.charAt(0)}
         </div>
 
-        {/* Filter Tabs */}
-        <Tabs value={selectedFilter} onValueChange={(v) => setSelectedFilter(v as any)} className="mb-8">
-          <TabsList className="grid w-full max-w-2xl grid-cols-4">
-            <TabsTrigger value="all">
-              All ({trophies.length})
-            </TabsTrigger>
-            <TabsTrigger value="process">
-              In Process ({trophies.filter(t => !['delivered', 'shipped'].includes(t.status)).length})
-            </TabsTrigger>
-            <TabsTrigger value="completed">
-              Completed ({trophies.filter(t => t.status === 'delivered').length})
-            </TabsTrigger>
-            <TabsTrigger value="shipped">
-              Shipped ({trophies.filter(t => t.status === 'shipped').length})
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="flex-1 min-w-0 space-y-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div>
+              <span className="font-semibold text-slate-900 dark:text-slate-100 text-sm">{trophy.species}</span>
+              <span className="text-slate-400 text-xs ml-2">{trophy.mountType}</span>
+              {trophy.tagNumber && <span className="text-slate-400 text-xs ml-2 font-mono">{trophy.tagNumber}</span>}
+            </div>
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+              trophy.status === 'completed'       ? 'bg-green-100 text-green-700' :
+              trophy.status === 'pending_payment' ? 'bg-amber-100 text-amber-700' :
+              trophy.isStalled                    ? 'bg-red-100 text-red-700' :
+                                                    'bg-blue-100 text-blue-700'
+            }`}>
+              {trophy.status === 'in_progress' && !trophy.isStalled
+                ? DEPT_LABELS[trophy.currentDept] ?? trophy.currentDept
+                : trophy.isStalled ? 'Delayed'
+                : STATUS_LABEL[trophy.status] ?? trophy.status}
+            </span>
+          </div>
 
-        {/* Trophy Grid */}
-        {filteredTrophies.length === 0 ? (
-          <Card className="p-12 text-center bg-white dark:bg-stone-900">
-            <Package className="w-16 h-16 text-stone-400 dark:text-stone-600 mx-auto mb-4" />
-            <h3 className="text-slate-900 dark:text-white mb-2">No Trophies Found</h3>
-            <p className="text-slate-600 dark:text-slate-400">
-              No trophies match the selected filter
-            </p>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredTrophies.map((trophy) => {
-              const statusDetails = getStatusDetails(trophy.status);
-              const StatusIcon = statusDetails.icon;
+          <div className="space-y-0.5">
+            <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+              <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${trophy.pct}%` }} />
+            </div>
+            <div className="flex justify-between text-[10px] text-slate-400">
+              <span>{trophy.stagesDone} of {trophy.pipeline.length} stages</span>
+              <span>{trophy.pct}%</span>
+            </div>
+          </div>
+        </div>
 
+        {open ? <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />}
+      </button>
+
+      {open && (
+        <div className="border-t border-slate-100 dark:border-slate-800 px-4 pb-4 pt-3 space-y-3">
+          {trophy.instructions && (
+            <div className="text-xs text-slate-500 bg-slate-50 dark:bg-slate-800 rounded-lg p-2">
+              <span className="font-medium">Your instructions:</span> {trophy.instructions}
+            </div>
+          )}
+          <div className="space-y-1">
+            {trophy.pipeline.map((stage, i) => {
+              const done    = i < trophy.stagesDone;
+              const current = stage === trophy.currentDept && trophy.status === 'in_progress';
+              const history = trophy.stageHistory.find(h => h.dept === stage);
               return (
-                <Card
-                  key={trophy.id}
-                  className="overflow-hidden hover:shadow-xl transition-all group"
-                >
-                  {/* Trophy Image */}
-                  <div className="aspect-video relative overflow-hidden bg-stone-200 dark:bg-stone-800">
-                    <img
-                      src={trophy.image}
-                      alt={trophy.species}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                    />
-                    <Badge className={`absolute top-3 right-3 ${statusDetails.color}`}>
-                      {statusDetails.label}
-                    </Badge>
+                <div key={stage} className={`flex items-center gap-2.5 py-1 ${done || current ? 'opacity-100' : 'opacity-35'}`}>
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
+                    done    ? 'bg-green-500' :
+                    current ? 'bg-[#0073ea] ring-4 ring-[#0073ea]/20' :
+                              'bg-slate-200 dark:bg-slate-700'
+                  }`}>
+                    {done
+                      ? <CheckCircle2 className="w-3 h-3 text-white" />
+                      : <div className={`w-2 h-2 rounded-full ${current ? 'bg-white' : 'bg-slate-400'}`} />}
                   </div>
-
-                  {/* Trophy Details */}
-                  <div className="p-6">
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <h3 className="text-slate-900 dark:text-white mb-1">
-                          {trophy.species}
-                        </h3>
-                        <p className="text-sm text-slate-600 dark:text-slate-400">
-                          {trophy.trophyType}
-                        </p>
-                      </div>
-                      <StatusIcon className="w-5 h-5 text-slate-400" />
-                    </div>
-
-                    {/* Progress Bar */}
-                    <div className="mb-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs text-slate-600 dark:text-slate-400">
-                          Progress
-                        </span>
-                        <span className="text-xs text-slate-900 dark:text-white">
-                          {trophy.progress}%
-                        </span>
-                      </div>
-                      <Progress value={trophy.progress} className="h-2" />
-                    </div>
-
-                    {/* Trophy ID */}
-                    <div className="flex items-center justify-between mb-4">
-                      <Badge variant="secondary" className="text-xs">
-                        {trophy.id}
-                      </Badge>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => viewTimeline(trophy)}
-                        className="text-green-600 dark:text-green-500 hover:text-green-700 dark:hover:text-green-400"
-                      >
-                        View Timeline
-                      </Button>
-                    </div>
-
-                    {/* Latest Update */}
-                    <div className="pt-4 border-t border-stone-200 dark:border-stone-800">
-                      <div className="flex items-start gap-2">
-                        <MapPin className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
-                        <div className="flex-1">
-                          <p className="text-xs text-slate-600 dark:text-slate-400">
-                            Last Update
-                          </p>
-                          <p className="text-sm text-slate-900 dark:text-white">
-                            {trophy.timeline[trophy.timeline.length - 1].status}
-                          </p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">
-                            {format(trophy.timeline[trophy.timeline.length - 1].timestamp, 'MMM d, yyyy')}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </Card>
+                  <span className={`text-xs flex-1 ${current ? 'font-semibold text-[#0073ea]' : done ? 'text-slate-600 dark:text-slate-300' : 'text-slate-400'}`}>
+                    {DEPT_LABELS[stage] ?? stage}
+                  </span>
+                  {history && <span className="text-[10px] text-slate-400">{timeAgo(history.completedAt)}</span>}
+                  {current && trophy.lastMovedAt && (
+                    <span className="text-[10px] text-blue-400 flex items-center gap-1">
+                      <Clock className="w-2.5 h-2.5" />{timeAgo(trophy.lastMovedAt)}
+                    </span>
+                  )}
+                </div>
               );
             })}
           </div>
-        )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HuntSection({ hunt }: { hunt: HunterHunt }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="space-y-3">
+      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-3 py-2 text-left">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-bold text-slate-900 dark:text-slate-100">Hunt {hunt.year}</span>
+            {hunt.operator && (
+              <span className="text-xs text-slate-500 flex items-center gap-1">
+                <User className="w-3 h-3" />{hunt.operator}
+              </span>
+            )}
+            {hunt.farm && <span className="text-xs text-slate-400">{hunt.farm}</span>}
+            <Badge className={`text-xs border-0 ${hunt.clientType === 'export' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+              {hunt.clientType}
+            </Badge>
+          </div>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {hunt.doneCount}/{hunt.totalCount} trophies complete · {hunt.pct}%
+          </p>
+        </div>
+        {open ? <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />}
+      </button>
+      <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+        <div className="h-full rounded-full bg-green-500 transition-all" style={{ width: `${hunt.pct}%` }} />
+      </div>
+      {open && (
+        <div className="space-y-2 pl-1">
+          {hunt.trophies.map(t => <TrophyCard key={t.docId} trophy={t} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function TrophyTrackingDashboard({ huntId }: { huntId?: string }) {
+  const { hunts, loading, refresh } = useHunterHunts();
+
+  const totalTrophies = hunts.reduce((s, h) => s + h.totalCount, 0);
+  const doneTrophies  = hunts.reduce((s, h) => s + h.doneCount,  0);
+  const inProgress    = hunts.reduce((s, h) => s + h.trophies.filter(t => t.status === 'in_progress').length, 0);
+  const pending       = hunts.reduce((s, h) => s + h.trophies.filter(t => t.status === 'pending_payment').length, 0);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20 text-slate-400 gap-2">
+        <Loader2 className="w-5 h-5 animate-spin" />
+        <span>Loading your trophies…</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <Trophy className="w-5 h-5 text-amber-500" /> My Trophies
+          </h2>
+          <p className="text-sm text-slate-500 mt-0.5">Live progress from the Apex workshop</p>
+        </div>
+        <button onClick={refresh} className="text-slate-400 hover:text-slate-700">
+          <RefreshCw className="w-4 h-4" />
+        </button>
       </div>
 
-      {/* Timeline Dialog */}
-      <Dialog open={showTimeline} onOpenChange={setShowTimeline}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Trophy Timeline</DialogTitle>
-          </DialogHeader>
-
-          {selectedTrophy && (
-            <div className="space-y-6">
-              {/* Trophy Header */}
-              <div className="flex items-center gap-4 p-4 bg-stone-50 dark:bg-stone-900/50 rounded-lg">
-                <img
-                  src={selectedTrophy.image}
-                  alt={selectedTrophy.species}
-                  className="w-20 h-20 object-cover rounded-lg"
-                />
-                <div className="flex-1">
-                  <h4 className="text-slate-900 dark:text-white mb-1">
-                    {selectedTrophy.species}
-                  </h4>
-                  <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">
-                    {selectedTrophy.trophyType}
-                  </p>
-                  <Badge variant="secondary">{selectedTrophy.id}</Badge>
-                </div>
-              </div>
-
-              {/* Timeline Events */}
-              <div className="space-y-4">
-                <h4 className="text-slate-900 dark:text-white">Processing Timeline</h4>
-                
-                <div className="relative">
-                  {/* Timeline Line */}
-                  <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-green-200 dark:bg-green-900"></div>
-
-                  {/* Events */}
-                  <div className="space-y-6">
-                    {selectedTrophy.timeline.map((event, index) => (
-                      <div key={index} className="relative flex gap-4">
-                        {/* Timeline Dot */}
-                        <div className="flex-shrink-0 w-8 h-8 bg-green-600 rounded-full flex items-center justify-center z-10">
-                          <CheckCircle2 className="w-4 h-4 text-white" />
-                        </div>
-
-                        {/* Event Content */}
-                        <Card className="flex-1 p-4 bg-white dark:bg-stone-900">
-                          <div className="flex items-start justify-between mb-2">
-                            <h5 className="text-slate-900 dark:text-white">
-                              {event.status}
-                            </h5>
-                            <span className="text-xs text-slate-500 dark:text-slate-400">
-                              {format(event.timestamp, 'MMM d, yyyy HH:mm')}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                            <MapPin className="w-3 h-3" />
-                            <span>{event.location}</span>
-                          </div>
-                          {event.notes && (
-                            <p className="text-sm text-slate-600 dark:text-slate-400 mt-2">
-                              {event.notes}
-                            </p>
-                          )}
-                        </Card>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Progress Summary */}
-              <Card className="p-4 bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-slate-900 dark:text-white">
-                    Overall Progress
-                  </span>
-                  <span className="text-sm text-green-700 dark:text-green-500">
-                    {selectedTrophy.progress}%
-                  </span>
-                </div>
-                <Progress value={selectedTrophy.progress} className="h-3" />
-              </Card>
+      {totalTrophies > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { label: 'Total',      value: totalTrophies, color: 'text-slate-900 dark:text-slate-100' },
+            { label: 'In Progress',value: inProgress,    color: 'text-[#0073ea]' },
+            { label: 'Complete',   value: doneTrophies,  color: 'text-green-600' },
+          ].map(s => (
+            <div key={s.label} className="text-center p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700">
+              <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+              <p className="text-xs text-slate-500">{s.label}</p>
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
+          ))}
+        </div>
+      )}
+
+      {pending > 0 && (
+        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-start gap-3">
+          <Package className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold text-amber-800 dark:text-amber-300 text-sm">
+              {pending} trophy{pending !== 1 ? ' trophies are' : ' is'} awaiting deposit confirmation
+            </p>
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+              Processing begins once your deposit is confirmed by Apex Trophy Solutions.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {hunts.length === 0 ? (
+        <div className="text-center py-16 space-y-3">
+          <Trophy className="w-12 h-12 mx-auto text-slate-300" />
+          <div>
+            <p className="font-semibold text-slate-600 dark:text-slate-300">No trophies yet</p>
+            <p className="text-sm text-slate-400 mt-1">
+              Your trophies will appear here once your outfitter links your hunt to your profile.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-8">
+          {hunts.map(h => <HuntSection key={h.id} hunt={h} />)}
+        </div>
+      )}
     </div>
   );
 }

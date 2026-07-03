@@ -1,13 +1,37 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../../../lib/supabase';
 import { useAuth } from '../../../../lib/auth';
 import { getStaffDepartments, getNextDepartment, getPipeline, DEPT_LABELS, DEPT_COLORS } from '../../../../lib/pipeline';
 import { toast } from 'sonner';
-import { CheckCircle2, Clock, ChevronRight, ListTodo, AlertTriangle, RefreshCw, Info } from 'lucide-react';
+import { CheckCircle2, Clock, ChevronRight, ListTodo, AlertTriangle, RefreshCw, Info, Camera, Upload, X, Bell } from 'lucide-react';
 import { Button } from '../../ui/button';
+import { Textarea } from '../../ui/textarea';
+import { AlertDashboard } from './AlertDashboard';
 
 // What each department needs to do with a trophy
 const DEPT_INSTRUCTIONS: Record<string, { action: string; steps: string[] }> = {
+  skinning: {
+    action: 'Skin and flesh the trophy — remove cape or hide from the skull/carcass.',
+    steps: [
+      'Measure and photograph the trophy before skinning',
+      'Make the correct incision for the mount type (Y-cut for shoulder, dorsal for full)',
+      'Carefully skin around the face — eyes, ears, nose, lips',
+      'Remove all flesh and membrane from the inside of the skin',
+      'Clean and separate skull if required — label everything with the tag number',
+      'Photograph completed skin and skull before moving to salting',
+    ],
+  },
+  salting: {
+    action: 'Salt the skin thoroughly to preserve and begin the curing process.',
+    steps: [
+      'Lay skin flesh-side up on a clean slanting surface',
+      'Apply a thick, even layer of coarse salt over the entire flesh side',
+      'Work salt into all folds — around ears, lips and feet',
+      'Fold the skin flesh-side in (salt inside)',
+      'Allow 24–48h to drain — do not stack salted skins',
+      'Mark complete when skin is fully salted and drained',
+    ],
+  },
   receiving: {
     action: 'Complete the receiving sheet, tag the trophy and photograph it.',
     steps: [
@@ -87,6 +111,27 @@ const DEPT_INSTRUCTIONS: Record<string, { action: string; steps: string[] }> = {
       'Mark complete to advance to Administration',
     ],
   },
+  dip_pack: {
+    action: 'Treat skins with dip solution and prepare for overseas shipment.',
+    steps: [
+      'Rehydrate salted skins in clean water — 30–60 min',
+      'Mix dip solution to correct concentration (follow CITES requirements)',
+      'Submerge skins fully — minimum 20 minutes',
+      'Remove, drain and allow to air dry on mesh',
+      'Label each skin with tag number and species',
+      'Pack in export-grade containers with moisture packs',
+    ],
+  },
+  packing: {
+    action: 'Pack finished mounts safely for delivery or export.',
+    steps: [
+      'Wrap mount in acid-free tissue, then bubble wrap',
+      'Build a custom crate if required — no movement inside',
+      'Attach client label with delivery address and contact',
+      'Photograph packed crate before sealing',
+      'Mark complete when crate is sealed and ready for collection',
+    ],
+  },
   administration: {
     action: 'Finalise the invoice, confirm delivery details and arrange dispatch.',
     steps: [
@@ -111,15 +156,26 @@ interface Task {
   instructions: string;
   currentDept: string;
   receivedAt: string;
-  stageHistory: { dept: string; completedBy: string; completedAt: string }[];
+  stageHistory: { dept: string; completedBy: string; completedAt: string; photoPaths?: string[] }[];
+}
+
+interface CompleteState {
+  photos: File[];
+  previews: string[];
+  notes: string;
+  uploading: boolean;
 }
 
 export function MyTasks() {
   const { profile } = useAuth();
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [tasks, setTasks]         = useState<Task[]>([]);
+  const [loading, setLoading]     = useState(true);
   const [completing, setCompleting] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [expanded, setExpanded]   = useState<string | null>(null);
+  const [completeOpen, setCompleteOpen] = useState<string | null>(null);
+  const [completeState, setCompleteState] = useState<Record<string, CompleteState>>({});
+  const [showAlerts, setShowAlerts] = useState(true);
+  const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const myDepts = getStaffDepartments(profile?.full_name ?? '');
 
@@ -170,35 +226,90 @@ export function MyTasks() {
 
   useEffect(() => { load(); }, [load]);
 
+  function getCS(docId: string): CompleteState {
+    return completeState[docId] ?? { photos: [], previews: [], notes: '', uploading: false };
+  }
+  function setCS(docId: string, patch: Partial<CompleteState>) {
+    setCompleteState(prev => ({ ...prev, [docId]: { ...getCS(docId), ...patch } }));
+  }
+
+  function addPhotos(docId: string, files: FileList | null) {
+    if (!files) return;
+    const newFiles = Array.from(files);
+    const newPreviews = newFiles.map(f => URL.createObjectURL(f));
+    setCS(docId, {
+      photos:   [...getCS(docId).photos, ...newFiles],
+      previews: [...getCS(docId).previews, ...newPreviews],
+    });
+  }
+
+  function removePhoto(docId: string, i: number) {
+    const cs = getCS(docId);
+    setCS(docId, {
+      photos:   cs.photos.filter((_, j) => j !== i),
+      previews: cs.previews.filter((_, j) => j !== i),
+    });
+  }
+
   async function completeStage(task: Task) {
+    const cs = getCS(task.docId);
+    if (cs.photos.length === 0) {
+      toast.error('Upload at least one completion photo before marking done.');
+      return;
+    }
     setCompleting(task.docId);
+    setCS(task.docId, { uploading: true });
     try {
+      // Upload photos
+      const photoPaths: string[] = [];
+      for (const file of cs.photos) {
+        const ext  = file.name.split('.').pop();
+        const path = `job-completions/${task.docId}/${task.currentDept}/${Date.now()}.${ext}`;
+        const { error } = await (supabase as any).storage.from('client-photos').upload(path, file, { upsert: true });
+        if (!error) photoPaths.push(path);
+      }
+
       const next = getNextDepartment(task.mountType, task.currentDept);
       const newHistory = [
         ...task.stageHistory,
-        { dept: task.currentDept, completedBy: profile?.full_name ?? '', completedAt: new Date().toISOString() },
+        { dept: task.currentDept, completedBy: profile?.full_name ?? '', completedAt: new Date().toISOString(), photoPaths },
       ];
 
       const { data: doc } = await (supabase as any)
         .from('hunt_documents').select('form_data').eq('id', task.docId).single();
 
       const { error } = await (supabase as any).from('hunt_documents').update({
-        current_department: next ?? 'done',
-        status: next ? 'in_progress' : 'complete',
+        current_department:     next ?? 'done',
+        status:                 next ? 'in_progress' : 'complete',
+        completion_photo_paths: photoPaths,
+        completion_notes:       cs.notes || null,
+        completed_by_name:      profile?.full_name ?? null,
         form_data: { ...(doc?.form_data ?? {}), stage_history: newHistory },
       }).eq('id', task.docId);
 
       if (error) throw error;
 
+      // Write stage history record
+      await (supabase as any).from('trophy_stage_history').insert({
+        hunt_doc_id:       task.docId,
+        department:        task.currentDept,
+        completed_by:      profile?.id ?? null,
+        completed_by_name: profile?.full_name ?? null,
+        photo_paths:       photoPaths,
+        notes:             cs.notes || null,
+      });
+
       toast.success(next
-        ? `Handed off to ${DEPT_LABELS[next] ?? next}`
-        : `${task.species} fully complete!`
+        ? `✓ Handed off to ${DEPT_LABELS[next] ?? next}`
+        : `✓ ${task.species} fully complete!`
       );
       setTasks(prev => prev.filter(t => t.docId !== task.docId));
+      setCompleteOpen(null);
     } catch (err: any) {
       toast.error('Failed: ' + err.message);
     } finally {
       setCompleting(null);
+      setCS(task.docId, { uploading: false });
     }
   }
 
@@ -236,6 +347,24 @@ export function MyTasks() {
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </button>
+      </div>
+
+      {/* Alert / Priority panel */}
+      <div className="bg-[#0F1A1C] rounded-xl border border-[rgba(58,174,204,0.15)] overflow-hidden">
+        <button
+          onClick={() => setShowAlerts(p => !p)}
+          className="w-full flex items-center justify-between px-4 py-3 text-left"
+        >
+          <span className="text-[#3AAECC] text-sm font-bold flex items-center gap-2">
+            <Bell className="w-4 h-4" /> Priority & Alerts
+          </span>
+          <ChevronRight className={`w-4 h-4 text-[#7AADB8] transition-transform ${showAlerts ? 'rotate-90' : ''}`} />
+        </button>
+        {showAlerts && (
+          <div className="px-4 pb-4 border-t border-[rgba(58,174,204,0.1)]">
+            <AlertDashboard />
+          </div>
+        )}
       </div>
 
       {/* Loading */}
@@ -397,22 +526,85 @@ export function MyTasks() {
                 </div>
               )}
 
-              {/* Action */}
-              <div className="flex justify-between items-center pt-2 border-t border-[rgba(58,174,204,0.1)]">
-                <p className="text-xs text-[#7AADB8]">
-                  {next ? <>Next: <span className="text-[#3AAECC] font-medium">{DEPT_LABELS[next] ?? next}</span></> : <span className="text-green-400">Final stage</span>}
-                </p>
-                <button
-                  onClick={() => completeStage(task)}
-                  disabled={isCompleting}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#3AAECC] hover:bg-[#2E9EB8] text-[#080C0C] text-sm font-bold transition-all disabled:opacity-50 shadow-[0_0_12px_rgba(58,174,204,0.25)] hover:shadow-[0_0_20px_rgba(58,174,204,0.35)]"
-                >
-                  {isCompleting ? (
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              {/* Action / Complete panel */}
+              <div className="pt-2 border-t border-[rgba(58,174,204,0.1)] space-y-3">
+                <div className="flex justify-between items-center">
+                  <p className="text-xs text-[#7AADB8]">
+                    {next ? <>Next: <span className="text-[#3AAECC] font-medium">{DEPT_LABELS[next] ?? next}</span></> : <span className="text-green-400">Final stage</span>}
+                  </p>
+                  {completeOpen !== task.docId ? (
+                    <button
+                      onClick={() => setCompleteOpen(task.docId)}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#3AAECC] hover:bg-[#2E9EB8] text-[#080C0C] text-sm font-bold transition-all shadow-[0_0_12px_rgba(58,174,204,0.25)]"
+                    >
+                      Mark Complete <ChevronRight className="w-4 h-4" />
+                    </button>
                   ) : (
-                    <>Mark Complete <ChevronRight className="w-4 h-4" /></>
+                    <button onClick={() => setCompleteOpen(null)} className="text-[#7AADB8] text-xs hover:text-red-400">Cancel</button>
                   )}
-                </button>
+                </div>
+
+                {completeOpen === task.docId && (() => {
+                  const cs = getCS(task.docId);
+                  return (
+                    <div className="bg-[rgba(58,174,204,0.05)] border border-[rgba(58,174,204,0.2)] rounded-xl p-3 space-y-3">
+                      <p className="text-xs font-semibold text-[#3AAECC] uppercase tracking-wide flex items-center gap-1.5">
+                        <Camera className="w-3.5 h-3.5" /> Photo proof required
+                      </p>
+
+                      {/* Photo previews */}
+                      {cs.previews.length > 0 && (
+                        <div className="flex gap-2 flex-wrap">
+                          {cs.previews.map((src, i) => (
+                            <div key={i} className="relative">
+                              <img src={src} alt="" className="w-16 h-16 object-cover rounded-lg border border-[rgba(58,174,204,0.3)]" />
+                              <button onClick={() => removePhoto(task.docId, i)}
+                                className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center">
+                                <X className="w-2.5 h-2.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Upload button */}
+                      <button
+                        onClick={() => fileRefs.current[task.docId]?.click()}
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-[rgba(58,174,204,0.3)] text-xs text-[#7AADB8] hover:border-[#3AAECC] hover:text-[#3AAECC] transition-colors"
+                      >
+                        <Upload className="w-3.5 h-3.5" /> Take / choose photo
+                      </button>
+                      <input
+                        ref={el => { fileRefs.current[task.docId] = el; }}
+                        type="file" accept="image/*" multiple capture="environment"
+                        className="hidden"
+                        onChange={e => addPhotos(task.docId, e.target.files)}
+                      />
+
+                      {/* Notes */}
+                      <Textarea
+                        value={cs.notes}
+                        onChange={e => setCS(task.docId, { notes: e.target.value })}
+                        placeholder="Notes for next department (optional)…"
+                        className="text-sm h-14 resize-none bg-transparent border-[rgba(58,174,204,0.2)] text-[#EDF6F9] placeholder:text-[#7AADB8]/50"
+                      />
+
+                      {/* Confirm button */}
+                      <button
+                        onClick={() => completeStage(task)}
+                        disabled={isCompleting || cs.photos.length === 0}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {isCompleting
+                          ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />Saving…</>
+                          : cs.photos.length === 0
+                            ? 'Add photo to complete'
+                            : <><CheckCircle2 className="w-4 h-4" />Confirm Complete & Advance</>
+                        }
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>

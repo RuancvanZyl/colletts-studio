@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
-import { Settings, Users, Building2, Plus, Edit2, RefreshCw, Loader2, Shield, QrCode, Printer, ImageIcon, Upload } from 'lucide-react';
+import { Settings, Users, Building2, Plus, Edit2, RefreshCw, Loader2, Shield, QrCode, Printer, ImageIcon, Upload, KeyRound } from 'lucide-react';
+import { StaffCredentials } from './StaffCredentials';
 import { useTrophyTypeImages } from '../../../../lib/hooks/useTrophyTypeImages';
 import { trophyTypeOptions } from '../mockAnimalData';
 import { supabase } from '../../../../lib/supabase';
@@ -153,6 +154,7 @@ export function AdminConfiguration() {
           <TabsTrigger value="departments"><Building2 className="w-4 h-4 mr-2" />Departments ({departments.length})</TabsTrigger>
           <TabsTrigger value="roles"><Shield className="w-4 h-4 mr-2" />Roles</TabsTrigger>
           <TabsTrigger value="trophy-images"><ImageIcon className="w-4 h-4 mr-2" />Trophy Photos</TabsTrigger>
+          <TabsTrigger value="credentials"><KeyRound className="w-4 h-4 mr-2" />Login Cards</TabsTrigger>
         </TabsList>
 
         {/* STAFF */}
@@ -329,6 +331,10 @@ export function AdminConfiguration() {
               </p>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="credentials" className="mt-4">
+          <StaffCredentials />
         </TabsContent>
       </Tabs>
 

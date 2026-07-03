@@ -1,274 +1,169 @@
-import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
-import { Button } from '../../ui/button';
+import { useWorkshopStats } from '../../../../lib/hooks/useWorkshopStats';
+import { DEPT_COLORS } from '../../../../lib/pipeline';
 import { Badge } from '../../ui/badge';
+import { Button } from '../../ui/button';
 import {
-  Scan,
-  ClipboardCheck,
-  TrendingUp,
-  RotateCw,
-  Scissors,
-  CheckCircle2,
-  AlertTriangle,
-  Clock,
-  Package,
-  Activity,
-  List,
-  RefreshCw,
+  RefreshCw, AlertTriangle, CheckCircle2, Activity,
+  ClipboardCheck, TrendingUp, Package, Clock, CreditCard,
 } from 'lucide-react';
-import { useDashboard } from '../../../../lib/hooks/useDashboard';
 
 interface WorkshopDashboardProps {
   onNavigate: (view: string) => void;
 }
 
-const PHASE_ICON_MAP: Record<string, string> = {
-  intake: 'text-amber-600',
-  skin_processing: 'text-blue-600',
-  skull_processing: 'text-blue-600',
-  storage_pre: 'text-purple-600',
-  tannery: 'text-purple-600',
-  storage_post: 'text-indigo-600',
-  mounting: 'text-indigo-600',
-  finishing: 'text-green-600',
-  quality_check: 'text-emerald-600',
-  packing: 'text-cyan-600',
-  shipped: 'text-cyan-600',
-};
+function timeAgo(iso: string) {
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
+  if (mins < 1)   return 'just now';
+  if (mins < 60)  return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24)   return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
 
 export function WorkshopDashboard({ onNavigate }: WorkshopDashboardProps) {
-  const { summary, recentActivity, alerts, loading, refresh } = useDashboard();
+  const { stats, loading, refresh } = useWorkshopStats();
 
-  const summaryStats = [
-    {
-      label: 'In Progress',
-      value: summary?.jobs_in_progress ?? '—',
-      icon: TrendingUp,
-      color: 'text-green-600',
-      bgColor: 'bg-green-50 dark:bg-green-950',
-    },
-    {
-      label: 'Returning From Tannery',
-      value: '—',
-      icon: RotateCw,
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-50 dark:bg-purple-950',
-    },
-    {
-      label: 'Received Today',
-      value: summary?.specimens_received_today ?? '—',
-      icon: ClipboardCheck,
-      color: 'text-amber-600',
-      bgColor: 'bg-amber-50 dark:bg-amber-950',
-    },
-    {
-      label: 'Shipping Today',
-      value: summary?.shipments_today ?? '—',
-      icon: Package,
-      color: 'text-cyan-600',
-      bgColor: 'bg-cyan-50 dark:bg-cyan-950',
-    },
-    {
-      label: 'Low Stock Items',
-      value: summary?.low_stock_items ?? '—',
-      icon: List,
-      color: 'text-indigo-600',
-      bgColor: 'bg-indigo-50 dark:bg-indigo-950',
-    },
-    {
-      label: 'Unacknowledged Alerts',
-      value: summary?.unacked_alerts ?? '—',
-      icon: CheckCircle2,
-      color: 'text-emerald-600',
-      bgColor: 'bg-emerald-50 dark:bg-emerald-950',
-    },
-  ];
-
-  const alertStats = [
-    {
-      label: 'Stalled Jobs',
-      value: summary?.jobs_stalled ?? '—',
-      icon: AlertTriangle,
-      color: 'text-red-600',
-      bgColor: 'bg-red-50 dark:bg-red-950',
-    },
-    {
-      label: 'Overdue (Paid)',
-      value: summary?.jobs_overdue ?? '—',
-      icon: Clock,
-      color: 'text-orange-600',
-      bgColor: 'bg-orange-50 dark:bg-orange-950',
-    },
-    {
-      label: 'Missing Due Date',
-      value: summary?.jobs_missing_date ?? '—',
-      icon: Scan,
-      color: 'text-yellow-600',
-      bgColor: 'bg-yellow-50 dark:bg-yellow-950',
-    },
+  const kpis = [
+    { label: 'Active Job Cards',    value: stats?.totalActive        ?? '—', color: 'text-[#0073ea]',  bg: 'bg-blue-50 dark:bg-blue-950/30',   icon: TrendingUp,    nav: 'inventory' },
+    { label: 'Completed This Month',value: stats?.completedThisMonth ?? '—', color: 'text-green-600',  bg: 'bg-green-50 dark:bg-green-950/30',  icon: CheckCircle2,  nav: null },
+    { label: 'Awaiting Payment',    value: stats?.pendingPayment     ?? '—', color: 'text-amber-600',  bg: 'bg-amber-50 dark:bg-amber-950/30',  icon: CreditCard,    nav: 'payment-confirmation' },
+    { label: 'Critically Stalled',  value: stats?.stalledRed         ?? '—', color: 'text-red-600',    bg: 'bg-red-50 dark:bg-red-950/30',      icon: AlertTriangle, nav: 'inventory' },
   ];
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-slate-900 dark:text-slate-100">Workshop Dashboard</h1>
-          <p className="text-slate-600 dark:text-slate-400">Production workflow overview</p>
+          <h1 className="text-slate-900 dark:text-slate-100 font-bold text-xl">Workshop Dashboard</h1>
+          <p className="text-slate-500 text-sm">Live production overview</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={refresh} variant="ghost" size="icon" disabled={loading}>
+        <div className="flex items-center gap-2">
+          <button onClick={refresh} disabled={loading}
+            className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </Button>
-          <Button onClick={() => onNavigate('scan')} className="bg-blue-600 hover:bg-blue-700">
-            <Scan className="w-4 h-4 mr-2" />
-            Scan Parts
-          </Button>
-          <Button onClick={() => onNavigate('arrival')} variant="outline">
-            <ClipboardCheck className="w-4 h-4 mr-2" />
-            New Check-In
+          </button>
+          <Button size="sm" onClick={() => onNavigate('receiving')} className="gap-1.5 bg-[#0073ea] hover:bg-[#0060c7] text-white">
+            <ClipboardCheck className="w-3.5 h-3.5" /> New Receiving
           </Button>
         </div>
       </div>
 
-      {/* Alert Banner — only shown when there are active alerts */}
-      {((summary?.jobs_overdue ?? 0) > 0 || (summary?.jobs_stalled ?? 0) > 0 || (summary?.jobs_missing_date ?? 0) > 0) && (
-        <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-center gap-3">
-          <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm font-medium text-red-800 dark:text-red-200">
-              Action required: {summary?.jobs_overdue} overdue, {summary?.jobs_stalled} stalled, {summary?.jobs_missing_date} missing due dates
-            </p>
-          </div>
-          <Button size="sm" variant="outline" className="border-red-300 text-red-700 hover:bg-red-100" onClick={() => onNavigate('inventory')}>
-            View All
+      {/* Red alert banner */}
+      {(stats?.stalledRed ?? 0) > 0 && (
+        <div className="flex items-center gap-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-xl p-4">
+          <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
+          <p className="text-sm font-medium text-red-700 dark:text-red-300 flex-1">
+            {stats!.stalledRed} job card{stats!.stalledRed !== 1 ? 's are' : ' is'} critically stalled — past 2× the allowed time in their department
+          </p>
+          <Button size="sm" variant="outline" onClick={() => onNavigate('inventory')}
+            className="border-red-300 text-red-700 hover:bg-red-100 shrink-0">
+            View
           </Button>
         </div>
       )}
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {summaryStats.map((stat, index) => (
-          <Card key={index} className="hover:shadow-lg transition-shadow">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">{stat.label}</p>
-                  <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1">
-                    {loading ? <span className="inline-block w-8 h-7 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" /> : stat.value}
-                  </p>
-                </div>
-                <div className={`w-12 h-12 ${stat.bgColor} rounded-lg flex items-center justify-center`}>
-                  <stat.icon className={`w-6 h-6 ${stat.color}`} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Alert Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {alertStats.map((stat, index) => (
-          <Card key={index} className="hover:shadow-lg transition-shadow border-2">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">{stat.label}</p>
-                  <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1">
-                    {loading ? <span className="inline-block w-8 h-7 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" /> : stat.value}
-                  </p>
-                </div>
-                <div className={`w-12 h-12 ${stat.bgColor} rounded-lg flex items-center justify-center`}>
-                  <stat.icon className={`w-6 h-6 ${stat.color}`} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Activity + Alerts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="w-5 h-5 text-blue-600" />
-              Recent Activity
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="space-y-3">
-                {[...Array(5)].map((_, i) => (
-                  <div key={i} className="h-10 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />
-                ))}
-              </div>
-            ) : recentActivity.length === 0 ? (
-              <p className="text-sm text-slate-500 text-center py-6">No activity yet — check in some trophies to get started.</p>
-            ) : (
-              <div className="space-y-4">
-                {recentActivity.map((activity) => (
-                  <div key={activity.id} className="flex items-start gap-3 pb-4 border-b border-slate-100 dark:border-slate-800 last:border-0 last:pb-0">
-                    <div className="w-8 h-8 bg-slate-50 dark:bg-slate-900 rounded-full flex items-center justify-center flex-shrink-0">
-                      <Activity className={`w-4 h-4 ${PHASE_ICON_MAP[activity.phase] ?? 'text-slate-400'}`} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-slate-900 dark:text-slate-100">{activity.text}</p>
-                      <p className="text-xs text-slate-500 mt-1">{activity.time}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Active Alerts</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="space-y-3">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="h-12 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />
-                ))}
-              </div>
-            ) : alerts.length === 0 ? (
-              <div className="text-center py-8">
-                <CheckCircle2 className="w-10 h-10 text-green-500 mx-auto mb-2" />
-                <p className="text-sm text-slate-500">All jobs on track</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {alerts.slice(0, 8).map((alert, i) => (
-                  <div key={i} className="flex items-start gap-3 p-3 bg-red-50 dark:bg-red-950/30 rounded-lg">
-                    <AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{alert.client_name}</p>
-                      <p className="text-xs text-slate-500">
-                        {alert.species_name} ·{' '}
-                        {alert.is_overdue_paid && 'Overdue'}
-                        {alert.is_stalled && 'Stalled in phase'}
-                        {alert.is_missing_target_date && 'Missing due date'}
-                        {alert.due_date && ` · Due ${new Date(alert.due_date).toLocaleDateString()}`}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-                {alerts.length > 8 && (
-                  <p className="text-xs text-slate-400 text-center">+{alerts.length - 8} more</p>
-                )}
-              </div>
-            )}
-            <div className="pt-4 border-t border-slate-200 dark:border-slate-700 mt-4">
-              <Button className="w-full" variant="outline" onClick={() => onNavigate('inventory')}>
-                <List className="w-4 h-4 mr-2" />
-                View Full Inventory
-              </Button>
+      {/* KPI cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {kpis.map(k => (
+          <button key={k.label} onClick={() => k.nav && onNavigate(k.nav)}
+            className={`text-left p-4 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 space-y-2 ${k.nav ? 'hover:border-[#0073ea]/50 transition-colors cursor-pointer' : 'cursor-default'}`}>
+            <div className={`w-9 h-9 rounded-xl ${k.bg} flex items-center justify-center`}>
+              <k.icon className={`w-4.5 h-4.5 ${k.color}`} />
             </div>
-          </CardContent>
-        </Card>
+            <div>
+              <p className={`text-2xl font-bold ${k.color}`}>
+                {loading ? <span className="inline-block w-8 h-7 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" /> : k.value}
+              </p>
+              <p className="text-xs text-slate-500">{k.label}</p>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* Body: dept breakdown + activity feed */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+        {/* Dept breakdown */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 space-y-4">
+          <h3 className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <Package className="w-4 h-4 text-slate-400" />
+            Jobs by Department
+          </h3>
+          {loading ? (
+            <div className="space-y-2">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="h-8 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />
+              ))}
+            </div>
+          ) : (stats?.byDept ?? []).length === 0 ? (
+            <p className="text-sm text-slate-400 text-center py-6">No active jobs</p>
+          ) : (
+            <div className="space-y-2">
+              {(stats?.byDept ?? []).map(d => (
+                <div key={d.dept} className="flex items-center gap-3">
+                  <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${DEPT_COLORS[d.dept] ?? 'bg-slate-400'}`} />
+                  <span className="text-sm text-slate-700 dark:text-slate-300 flex-1 truncate">{d.label}</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {d.stalled > 0 && (
+                      <Badge className="text-[10px] h-4 bg-red-100 text-red-700 border-0 px-1.5">
+                        {d.stalled} stalled
+                      </Badge>
+                    )}
+                    <span className="text-sm font-semibold text-slate-900 dark:text-slate-100 w-5 text-right">{d.count}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Activity feed */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 space-y-4">
+          <h3 className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <Activity className="w-4 h-4 text-slate-400" />
+            Recent Activity
+          </h3>
+          {loading ? (
+            <div className="space-y-3">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="h-9 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />
+              ))}
+            </div>
+          ) : (stats?.recentActivity ?? []).length === 0 ? (
+            <p className="text-sm text-slate-400 text-center py-6">No activity yet</p>
+          ) : (
+            <div className="space-y-3 overflow-y-auto max-h-72">
+              {(stats?.recentActivity ?? []).map((a, i) => (
+                <div key={i} className="flex items-start gap-3">
+                  <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${DEPT_COLORS[a.dept] ?? 'bg-slate-300'}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-slate-800 dark:text-slate-200 truncate">{a.title}</p>
+                    <p className="text-xs text-slate-400">
+                      {a.clientName && <span>{a.clientName} · </span>}
+                      {timeAgo(a.movedAt)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Quick nav shortcuts */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Job Tracker',   nav: 'inventory',             color: 'border-blue-200 hover:border-[#0073ea]' },
+          { label: 'Payments',      nav: 'payment-confirmation',  color: 'border-amber-200 hover:border-amber-500' },
+          { label: 'Clients',       nav: 'clients',               color: 'border-slate-200 hover:border-slate-400' },
+          { label: 'My Tasks',      nav: 'tasks',                 color: 'border-green-200 hover:border-green-500' },
+        ].map(s => (
+          <button key={s.label} onClick={() => onNavigate(s.nav)}
+            className={`p-3 rounded-xl border bg-white dark:bg-slate-900 dark:border-slate-700 text-sm font-medium text-slate-700 dark:text-slate-300 transition-colors text-center ${s.color}`}>
+            {s.label}
+          </button>
+        ))}
       </div>
     </div>
   );

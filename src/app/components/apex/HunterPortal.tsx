@@ -11,13 +11,15 @@ import { HunterOnboarding } from './hunter/HunterOnboarding';
 import { ActiveHuntDashboard } from './hunter/ActiveHuntDashboard';
 import { AddTrophyFlow } from './hunter/AddTrophyFlow';
 import { TrophyTrackingDashboard } from './hunter/TrophyTrackingDashboard';
+import { TrophyMessages } from './hunter/TrophyMessages';
+import { SpecialRequests } from './hunter/SpecialRequests';
 import { UniversalAIAssistant } from './shared/UniversalAIAssistant';
 import { Button } from '../ui/button';
-import { Home, Award, Bell, User, Search, Moon, Sun, Trophy as TrophyIcon, Plus } from 'lucide-react';
+import { Home, Award, Bell, User, Search, Moon, Sun, Trophy as TrophyIcon, Plus, MessageCircle, Wand2 } from 'lucide-react';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
-import { mockNotifications } from './mockData';
 import { Trophy, TrophySelection as TrophySelectionType } from './types';
+import { useClientNotifications } from '../../../lib/hooks/useClientNotifications';
 import { useTheme } from './ThemeProvider';
 import { usePortalTheme } from './PortalThemeProvider';
 import { toast } from 'sonner';
@@ -45,7 +47,7 @@ type HunterFlow =
   | 'tracking'
   | 'main';
 
-type HunterView = 'home' | 'trophies' | 'trophy-detail' | 'notifications' | 'profile' | 'trophy-selection';
+type HunterView = 'home' | 'trophies' | 'trophy-detail' | 'notifications' | 'profile' | 'trophy-selection' | 'messages' | 'special-requests';
 
 export function HunterPortal({ onLogout }: HunterPortalProps) {
   const { user } = useAuth();
@@ -58,7 +60,6 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
   // Main portal state
   const [currentView, setCurrentView] = useState<HunterView>('home');
   const [selectedTrophy, setSelectedTrophy] = useState<Trophy | null>(null);
-  const [notifications, setNotifications] = useState(mockNotifications);
   const { theme, toggleTheme } = useTheme();
   const { theme: portalTheme } = usePortalTheme();
 
@@ -81,7 +82,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
     };
   });
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const { notifications, unreadCount, markRead, markAllRead } = useClientNotifications(client?.id);
 
   // Registration flow handlers
   const handleRegistrationComplete = () => {
@@ -199,24 +200,27 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
   const renderView = () => {
     switch (currentView) {
       case 'home':
-        return <HunterHome trophies={realTrophies} onViewTrophy={handleViewTrophy} onAddTrophy={() => setCurrentView('trophy-selection')} hunterName={displayName} />;
+        return <TrophyTrackingDashboard />;
       case 'trophies':
-        return <MyTrophies trophies={realTrophies} onViewTrophy={handleViewTrophy} />;
+        return <TrophyTrackingDashboard />;
       case 'trophy-detail':
         return selectedTrophy ? (
           <TrophyDetail trophy={selectedTrophy} onBack={handleBackToList} />
         ) : null;
       case 'notifications':
         return (
-          <Notifications 
-            notifications={notifications} 
-            onMarkAsRead={(id) => {
-              setNotifications(prev => 
-                prev.map(n => n.id === id ? { ...n, read: true } : n)
-              );
-            }}
+          <Notifications
+            notifications={notifications}
+            loading={false}
+            unreadCount={unreadCount}
+            onMarkRead={markRead}
+            onMarkAllRead={markAllRead}
           />
         );
+      case 'messages':
+        return <TrophyMessages />;
+      case 'special-requests':
+        return <SpecialRequests />;
       case 'profile':
         return <HunterProfile onLogout={onLogout} />;
       case 'trophy-selection':
@@ -227,7 +231,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
           />
         );
       default:
-        return <HunterHome trophies={realTrophies} onViewTrophy={handleViewTrophy} onAddTrophy={() => setCurrentView('trophy-selection')} hunterName={displayName} />;
+        return <TrophyTrackingDashboard />;
     }
   };
 
@@ -347,6 +351,14 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
             <span className="text-xs">Alerts</span>
           </Button>
           <Button
+            variant={currentView === 'messages' ? 'default' : 'ghost'}
+            className="flex flex-col items-center gap-1 h-auto py-2"
+            onClick={() => setCurrentView('messages')}
+          >
+            <MessageCircle className="w-5 h-5" />
+            <span className="text-xs">Ask</span>
+          </Button>
+          <Button
             variant={currentView === 'profile' ? 'default' : 'ghost'}
             className="flex flex-col items-center gap-1 h-auto py-2"
             onClick={() => setCurrentView('profile')}
@@ -383,6 +395,22 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
           >
             <Plus className="w-5 h-5 mr-3" />
             Add Trophy
+          </Button>
+          <Button
+            variant={currentView === 'messages' ? 'default' : 'ghost'}
+            className="w-full justify-start"
+            onClick={() => setCurrentView('messages')}
+          >
+            <MessageCircle className="w-5 h-5 mr-3" />
+            Ask the Workshop
+          </Button>
+          <Button
+            variant={currentView === 'special-requests' ? 'default' : 'ghost'}
+            className="w-full justify-start"
+            onClick={() => setCurrentView('special-requests')}
+          >
+            <Wand2 className="w-5 h-5 mr-3" />
+            Special Requests
           </Button>
           <Button
             variant={currentView === 'notifications' ? 'default' : 'ghost'}

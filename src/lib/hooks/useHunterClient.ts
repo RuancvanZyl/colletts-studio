@@ -40,8 +40,35 @@ export function useHunterClient() {
       setLoading(false);
       return;
     }
-    setClient(data ?? null);
-    if (data) await loadSpecimens(data.id);
+    if (data) {
+      setClient(data);
+      await loadSpecimens(data.id);
+      setLoading(false);
+      return;
+    }
+
+    // No client linked by auth_user_id — try to find one by email and auto-link
+    if (user.email) {
+      const { data: byEmail } = await (supabase as any)
+        .from('clients')
+        .select('*')
+        .ilike('email', user.email)
+        .is('auth_user_id', null)
+        .maybeSingle();
+
+      if (byEmail) {
+        await (supabase as any)
+          .from('clients')
+          .update({ auth_user_id: user.id })
+          .eq('id', byEmail.id);
+        setClient({ ...byEmail, auth_user_id: user.id });
+        await loadSpecimens(byEmail.id);
+        setLoading(false);
+        return;
+      }
+    }
+
+    setClient(null);
     setLoading(false);
   }
 
