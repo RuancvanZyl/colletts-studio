@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { HunterPortal } from './components/apex/HunterPortal';
+import { LocalHunterPortal } from './components/apex/LocalHunterPortal';
 import { TaxidermyPortal } from './components/apex/TaxidermyPortal';
 import { OutfitterPortal } from './components/apex/OutfitterPortal';
 import { LandingPage } from './components/apex/LandingPage';
@@ -11,8 +12,9 @@ import { ThemeProvider } from './components/apex/ThemeProvider';
 import { PortalThemeProvider, PortalType } from './components/apex/PortalThemeProvider';
 import { Toaster } from './components/ui/sonner';
 import { AuthProvider, useAuth } from '../lib/auth';
+import { supabase } from '../lib/supabase';
 
-export type UserRole = 'hunter' | 'admin' | 'outfitter' | 'taxidermy' | 'unified' | null;
+export type UserRole = 'hunter' | 'local-hunter' | 'admin' | 'outfitter' | 'taxidermy' | 'unified' | null;
 
 type AppView = 'landing' | 'login' | 'register' | 'portal' | 'dashboard';
 
@@ -45,9 +47,23 @@ function AppInner() {
     setCurrentView('login');
   };
 
-  const handleLogin = () => {
+  const handleLogin = useCallback(async () => {
+    // For hunter portals, check client_type to route local vs export
+    if (selectedPortal === 'hunter') {
+      const { data: { user: u } } = await supabase.auth.getUser();
+      if (u) {
+        const { data: client } = await (supabase as any)
+          .from('clients')
+          .select('client_type')
+          .eq('auth_user_id', u.id)
+          .single();
+        if (client?.client_type === 'local') {
+          setSelectedPortal('local-hunter' as any);
+        }
+      }
+    }
     setCurrentView('portal');
-  };
+  }, [selectedPortal]);
 
   const handleLogout = async () => {
     await signOut();
@@ -162,6 +178,7 @@ function AppInner() {
             }}
           >
             {selectedPortal === 'hunter' && <HunterPortal onLogout={handleLogout} />}
+            {selectedPortal === ('local-hunter' as any) && <LocalHunterPortal onLogout={handleLogout} />}
             {selectedPortal === 'outfitter' && <OutfitterPortal onLogout={handleLogout} />}
             {selectedPortal === 'admin' && <TaxidermyPortal onLogout={handleLogout} />}
             <Toaster />
