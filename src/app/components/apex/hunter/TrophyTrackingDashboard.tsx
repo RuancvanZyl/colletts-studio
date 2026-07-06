@@ -21,20 +21,22 @@ function timeAgo(iso: string | null) {
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  pending_payment: 'Awaiting Deposit',
-  in_progress:     'In Progress',
-  completed:       'Complete',
-  flagged:         'Flagged',
+  pending_payment:  'Awaiting Deposit',
+  awaiting_arrival: 'Pre-registered',
+  in_progress:      'In Progress',
+  completed:        'Complete',
+  flagged:          'Flagged',
 };
 
 function TrophyCard({ trophy }: { trophy: HunterTrophy }) {
   const [open, setOpen] = useState(false);
 
   const barColor =
-    trophy.status === 'completed'       ? 'bg-green-500' :
-    trophy.status === 'pending_payment' ? 'bg-slate-300 dark:bg-slate-600' :
-    trophy.isStalled                    ? 'bg-red-500' :
-                                          'bg-[#0073ea]';
+    trophy.status === 'completed'         ? 'bg-green-500' :
+    trophy.status === 'pending_payment'   ? 'bg-slate-300 dark:bg-slate-600' :
+    trophy.status === 'awaiting_arrival'  ? 'bg-purple-400' :
+    trophy.isStalled                      ? 'bg-red-500' :
+                                            'bg-[#0073ea]';
 
   const deptColor = DEPT_COLORS[trophy.currentDept] ?? 'bg-slate-500';
 
@@ -65,10 +67,11 @@ function TrophyCard({ trophy }: { trophy: HunterTrophy }) {
               {trophy.tagNumber && <span className="text-slate-400 text-xs ml-2 font-mono">{trophy.tagNumber}</span>}
             </div>
             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-              trophy.status === 'completed'       ? 'bg-green-100 text-green-700' :
-              trophy.status === 'pending_payment' ? 'bg-amber-100 text-amber-700' :
-              trophy.isStalled                    ? 'bg-red-100 text-red-700' :
-                                                    'bg-blue-100 text-blue-700'
+              trophy.status === 'completed'        ? 'bg-green-100 text-green-700' :
+              trophy.status === 'pending_payment'  ? 'bg-amber-100 text-amber-700' :
+              trophy.status === 'awaiting_arrival' ? 'bg-purple-100 text-purple-700' :
+              trophy.isStalled                     ? 'bg-red-100 text-red-700' :
+                                                     'bg-blue-100 text-blue-700'
             }`}>
               {trophy.status === 'in_progress' && !trophy.isStalled
                 ? DEPT_LABELS[trophy.currentDept] ?? trophy.currentDept
@@ -176,6 +179,7 @@ export function TrophyTrackingDashboard({ huntId }: { huntId?: string }) {
   const doneTrophies  = hunts.reduce((s, h) => s + h.doneCount,  0);
   const inProgress    = hunts.reduce((s, h) => s + h.trophies.filter(t => t.status === 'in_progress').length, 0);
   const pending       = hunts.reduce((s, h) => s + h.trophies.filter(t => t.status === 'pending_payment').length, 0);
+  const awaitingArrival = hunts.reduce((s, h) => s + h.trophies.filter(t => t.status === 'awaiting_arrival').length, 0);
 
   if (loading) {
     return (
@@ -224,6 +228,20 @@ export function TrophyTrackingDashboard({ huntId }: { huntId?: string }) {
             </p>
             <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
               Processing begins once your deposit is confirmed by Apex Trophy Solutions.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {awaitingArrival > 0 && (
+        <div className="bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded-xl p-4 flex items-start gap-3">
+          <Package className="w-5 h-5 text-purple-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold text-purple-800 dark:text-purple-300 text-sm">
+              {awaitingArrival} trophy{awaitingArrival !== 1 ? ' trophies are' : ' is'} pre-registered and awaiting arrival
+            </p>
+            <p className="text-xs text-purple-600 dark:text-purple-400 mt-0.5">
+              These have been registered by your outfitter. Processing begins once your trophies physically arrive at our workshop.
             </p>
           </div>
         </div>
