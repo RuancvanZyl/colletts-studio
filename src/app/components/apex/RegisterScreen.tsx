@@ -8,6 +8,7 @@ import { ArrowLeft, Compass, User, Package, Upload, Loader2 } from 'lucide-react
 import { useTheme } from './ThemeProvider';
 import { toast } from 'sonner';
 import { supabase } from '../../../lib/supabase';
+import { createClientRecord } from '../../../lib/hooks/useHunterSelfService';
 
 interface RegisterScreenProps {
   onBack: () => void;
@@ -31,6 +32,7 @@ export function RegisterScreen({
     licenceNumber: '',
     agreeToTerms: false,
   });
+  const [clientType, setClientType] = useState<'local' | 'export'>('export');
   const { theme } = useTheme();
   const [submitting, setSubmitting] = useState(false);
 
@@ -53,14 +55,16 @@ export function RegisterScreen({
     }
 
     setSubmitting(true);
-    const { error } = await supabase.auth.signUp({
+    const fullName = `${formData.firstName} ${formData.lastName}`.trim();
+    const { data: authData, error } = await supabase.auth.signUp({
       email: formData.email,
       password: formData.password,
       options: {
         data: {
-          full_name: `${formData.firstName} ${formData.lastName}`.trim(),
+          full_name: fullName,
           phone: formData.phone,
           portal_type: portalType,
+          client_type: portalType === 'hunter' ? clientType : undefined,
         },
       },
     });
@@ -69,6 +73,17 @@ export function RegisterScreen({
     if (error) {
       toast.error(error.message);
       return;
+    }
+
+    // Create client record immediately for hunters
+    if (portalType === 'hunter' && authData.user) {
+      await createClientRecord(
+        authData.user.id,
+        fullName,
+        formData.email,
+        formData.phone,
+        clientType,
+      );
     }
 
     // Fire welcome email — fire-and-forget, never blocks registration
@@ -158,6 +173,28 @@ export function RegisterScreen({
         {/* Registration Card */}
         <Card className={`p-8 bg-white/90 dark:bg-stone-900/90 backdrop-blur-lg border-2 ${config.borderColor} shadow-2xl`}>
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Hunt type — hunters only */}
+            {portalType === 'hunter' && (
+              <div className="space-y-3">
+                <h3 className="text-slate-900 dark:text-white">Hunt Type</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  {(['local', 'export'] as const).map(t => (
+                    <button key={t} type="button" onClick={() => setClientType(t)}
+                      className={`p-4 rounded-xl border-2 text-left transition-all ${
+                        clientType === t
+                          ? 'border-[#0073ea] bg-blue-50 dark:bg-blue-950/30'
+                          : 'border-slate-200 dark:border-slate-700'
+                      }`}>
+                      <div className="font-semibold text-sm text-slate-900 dark:text-slate-100 capitalize">{t}</div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        {t === 'local' ? 'Trophies stay in South Africa' : 'Trophies shipped internationally'}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Personal Information */}
             <div className="space-y-4">
               <h3 className="text-slate-900 dark:text-white">Personal Information</h3>

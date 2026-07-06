@@ -7,16 +7,13 @@ import { HunterProfile } from './hunter/HunterProfile';
 import { TrophySelection } from './hunter/TrophySelection';
 import { HunterRegistration } from './hunter/HunterRegistration';
 import { VerificationPending } from './hunter/VerificationPending';
-import { HunterOnboarding } from './hunter/HunterOnboarding';
-import { ActiveHuntDashboard } from './hunter/ActiveHuntDashboard';
-import { AddTrophyFlow } from './hunter/AddTrophyFlow';
 import { TrophyTrackingDashboard } from './hunter/TrophyTrackingDashboard';
 import { TrophyMessages } from './hunter/TrophyMessages';
 import { SpecialRequests } from './hunter/SpecialRequests';
+import { HunterHuntCreationWizard } from './hunter/HunterHuntCreationWizard';
 import { UniversalAIAssistant } from './shared/UniversalAIAssistant';
 import { Button } from '../ui/button';
-import { Home, Award, Bell, User, Search, Moon, Sun, Trophy as TrophyIcon, Plus, MessageCircle, Wand2 } from 'lucide-react';
-import { Input } from '../ui/input';
+import { Home, Award, Bell, User, Moon, Sun, Trophy as TrophyIcon, Plus, MessageCircle } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Trophy, TrophySelection as TrophySelectionType } from './types';
 import { useClientNotifications } from '../../../lib/hooks/useClientNotifications';
@@ -24,8 +21,9 @@ import { useTheme } from './ThemeProvider';
 import { usePortalTheme } from './PortalThemeProvider';
 import { toast } from 'sonner';
 import { useHunterClient } from '../../../lib/hooks/useHunterClient';
+import { useHunterHunts } from '../../../lib/hooks/useHunterHunts';
 import { useAuth } from '../../../lib/auth';
-import { AlertCircle, CreditCard } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 
 const PHASE_PROGRESS: Record<string, number> = {
   intake: 10, skin_processing: 20, skull_processing: 30,
@@ -38,81 +36,31 @@ interface HunterPortalProps {
   onLogout: () => void;
 }
 
-type HunterFlow = 
+type HunterFlow =
   | 'registration'
-  | 'pending-verification' 
+  | 'pending-verification'
   | 'onboarding'
   | 'active-hunt'
   | 'add-trophy'
   | 'tracking'
+  | 'create-hunt'
   | 'main';
 
 type HunterView = 'home' | 'trophies' | 'trophy-detail' | 'notifications' | 'profile' | 'trophy-selection' | 'messages' | 'special-requests';
 
 export function HunterPortal({ onLogout }: HunterPortalProps) {
   const { user } = useAuth();
-  const { client, specimens, loading: clientLoading, displayName, ensureClient } = useHunterClient();
+  const { client, loading: clientLoading, displayName } = useHunterClient();
+  const { hunts, loading: huntsLoading, refresh: refreshHunts } = useHunterHunts();
 
-  // Flow state - determines which major section the user is in
   const [flow, setFlow] = useState<HunterFlow>('main');
-  const [huntData, setHuntData] = useState<any>(null);
-
-  // Main portal state
   const [currentView, setCurrentView] = useState<HunterView>('home');
   const [selectedTrophy, setSelectedTrophy] = useState<Trophy | null>(null);
   const { theme, toggleTheme } = useTheme();
   const { theme: portalTheme } = usePortalTheme();
 
-  // Convert real specimens to the Trophy shape expected by existing UI components
-  const realTrophies: Trophy[] = specimens.map(s => {
-    const job = s.jobs?.[0];
-    const phase = job?.current_phase ?? 'intake';
-    const progress = PHASE_PROGRESS[phase] ?? 0;
-    return {
-      id: s.id,
-      species: s.species?.common_name ?? s.species_name ?? 'Unknown Species',
-      clientName: displayName,
-      progress,
-      currentStage: phase as any,
-      parts: [],
-      imageUrl: undefined,
-      createdAt: s.created_at,
-      lastUpdated: s.updated_at,
-      events: [],
-    };
-  });
-
   const { notifications, unreadCount, markRead, markAllRead } = useClientNotifications(client?.id);
 
-  // Registration flow handlers
-  const handleRegistrationComplete = () => {
-    setFlow('pending-verification');
-  };
-
-  const handleBackToLogin = () => {
-    onLogout();
-  };
-
-  const handleOnboardingComplete = (data: any) => {
-    setHuntData(data);
-    setFlow('active-hunt');
-  };
-
-  const handleAddTrophy = () => {
-    setFlow('add-trophy');
-  };
-
-  const handleTrophyAdded = (trophy: any) => {
-    toast.success('Trophy added successfully!');
-    setFlow('active-hunt');
-  };
-
-  const handleSubmitHunt = () => {
-    toast.success('Hunt submitted to taxidermy workshop!');
-    setFlow('tracking');
-  };
-
-  // Main portal handlers
   const handleViewTrophy = (trophy: Trophy) => {
     setSelectedTrophy(trophy);
     setCurrentView('trophy-detail');
@@ -123,76 +71,64 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
     setCurrentView('trophies');
   };
 
-  const handleTrophySelectionComplete = (selections: TrophySelectionType[]) => {
-    toast.success(`Successfully added ${selections.length} trophy selection${selections.length > 1 ? 's' : ''}!`, {
-      description: 'Your selections have been saved and will be tracked through the process.',
-    });
+  const handleTrophySelectionComplete = (_selections: TrophySelectionType[]) => {
     setCurrentView('home');
   };
 
-  // Registration and Onboarding Flow
-  if (flow === 'registration') {
+  // Loading state
+  if (clientLoading || huntsLoading) {
     return (
-      <HunterRegistration 
-        onComplete={handleRegistrationComplete}
-        onBack={handleBackToLogin}
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+      </div>
+    );
+  }
+
+  // No client record yet — shouldn't happen if RegisterScreen worked, but handle gracefully
+  if (!client) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-8 text-center">
+        <div className="space-y-3">
+          <AlertCircle className="w-10 h-10 text-amber-400 mx-auto" />
+          <p className="font-semibold text-slate-700 dark:text-slate-300">Profile not set up yet</p>
+          <p className="text-sm text-slate-500">Our team is linking your account. Please check back shortly or contact us.</p>
+          <Button variant="outline" onClick={onLogout}>Sign Out</Button>
+        </div>
+      </div>
+    );
+  }
+
+  // New hunter — no hunts yet → show creation wizard
+  if (hunts.length === 0 && flow !== 'create-hunt') {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-6 text-center gap-6">
+        <div>
+          <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-950/50 flex items-center justify-center mx-auto mb-4">
+            <TrophyIcon className="w-8 h-8 text-amber-500" />
+          </div>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Welcome, {displayName}!</h2>
+          <p className="text-sm text-slate-500 mt-2 max-w-sm mx-auto">
+            Let's register your hunt and trophies so our team can start processing them.
+          </p>
+        </div>
+        <Button onClick={() => setFlow('create-hunt')} size="lg" className="gap-2">
+          <Plus className="w-5 h-5" /> Register My Hunt & Trophies
+        </Button>
+        <button onClick={onLogout} className="text-xs text-slate-400 hover:text-slate-600">Sign out</button>
+      </div>
+    );
+  }
+
+  // Hunt creation wizard
+  if (flow === 'create-hunt') {
+    return (
+      <HunterHuntCreationWizard
+        clientId={client.id}
+        clientName={displayName}
+        clientEmail={client.email ?? user?.email ?? ''}
+        clientType={(client as any).client_type ?? 'export'}
+        onComplete={() => { refreshHunts(); setFlow('main'); }}
       />
-    );
-  }
-
-  if (flow === 'pending-verification') {
-    return (
-      <VerificationPending 
-        onBackToLogin={handleBackToLogin}
-      />
-    );
-  }
-
-  if (flow === 'onboarding') {
-    return (
-      <HunterOnboarding 
-        onComplete={handleOnboardingComplete}
-      />
-    );
-  }
-
-  // Active Hunt Management
-  if (flow === 'active-hunt') {
-    return (
-      <>
-        <ActiveHuntDashboard
-          huntData={huntData}
-          onAddTrophy={handleAddTrophy}
-          onViewTrophy={(t: any) => handleViewTrophy(t as Trophy)}
-          onSubmitHunt={handleSubmitHunt}
-        />
-        <UniversalAIAssistant />
-      </>
-    );
-  }
-
-  if (flow === 'add-trophy') {
-    return (
-      <>
-        <AddTrophyFlow 
-          huntId={huntData?.huntId || 'HUNT-2025-0001'}
-          onComplete={handleTrophyAdded}
-          onCancel={() => setFlow('active-hunt')}
-        />
-        <UniversalAIAssistant />
-      </>
-    );
-  }
-
-  // Trophy Tracking (Post-submission)
-  if (flow === 'tracking') {
-    return (
-      <>
-        <TrophyTrackingDashboard 
-          huntId={huntData?.huntId || 'HUNT-2025-0001'}
-        />
-        <UniversalAIAssistant />
-      </>
     );
   }
 
@@ -200,7 +136,6 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
   const renderView = () => {
     switch (currentView) {
       case 'home':
-        return <TrophyTrackingDashboard />;
       case 'trophies':
         return <TrophyTrackingDashboard />;
       case 'trophy-detail':
@@ -225,7 +160,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
         return <HunterProfile onLogout={onLogout} />;
       case 'trophy-selection':
         return (
-          <TrophySelection 
+          <TrophySelection
             onBack={() => setCurrentView('home')}
             onComplete={handleTrophySelectionComplete}
           />
@@ -251,16 +186,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
               </div>
             </div>
             
-            {/* Desktop Search */}
-            <div className="hidden md:block flex-1 max-w-md mx-8">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-green-700 dark:text-green-500" />
-                <Input 
-                  placeholder="Search trophies..." 
-                  className="pl-10 bg-green-50 dark:bg-stone-800 border-green-200 dark:border-green-800 focus:border-green-500 dark:focus:border-green-600"
-                />
-              </div>
-            </div>
+            <div className="hidden md:block flex-1" />
 
             <div className="flex items-center gap-2">
               <Button 
@@ -288,22 +214,6 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
         </div>
       </header>
 
-      {/* Payment Required Banner — shown when client has trophies but no deposit paid */}
-      {client && specimens.length > 0 && specimens.some(s => s.jobs?.length === 0 || s.status === 'expected') && (
-        <div className="bg-amber-50 dark:bg-amber-950/50 border-b border-amber-200 dark:border-amber-800">
-          <div className="container mx-auto px-4 py-3 flex items-center gap-3">
-            <CreditCard className="w-5 h-5 text-amber-600 flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-amber-800 dark:text-amber-300 font-medium text-sm">
-                Deposit required before processing begins
-              </p>
-              <p className="text-amber-700 dark:text-amber-400 text-xs">
-                Your trophies are registered. A 50% deposit invoice will be sent to you — work starts once payment is confirmed.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Content */}
       <main className="container mx-auto px-4 py-6 pb-24 md:pb-6">
@@ -405,12 +315,12 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
             Ask the Workshop
           </Button>
           <Button
-            variant={currentView === 'special-requests' ? 'default' : 'ghost'}
+            variant="ghost"
             className="w-full justify-start"
-            onClick={() => setCurrentView('special-requests')}
+            onClick={() => setFlow('create-hunt')}
           >
-            <Wand2 className="w-5 h-5 mr-3" />
-            Special Requests
+            <Plus className="w-5 h-5 mr-3" />
+            Register New Hunt
           </Button>
           <Button
             variant={currentView === 'notifications' ? 'default' : 'ghost'}
