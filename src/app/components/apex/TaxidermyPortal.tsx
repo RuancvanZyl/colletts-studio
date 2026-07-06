@@ -30,6 +30,7 @@ import { ClientInbox } from './taxidermy/ClientInbox';
 import { WorkshopInstructions } from './taxidermy/WorkshopInstructions';
 import { PaymentConfirmation } from './taxidermy/PaymentConfirmation';
 import { DailyTodoList } from './taxidermy/DailyTodoList';
+import { StaffWellness } from './taxidermy/StaffWellness';
 import { NoticeBoard } from './shared/NoticeBoard';
 import { GlobalSearch } from './shared/GlobalSearch';
 import { useAuth } from '../../../lib/auth';
@@ -38,7 +39,7 @@ import {
   LayoutDashboard, Scan, ClipboardCheck, Droplet, Skull,
   Warehouse, Scissors, Paintbrush, CheckCircle2, Package,
   List, Settings, Search, LogOut, Menu, X, Moon, Sun,
-  Users, FileText, ChevronRight, BarChart3, ClipboardList, ListTodo, FolderOpen, CreditCard, Calendar, MessageCircle,
+  Users, FileText, ChevronRight, BarChart3, ClipboardList, ListTodo, FolderOpen, CreditCard, Calendar, MessageCircle, Dumbbell,
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 
@@ -67,6 +68,7 @@ type TaxidermyView =
   | 'ready-to-ship'
   | 'client-inbox'
   | 'workshop-brief'
+  | 'wellness'
   | 'payment-confirmation'
   | 'inventory'
   | 'clients'
@@ -131,6 +133,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
         { view: 'tasks',     icon: ListTodo,        label: 'My Tasks', badge: myTaskCount },
         { view: 'summary',   icon: BarChart3,       label: 'Summary' },
         { view: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+        { view: 'wellness',  icon: Dumbbell,        label: 'Wellness' },
       ],
     },
     {
@@ -209,6 +212,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'finishing':       return <FinishingStation />;
       case 'quality':         return <QualityInspection />;
       case 'workshop-brief':         return <WorkshopInstructions />;
+      case 'wellness':               return <StaffWellness />;
       case 'packing':                return <PackingStation />;
       case 'photos-admin':           return <PackingShipping />;
       case 'ready-to-ship':          return <ReadyToShip />;
