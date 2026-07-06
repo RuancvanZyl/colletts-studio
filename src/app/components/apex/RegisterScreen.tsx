@@ -71,6 +71,19 @@ export function RegisterScreen({
       return;
     }
 
+    // Fire welcome email — fire-and-forget, never blocks registration
+    fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-client-welcome`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify({
+        email: formData.email,
+        name: `${formData.firstName} ${formData.lastName}`.trim(),
+      }),
+    }).catch(() => {});
+
     toast.success('Account created! Please check your email and click the confirmation link before logging in.');
     onRegisterComplete();
   };
