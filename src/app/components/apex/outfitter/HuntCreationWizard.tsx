@@ -50,7 +50,7 @@ const PROCESS_TYPES = [
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface ClientRow { id: string; full_name: string; client_number: string | null; email: string | null; country: string | null }
+interface ClientRow { id: string; full_name: string; client_number: string | null; email: string | null; country: string | null; outfitter_id: string | null; client_type: string | null }
 
 interface TrophyRow {
   species:        string;
@@ -131,7 +131,7 @@ export function HuntCreationWizard({ onDone, onCancel }: { onDone: () => void; o
     const t = setTimeout(async () => {
       const { data } = await (supabase as any)
         .from('clients')
-        .select('id, full_name, client_number, email, country')
+        .select('id, full_name, client_number, email, country, outfitter_id, client_type')
         .or(`full_name.ilike.%${clientSearch}%,client_number.ilike.%${clientSearch}%,email.ilike.%${clientSearch}%`)
         .limit(8);
       setClients(data ?? []);
@@ -165,13 +165,14 @@ export function HuntCreationWizard({ onDone, onCancel }: { onDone: () => void; o
     setSaving(true);
     try {
       // 1. Create client_hunts record
+      const isExport = (selectedClient.client_type ?? huntForm.client_type) === 'export';
       const { data: hunt, error: huntErr } = await (supabase as any)
         .from('client_hunts')
         .insert({
           client_id:    selectedClient.id,
           year:         parseInt(huntForm.year),
           operator:     operatorMode === 'independent' ? 'Independent' : (huntForm.operator.trim() || null),
-          client_type:  huntForm.client_type,
+          client_type:  selectedClient.client_type ?? huntForm.client_type,
           process_type: huntForm.process_type,
           farm:         huntForm.farm.trim() || null,
           region:       huntForm.region.trim() || null,
@@ -179,17 +180,19 @@ export function HuntCreationWizard({ onDone, onCancel }: { onDone: () => void; o
           end_date:     huntForm.end_date || null,
           status:       'active',
           notes:        huntForm.notes.trim() || null,
+          outfitter_id: selectedClient.outfitter_id ?? null,
         })
         .select()
         .single();
       if (huntErr) throw new Error(huntErr.message);
 
       // 2. Create hunt_documents job card for each trophy row
+      // Export hunts pre-register as awaiting_arrival; local hunts go straight to pending_payment
       const jobCards = trophies.map(t => ({
         hunt_id:            hunt.id,
         doc_type:           'job_card',
         title:              `${t.species} — ${t.mount_type}`,
-        status:             'pending_payment',
+        status:             isExport ? 'awaiting_arrival' : 'pending_payment',
         current_department: 'receiving',
         process_type:       huntForm.process_type,
         form_data: {

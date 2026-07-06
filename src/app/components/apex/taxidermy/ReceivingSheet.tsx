@@ -35,6 +35,7 @@ interface TrophyLine {
   tagNumber: string;
   expectedCondition: string;
   instructions: string;
+  preRegistered: boolean; // true = awaiting_arrival (outfitter pre-entered)
   // receiving decision
   status: CheckStatus;
   conditionNotes: string;
@@ -63,14 +64,14 @@ export function ReceivingSheet({ onNavigate }: { onNavigate: (v: string) => void
       .limit(50)
       .catch(() => ({ data: null }));
 
-    // fallback: query via hunt_documents to get only activated (in_progress) hunts
+    // fallback: query via hunt_documents
     if (!data) {
-      // Get hunt_ids that have at least one in_progress job card at receiving
+      // Pending = awaiting_arrival (pre-registered export) OR in_progress at receiving
       const { data: activeDocs } = await (supabase as any)
         .from('hunt_documents')
         .select('hunt_id')
         .eq('doc_type', 'job_card')
-        .eq('status', 'in_progress')
+        .in('status', ['awaiting_arrival', 'in_progress'])
         .eq('current_department', 'receiving');
 
       const activeHuntIds = [...new Set((activeDocs ?? []).map((d: any) => d.hunt_id))];
@@ -216,17 +217,18 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
       .single();
     if (hunt) setHuntInfo({ client_name: hunt.clients?.full_name, client_number: hunt.clients?.client_number });
 
-    // Job cards for this hunt — only in_progress (deposit confirmed)
+    // Job cards: awaiting_arrival (pre-registered export) + in_progress at receiving
     const { data: docs } = await (supabase as any)
       .from('hunt_documents')
-      .select('id, title, form_data, current_department')
+      .select('id, title, form_data, current_department, status')
       .eq('hunt_id', huntId)
       .eq('doc_type', 'job_card')
-      .eq('status', 'in_progress');
+      .in('status', ['awaiting_arrival', 'in_progress']);
 
     const mapped: TrophyLine[] = (docs ?? []).map((d: any) => {
       const fd = d.form_data ?? {};
       return {
+        preRegistered: d.status === 'awaiting_arrival',
         docId:             d.id,
         species:           fd.species ?? 'Unknown',
         mountType:         fd.mount_type ?? '',
@@ -408,6 +410,19 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
           className="hidden" onChange={e => addHuntPhotos(e.target.files)} />
       </div>
 
+      {/* Pre-registered export notice */}
+      {lines.some(l => l.preRegistered) && (
+        <div className="bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded-xl px-4 py-3 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 text-purple-500 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-purple-900 dark:text-purple-200">Pre-registered export hunt</p>
+            <p className="text-xs text-purple-700 dark:text-purple-400 mt-0.5">
+              The outfitter pre-entered these trophies. Cross-reference each one against what physically arrived — mark OK or flag any discrepancies.
+            </p>
+          </div>
+        </div>
+      )}
+
       {lines.length === 0 ? (
         <div className="text-center py-10 text-slate-400">
           <Package className="w-10 h-10 mx-auto mb-2 opacity-30" />
@@ -475,6 +490,9 @@ function TrophyCheckCard({
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-bold text-slate-900 dark:text-slate-100 text-lg">{line.species}</span>
             <span className="text-sm text-slate-500">{line.mountType}</span>
+            {line.preRegistered && (
+              <Badge className="text-[10px] bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 border-0">Pre-registered</Badge>
+            )}
           </div>
           <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-400 flex-wrap">
             {line.tagNumber && <span className="font-mono">Tag: {line.tagNumber}</span>}

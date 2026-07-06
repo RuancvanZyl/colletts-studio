@@ -23,6 +23,8 @@ export interface OutfitterHunt {
   created_at: string;
   client: { id: string; full_name: string; client_number: string | null; country: string | null } | null;
   trophyCount: number;
+  awaitingCount: number;  // awaiting_arrival job cards
+  inProgressCount: number;
   docCount: number;
   species: string[];
 }
@@ -33,10 +35,11 @@ interface HuntDashboardProps {
 }
 
 export function HuntDashboard({ onCreateHunt, onOpenHunt }: HuntDashboardProps) {
-  const [hunts,      setHunts]      = useState<OutfitterHunt[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [search,     setSearch]     = useState('');
-  const [yearFilter, setYearFilter] = useState<string>('all');
+  const [hunts,        setHunts]        = useState<OutfitterHunt[]>([]);
+  const [loading,      setLoading]      = useState(true);
+  const [search,       setSearch]       = useState('');
+  const [yearFilter,   setYearFilter]   = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'awaiting' | 'active' | 'completed'>('all');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -58,7 +61,7 @@ export function HuntDashboard({ onCreateHunt, onOpenHunt }: HuntDashboardProps) 
           : Promise.resolve({ data: [] }),
         (supabase as any)
           .from('hunt_documents')
-          .select('hunt_id, doc_type, title, form_data')
+          .select('hunt_id, doc_type, status, title, form_data')
           .in('hunt_id', huntIds),
       ]);
 
@@ -72,14 +75,18 @@ export function HuntDashboard({ onCreateHunt, onOpenHunt }: HuntDashboardProps) 
       }
 
       const result: OutfitterHunt[] = huntRows.map((h: any) => {
-        const docs     = docsByHunt[h.id] ?? [];
-        const jobCards = docs.filter((d: any) => d.doc_type === 'job_card');
-        const species  = [...new Set(jobCards.map((d: any) => d.form_data?.species).filter(Boolean))] as string[];
+        const docs           = docsByHunt[h.id] ?? [];
+        const jobCards       = docs.filter((d: any) => d.doc_type === 'job_card');
+        const awaitingCount  = jobCards.filter((d: any) => d.status === 'awaiting_arrival').length;
+        const inProgressCount = jobCards.filter((d: any) => d.status === 'in_progress').length;
+        const species        = [...new Set(jobCards.map((d: any) => d.form_data?.species).filter(Boolean))] as string[];
         return {
           ...h,
-          client:      clientMap[h.client_id] ?? null,
-          trophyCount: jobCards.length,
-          docCount:    docs.filter((d: any) => d.doc_type !== 'job_card').length,
+          client:       clientMap[h.client_id] ?? null,
+          trophyCount:  jobCards.length,
+          awaitingCount,
+          inProgressCount,
+          docCount:     docs.filter((d: any) => d.doc_type !== 'job_card').length,
           species,
         };
       });
@@ -96,6 +103,8 @@ export function HuntDashboard({ onCreateHunt, onOpenHunt }: HuntDashboardProps) 
 
   const years = [...new Set(hunts.map(h => h.year.toString()))].sort((a, b) => Number(b) - Number(a));
 
+  const awaitingTotal = hunts.filter(h => h.awaitingCount > 0).length;
+
   const filtered = hunts.filter(h => {
     const q = search.toLowerCase();
     const matchSearch = !q
@@ -104,8 +113,13 @@ export function HuntDashboard({ onCreateHunt, onOpenHunt }: HuntDashboardProps) 
       || h.operator?.toLowerCase().includes(q)
       || h.farm?.toLowerCase().includes(q)
       || h.species.some(s => s.toLowerCase().includes(q));
-    const matchYear = yearFilter === 'all' || h.year.toString() === yearFilter;
-    return matchSearch && matchYear;
+    const matchYear   = yearFilter === 'all' || h.year.toString() === yearFilter;
+    const matchStatus =
+      statusFilter === 'all'       ? true :
+      statusFilter === 'awaiting'  ? h.awaitingCount > 0 :
+      statusFilter === 'active'    ? h.inProgressCount > 0 :
+      h.status === 'completed';
+    return matchSearch && matchYear && matchStatus;
   });
 
   // Farm-wide species summary
@@ -154,7 +168,28 @@ export function HuntDashboard({ onCreateHunt, onOpenHunt }: HuntDashboardProps) 
         </div>
       )}
 
-      {/* Filters */}
+      {/* Status tabs */}
+      <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg w-fit flex-wrap">
+        {([
+          { key: 'all',       label: 'All' },
+          { key: 'awaiting',  label: `Awaiting Arrival${awaitingTotal > 0 ? ` (${awaitingTotal})` : ''}` },
+          { key: 'active',    label: 'In Workshop' },
+          { key: 'completed', label: 'Completed' },
+        ] as const).map(t => (
+          <button key={t.key} onClick={() => setStatusFilter(t.key)}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              statusFilter === t.key
+                ? t.key === 'awaiting'
+                  ? 'bg-purple-600 text-white shadow'
+                  : 'bg-white dark:bg-slate-700 shadow text-slate-900 dark:text-white'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Search + year filters */}
       <div className="flex gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -207,9 +242,15 @@ export function HuntDashboard({ onCreateHunt, onOpenHunt }: HuntDashboardProps) 
                     {hunt.client?.country && (
                       <span className="text-xs text-slate-400">{hunt.client.country}</span>
                     )}
-                    <Badge className={`text-[10px] px-1.5 h-4 ${hunt.status === 'active' ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300' : 'bg-slate-100 text-slate-500'}`}>
-                      {hunt.status}
-                    </Badge>
+                    {hunt.awaitingCount > 0 && hunt.inProgressCount === 0 ? (
+                      <Badge className="text-[10px] px-1.5 h-4 bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 border-0">
+                        Awaiting Arrival
+                      </Badge>
+                    ) : (
+                      <Badge className={`text-[10px] px-1.5 h-4 ${hunt.status === 'active' ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300' : 'bg-slate-100 text-slate-500'}`}>
+                        {hunt.status}
+                      </Badge>
+                    )}
                     <Badge variant="outline" className="text-[10px] px-1.5 h-4">{hunt.year}</Badge>
                   </div>
 
@@ -246,6 +287,16 @@ export function HuntDashboard({ onCreateHunt, onOpenHunt }: HuntDashboardProps) 
                 <div className="flex flex-col items-end gap-1 flex-shrink-0">
                   <span className="text-xl font-bold text-slate-900 dark:text-slate-100">{hunt.trophyCount}</span>
                   <span className="text-[10px] text-slate-400">trophies</span>
+                  {hunt.awaitingCount > 0 && (
+                    <span className="text-[10px] font-semibold text-purple-600 dark:text-purple-400">
+                      {hunt.awaitingCount} awaiting
+                    </span>
+                  )}
+                  {hunt.inProgressCount > 0 && (
+                    <span className="text-[10px] font-semibold text-green-600 dark:text-green-400">
+                      {hunt.inProgressCount} in workshop
+                    </span>
+                  )}
                   {hunt.docCount > 0 && (
                     <span className="flex items-center gap-1 text-[10px] text-[#0073ea]">
                       <FileText className="w-3 h-3" />{hunt.docCount} docs
