@@ -20,6 +20,7 @@ interface JobCard {
   huntId: string;
   clientNumber: string;
   clientName: string;
+  clientEmail: string | null;
   tagNumber: string;
   species: string;
   mountType: string;
@@ -27,6 +28,8 @@ interface JobCard {
   specialRequests: string[];
   department: string;
   stageHistory: StageHistory[];
+  huntYear: number | null;
+  operator: string | null;
 }
 
 export function WorkshopInstructions() {
@@ -75,13 +78,17 @@ export function WorkshopInstructions() {
     if (huntIds.length === 0) { setCards([]); setLoading(false); return; }
 
     const { data: hunts } = await (supabase as any)
-      .from('client_hunts').select('id, client_id').in('id', huntIds);
+      .from('client_hunts').select('id, client_id, year, operator').in('id', huntIds);
     const clientIds = [...new Set((hunts ?? []).map((h: any) => h.client_id))];
     const { data: clients } = await (supabase as any)
-      .from('clients').select('id, full_name, client_number').in('id', clientIds);
+      .from('clients').select('id, full_name, client_number, email').in('id', clientIds);
 
     const huntToClient: Record<string, string> = {};
-    for (const h of hunts ?? []) huntToClient[h.id] = h.client_id;
+    const huntMeta: Record<string, { year: number; operator: string | null }> = {};
+    for (const h of hunts ?? []) {
+      huntToClient[h.id] = h.client_id;
+      huntMeta[h.id] = { year: h.year, operator: h.operator };
+    }
     const clientMap: Record<string, any> = {};
     for (const c of clients ?? []) clientMap[c.id] = c;
 
@@ -96,11 +103,13 @@ export function WorkshopInstructions() {
       const clientId = huntToClient[doc.hunt_id];
       const cl = clientMap[clientId] ?? {};
       const fd = doc.form_data ?? {};
+      const meta = huntMeta[doc.hunt_id] ?? {};
       return {
         docId:           doc.id,
         huntId:          doc.hunt_id,
         clientNumber:    cl.client_number ?? '—',
         clientName:      cl.full_name     ?? '—',
+        clientEmail:     cl.email         ?? null,
         tagNumber:       fd.tag_number    ?? '',
         species:         fd.species       ?? '—',
         mountType:       fd.mount_type    ?? '—',
@@ -108,6 +117,8 @@ export function WorkshopInstructions() {
         specialRequests: custByHunt[doc.hunt_id] ?? [],
         department:      doc.current_department ?? '',
         stageHistory:    fd.stage_history ?? [],
+        huntYear:        meta.year        ?? null,
+        operator:        meta.operator    ?? null,
       };
     });
 
@@ -168,6 +179,26 @@ export function WorkshopInstructions() {
       completed_by: profile?.id ?? null, completed_by_name: by,
       photo_paths: uploadedPaths, notes: null,
     });
+
+    // Fire-and-forget email to client at checkpoint stages
+    if (card.clientEmail) {
+      fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-trophy-update`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({
+          clientEmail: card.clientEmail,
+          clientName:  card.clientName,
+          species:     card.species,
+          mountType:   card.mountType,
+          stage:       next ?? 'done',
+          huntYear:    card.huntYear,
+          operator:    card.operator,
+        }),
+      }).catch(() => {}); // silent — email is best-effort
+    }
 
     const nextLabel = next ? (DEPT_LABELS[next] ?? next) : null;
     toast.success(`${card.species} done${nextLabel ? ` → moving to ${nextLabel}` : ' — job complete!'}`);

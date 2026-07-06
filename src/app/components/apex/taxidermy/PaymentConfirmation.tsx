@@ -12,7 +12,6 @@ import { toast } from 'sonner';
 import {
   CreditCard, CheckCircle2, AlertCircle, RefreshCw, Loader2,
   User, Calendar, Crosshair, ChevronDown, ChevronUp, DollarSign,
-  Link, Copy,
 } from 'lucide-react';
 
 interface PendingHunt {
@@ -81,41 +80,6 @@ export function PaymentConfirmation() {
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     ));
     setLoading(false);
-  }
-
-  function generatePayFastUrl(hunt: PendingHunt): string {
-    const merchantId  = import.meta.env.VITE_PAYFAST_MERCHANT_ID ?? '';
-    const merchantKey = import.meta.env.VITE_PAYFAST_MERCHANT_KEY ?? '';
-    const amount      = depositAmounts[hunt.id] ? parseFloat(depositAmounts[hunt.id]).toFixed(2) : '0.00';
-    const sandbox     = import.meta.env.VITE_PAYFAST_SANDBOX === 'true';
-    const base        = sandbox ? 'https://sandbox.payfast.co.za' : 'https://www.payfast.co.za';
-    const notifyUrl   = `https://kpbtydfkqrrtbpwxvbep.supabase.co/functions/v1/payfast-webhook`;
-    const returnUrl   = `https://app.apextrophysolutions.com`;
-
-    const params = new URLSearchParams({
-      merchant_id:  merchantId,
-      merchant_key: merchantKey,
-      return_url:   returnUrl,
-      cancel_url:   returnUrl,
-      notify_url:   notifyUrl,
-      name_first:   hunt.client_name.split(' ')[0] ?? '',
-      name_last:    hunt.client_name.split(' ').slice(1).join(' ') ?? '',
-      email_address: hunt.client_email ?? '',
-      amount,
-      item_name:    `Apex Trophy Deposit — ${hunt.client_name} ${hunt.year}`,
-      custom_str1:  hunt.id,  // hunt_id — used by webhook to find the hunt
-    });
-
-    return `${base}/eng/process?${params.toString()}`;
-  }
-
-  function copyPayFastLink(hunt: PendingHunt) {
-    const url = generatePayFastUrl(hunt);
-    navigator.clipboard.writeText(url).then(() => {
-      toast.success('Payment link copied to clipboard');
-    }).catch(() => {
-      toast.error('Could not copy — open the link manually');
-    });
   }
 
   async function confirmDeposit(hunt: PendingHunt) {
@@ -251,9 +215,9 @@ export function PaymentConfirmation() {
                       ))}
                     </div>
 
-                    {/* Deposit amount + PayFast link */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <div className="relative flex-1 min-w-32">
+                    {/* Deposit amount + confirm */}
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
                         <DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
                         <input
                           type="number"
@@ -261,44 +225,22 @@ export function PaymentConfirmation() {
                           step={0.01}
                           value={depositAmounts[hunt.id] ?? ''}
                           onChange={e => setDepositAmounts(p => ({ ...p, [hunt.id]: e.target.value }))}
-                          placeholder="Deposit amount (ZAR)"
+                          placeholder="Deposit amount (ZAR, optional)"
                           className="w-full h-9 pl-8 pr-3 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent focus:outline-none focus:ring-1 focus:ring-[#0073ea]"
                         />
                       </div>
-
-                      {/* PayFast link buttons — only show if amount entered */}
-                      {depositAmounts[hunt.id] && parseFloat(depositAmounts[hunt.id]) > 0 && (
-                        <>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => copyPayFastLink(hunt)}
-                            className="gap-1.5 shrink-0 border-blue-300 text-blue-600 hover:bg-blue-50">
-                            <Copy className="w-3.5 h-3.5" />Copy PayFast Link
-                          </Button>
-                          <a
-                            href={generatePayFastUrl(hunt)}
-                            target="_blank"
-                            rel="noopener noreferrer">
-                            <Button variant="outline" size="sm" className="gap-1.5 shrink-0 border-blue-300 text-blue-600 hover:bg-blue-50">
-                              <Link className="w-3.5 h-3.5" />Open
-                            </Button>
-                          </a>
-                        </>
-                      )}
-
                       <Button
                         onClick={() => confirmDeposit(hunt)}
                         disabled={isConfirming}
                         className="bg-green-600 hover:bg-green-700 text-white gap-1.5 shrink-0">
                         {isConfirming
                           ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Activating…</>
-                          : <><CheckCircle2 className="w-3.5 h-3.5" />Confirm Cash/EFT</>}
+                          : <><CheckCircle2 className="w-3.5 h-3.5" />Confirm Deposit Received</>}
                       </Button>
                     </div>
 
                     <p className="text-xs text-slate-400">
-                      Enter amount → copy PayFast link to send to client for online payment (webhook auto-activates), or confirm manually for cash/EFT.
+                      This will release {hunt.job_cards.length} job card{hunt.job_cards.length !== 1 ? 's' : ''} into the receiving queue immediately.
                     </p>
                   </div>
                 )}
