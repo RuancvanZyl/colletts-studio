@@ -50,7 +50,7 @@ type HunterView = 'home' | 'trophies' | 'trophy-detail' | 'notifications' | 'pro
 
 export function HunterPortal({ onLogout }: HunterPortalProps) {
   const { user } = useAuth();
-  const { client, loading: clientLoading, displayName } = useHunterClient();
+  const { client, loading: clientLoading, displayName, ensureClient } = useHunterClient();
   const { hunts, loading: huntsLoading, refresh: refreshHunts } = useHunterHunts();
 
   const [flow, setFlow] = useState<HunterFlow>('main');
@@ -84,16 +84,12 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
     );
   }
 
-  // No client record yet — shouldn't happen if RegisterScreen worked, but handle gracefully
-  if (!client) {
+  // No client record — auto-create it now that the user is authenticated
+  if (!client && !clientLoading) {
+    ensureClient().catch(() => {});
     return (
-      <div className="min-h-screen flex items-center justify-center p-8 text-center">
-        <div className="space-y-3">
-          <AlertCircle className="w-10 h-10 text-amber-400 mx-auto" />
-          <p className="font-semibold text-slate-700 dark:text-slate-300">Profile not set up yet</p>
-          <p className="text-sm text-slate-500">Our team is linking your account. Please check back shortly or contact us.</p>
-          <Button variant="outline" onClick={onLogout}>Sign Out</Button>
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
       </div>
     );
   }
