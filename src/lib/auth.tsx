@@ -45,12 +45,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!HAS_SUPABASE) return; // No credentials yet — skip auth
 
+    const timeout = setTimeout(() => setLoading(false), 5000);
     supabase.auth.getSession().then(({ data: { session } }) => {
+      clearTimeout(timeout);
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) loadProfile(session.user.id);
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch(() => { clearTimeout(timeout); setLoading(false); });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);

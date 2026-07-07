@@ -44,6 +44,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      devOptions: { enabled: false },
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'favicon-32x32.png'],
       manifest: {
         name: 'Apex Trophy Solutions',
