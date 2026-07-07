@@ -61,6 +61,15 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
 
   const { notifications, unreadCount, markRead, markAllRead } = useClientNotifications(client?.id);
 
+  // Auto-create client record if missing — run once when loading finishes
+  const ensuredRef = useRef(false);
+  useEffect(() => {
+    if (!client && !clientLoading && !ensuredRef.current) {
+      ensuredRef.current = true;
+      ensureClient().catch(() => {});
+    }
+  }, [client, clientLoading]);
+
   const handleViewTrophy = (trophy: Trophy) => {
     setSelectedTrophy(trophy);
     setCurrentView('trophy-detail');
@@ -83,15 +92,6 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
       </div>
     );
   }
-
-  // No client record — auto-create once then reload
-  const ensuredRef = useRef(false);
-  useEffect(() => {
-    if (!client && !clientLoading && !ensuredRef.current) {
-      ensuredRef.current = true;
-      ensureClient().catch(() => {});
-    }
-  }, [client, clientLoading]);
 
   if (!client) {
     return (
