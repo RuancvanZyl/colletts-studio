@@ -68,7 +68,24 @@ export function useHunterClient() {
       }
     }
 
-    setClient(null);
+    // Auto-create client record using SECURITY DEFINER function (bypasses RLS)
+    const fullName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Hunter';
+    const { data: newId } = await (supabase.rpc as any)('get_or_create_hunter_client', {
+      p_full_name: fullName,
+      p_email: user.email ?? null,
+      p_phone: user.user_metadata?.phone ?? null,
+    });
+
+    if (newId) {
+      const { data: created } = await (supabase as any)
+        .from('clients')
+        .select('*')
+        .eq('id', newId)
+        .maybeSingle();
+      setClient(created ?? null);
+    } else {
+      setClient(null);
+    }
     setLoading(false);
   }
 

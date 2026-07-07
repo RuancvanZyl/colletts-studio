@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { HunterHome } from './hunter/HunterHome';
 import { MyTrophies } from './hunter/MyTrophies';
 import { TrophyDetail } from './hunter/TrophyDetail';
@@ -50,7 +50,7 @@ type HunterView = 'home' | 'trophies' | 'trophy-detail' | 'notifications' | 'pro
 
 export function HunterPortal({ onLogout }: HunterPortalProps) {
   const { user } = useAuth();
-  const { client, loading: clientLoading, displayName, ensureClient } = useHunterClient();
+  const { client, loading: clientLoading, displayName } = useHunterClient();
   const { hunts, loading: huntsLoading, refresh: refreshHunts } = useHunterHunts();
 
   const [flow, setFlow] = useState<HunterFlow>('main');
@@ -60,15 +60,6 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
   const { theme: portalTheme } = usePortalTheme();
 
   const { notifications, unreadCount, markRead, markAllRead } = useClientNotifications(client?.id);
-
-  // Auto-create client record if missing — run once when loading finishes
-  const ensuredRef = useRef(false);
-  useEffect(() => {
-    if (!client && !clientLoading && !ensuredRef.current) {
-      ensuredRef.current = true;
-      ensureClient().catch(() => {});
-    }
-  }, [client, clientLoading]);
 
   const handleViewTrophy = (trophy: Trophy) => {
     setSelectedTrophy(trophy);
