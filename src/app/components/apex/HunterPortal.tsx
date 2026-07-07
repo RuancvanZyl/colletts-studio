@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { HunterHome } from './hunter/HunterHome';
 import { MyTrophies } from './hunter/MyTrophies';
 import { TrophyDetail } from './hunter/TrophyDetail';
@@ -84,9 +84,16 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
     );
   }
 
-  // No client record — auto-create it now that the user is authenticated
-  if (!client && !clientLoading) {
-    ensureClient().catch(() => {});
+  // No client record — auto-create once then reload
+  const ensuredRef = useRef(false);
+  useEffect(() => {
+    if (!client && !clientLoading && !ensuredRef.current) {
+      ensuredRef.current = true;
+      ensureClient().catch(() => {});
+    }
+  }, [client, clientLoading]);
+
+  if (!client) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
