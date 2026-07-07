@@ -84,16 +84,17 @@ export async function addTrophyToHunt(huntId: string, trophy: TrophyEntry) {
   const { data, error } = await (supabase as any)
     .from('hunt_documents')
     .insert({
-      hunt_id:  huntId,
-      doc_type: 'job_card',
-      title:    `${trophy.species} — ${trophy.mountType}`,
-      status:   'pending_payment',
+      hunt_id:            huntId,
+      doc_type:           'job_card',
+      title:              `${trophy.species} — ${trophy.mountType}`,
+      status:             'pending_payment',
+      current_department: 'receiving',
       form_data: {
-        species:     trophy.species,
-        mount_type:  trophy.mountType,
-        quantity:    trophy.quantity,
-        instructions: trophy.instructions + extrasNote,
-        extras:      trophy.extras,
+        species:             trophy.species,
+        mount_type:          trophy.mountType,
+        quantity:            trophy.quantity,
+        instructions:        trophy.instructions + extrasNote,
+        extras:              trophy.extras,
         submitted_by_hunter: true,
       },
     })

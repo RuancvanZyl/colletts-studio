@@ -30,14 +30,17 @@ interface JobCard {
   stageHistory: StageHistory[];
   huntYear: number | null;
   operator: string | null;
+  isPending?: boolean;
 }
 
 export function WorkshopInstructions() {
   const { profile } = useAuth();
   const [cards, setCards]         = useState<JobCard[]>([]);
+  const [pendingCards, setPendingCards] = useState<JobCard[]>([]);
   const [loading, setLoading]     = useState(true);
   const [expanded, setExpanded]   = useState<string | null>(null);
   const [completing, setCompleting] = useState<string | null>(null);
+  const [activating, setActivating] = useState<string | null>(null);
   const [photos, setPhotos]       = useState<Record<string, File[]>>({});
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -53,30 +56,36 @@ export function WorkshopInstructions() {
   async function load() {
     setLoading(true);
 
+    // Fetch active (in_progress) jobs
     let query = (supabase as any)
       .from('hunt_documents')
-      .select('id, hunt_id, form_data, current_department')
+      .select('id, hunt_id, form_data, current_department, status')
       .eq('doc_type', 'job_card')
       .eq('status', 'in_progress')
       .order('created_at', { ascending: true });
 
-    // Regular staff only see their own department's jobs
     if (!seeAll && myDepts.length > 0) {
       query = query.in('current_department', myDepts);
     }
 
-    const { data: docs } = await query;
+    const [{ data: docs }, { data: pendingDocs }, { data: custDocs }] = await Promise.all([
+      query,
+      // Admin also fetches pending_payment (hunter-submitted, not yet activated)
+      seeAll
+        ? (supabase as any).from('hunt_documents')
+            .select('id, hunt_id, form_data, current_department, status')
+            .eq('doc_type', 'job_card')
+            .eq('status', 'pending_payment')
+            .order('created_at', { ascending: false })
+        : Promise.resolve({ data: [] }),
+      (supabase as any).from('hunt_documents')
+        .select('hunt_id, title, form_data').eq('doc_type', 'customisation'),
+    ]);
 
-    const { data: custDocs } = await (supabase as any)
-      .from('hunt_documents')
-      .select('hunt_id, title, form_data')
-      .eq('doc_type', 'customisation');
+    const allDocs = [...(docs ?? []), ...(pendingDocs ?? [])];
+    if (allDocs.length === 0) { setCards([]); setPendingCards([]); setLoading(false); return; }
 
-    if (!docs) { setLoading(false); return; }
-
-    const huntIds = [...new Set(docs.map((d: any) => d.hunt_id))];
-    if (huntIds.length === 0) { setCards([]); setLoading(false); return; }
-
+    const huntIds = [...new Set(allDocs.map((d: any) => d.hunt_id))];
     const { data: hunts } = await (supabase as any)
       .from('client_hunts').select('id, client_id, year, operator').in('id', huntIds);
     const clientIds = [...new Set((hunts ?? []).map((h: any) => h.client_id))];
@@ -84,7 +93,7 @@ export function WorkshopInstructions() {
       .from('clients').select('id, full_name, client_number, email').in('id', clientIds);
 
     const huntToClient: Record<string, string> = {};
-    const huntMeta: Record<string, { year: number; operator: string | null }> = {};
+    const huntMeta: Record<string, { year: string; operator: string | null }> = {};
     for (const h of hunts ?? []) {
       huntToClient[h.id] = h.client_id;
       huntMeta[h.id] = { year: h.year, operator: h.operator };
@@ -99,7 +108,7 @@ export function WorkshopInstructions() {
       custByHunt[c.hunt_id].push(desc);
     }
 
-    const result: JobCard[] = docs.map((doc: any) => {
+    const toCard = (doc: any, isPending = false): JobCard => {
       const clientId = huntToClient[doc.hunt_id];
       const cl = clientMap[clientId] ?? {};
       const fd = doc.form_data ?? {};
@@ -115,15 +124,29 @@ export function WorkshopInstructions() {
         mountType:       fd.mount_type    ?? '—',
         instructions:    fd.instructions  ?? '',
         specialRequests: custByHunt[doc.hunt_id] ?? [],
-        department:      doc.current_department ?? '',
+        department:      doc.current_department ?? 'receiving',
         stageHistory:    fd.stage_history ?? [],
         huntYear:        meta.year        ?? null,
         operator:        meta.operator    ?? null,
+        isPending,
       };
-    });
+    };
 
-    setCards(result);
+    setCards((docs ?? []).map((d: any) => toCard(d, false)));
+    setPendingCards((pendingDocs ?? []).map((d: any) => toCard(d, true)));
     setLoading(false);
+  }
+
+  async function activateJob(card: JobCard) {
+    setActivating(card.docId);
+    const { error } = await (supabase as any)
+      .from('hunt_documents')
+      .update({ status: 'in_progress', current_department: 'receiving' })
+      .eq('id', card.docId);
+    if (error) { toast.error('Could not activate job'); }
+    else { toast.success(`${card.species} activated → Receiving`); }
+    setActivating(null);
+    load();
   }
 
   useEffect(() => { load(); }, [profile?.full_name]);
@@ -237,7 +260,7 @@ export function WorkshopInstructions() {
           <h1 className="text-slate-900 dark:text-slate-100 text-xl font-bold">Job Cards</h1>
           <p className="text-slate-500 text-sm">
             {seeAll
-              ? `All departments — ${cards.length} active jobs`
+              ? `${cards.length} active · ${pendingCards.length} incoming`
               : myDepts.length > 0
                 ? `${myDepts.map(d => DEPT_LABELS[d] ?? d).join(', ')} — ${cards.length} job${cards.length !== 1 ? 's' : ''}`
                 : 'No department assigned'
@@ -248,6 +271,35 @@ export function WorkshopInstructions() {
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
         </Button>
       </div>
+
+      {/* Pending hunter submissions — admin only */}
+      {seeAll && pendingCards.length > 0 && (
+        <div className="mb-6">
+          <div className="flex items-center gap-2 mb-3 px-1">
+            <span className="text-xs font-bold text-amber-500 uppercase tracking-wider">Incoming from Hunters</span>
+            <span className="text-xs bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded-full font-semibold">{pendingCards.length}</span>
+          </div>
+          <div className="bg-white dark:bg-[#1c2b3a] rounded-2xl border-2 border-amber-300 dark:border-amber-700 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800">
+            {pendingCards.map(card => (
+              <div key={card.docId} className="p-4 flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="font-semibold text-slate-900 dark:text-slate-100">{card.species} — {card.mountType}</div>
+                  <div className="text-sm text-slate-500">{card.clientName} · {card.huntYear ?? '—'} · {card.operator ?? 'No outfitter'}</div>
+                  {card.instructions && <div className="text-xs text-slate-400 mt-1 truncate">{card.instructions}</div>}
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => activateJob(card)}
+                  disabled={activating === card.docId}
+                  className="shrink-0 bg-amber-500 hover:bg-amber-600 text-white"
+                >
+                  {activating === card.docId ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Activate'}
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center py-24">
