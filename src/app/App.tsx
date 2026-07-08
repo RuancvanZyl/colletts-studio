@@ -48,7 +48,7 @@ function AppInner() {
           .from('clients')
           .select('client_type')
           .eq('auth_user_id', u.id)
-          .single();
+          .maybeSingle();
         if (client?.client_type === 'local') {
           setSelectedPortal('local-hunter' as any);
         }
