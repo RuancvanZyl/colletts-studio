@@ -31,7 +31,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<StaffProfile | null>(null);
-  const [loading, setLoading] = useState(HAS_SUPABASE);
+  // Never block the UI — start false, update in background
+  const [loading, setLoading] = useState(false);
 
   async function loadProfile(userId: string) {
     const { data } = await supabase
@@ -43,16 +44,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    if (!HAS_SUPABASE) return; // No credentials yet — skip auth
+    if (!HAS_SUPABASE) return;
 
-    const timeout = setTimeout(() => setLoading(false), 5000);
     supabase.auth.getSession().then(({ data: { session } }) => {
-      clearTimeout(timeout);
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) loadProfile(session.user.id);
-      setLoading(false);
-    }).catch(() => { clearTimeout(timeout); setLoading(false); });
+    }).catch(() => {});
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
