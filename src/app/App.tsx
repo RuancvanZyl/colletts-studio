@@ -105,6 +105,25 @@ function AppInner() {
     setCurrentView('login');
   };
 
+  const handleRegisteredAndLoggedIn = useCallback(async () => {
+    // Email confirmation OFF — user is already logged in after signUp
+    // Route to correct portal based on selectedPortal
+    if (selectedPortal === 'hunter') {
+      const { data: { user: u } } = await supabase.auth.getUser();
+      if (u) {
+        const { data: client } = await (supabase as any)
+          .from('clients')
+          .select('client_type')
+          .eq('auth_user_id', u.id)
+          .maybeSingle();
+        if (client?.client_type === 'local') {
+          setSelectedPortal('local-hunter' as any);
+        }
+      }
+    }
+    setCurrentView('portal');
+  }, [selectedPortal]);
+
   const handleGoToDashboard = () => {
     setSelectedPortal('unified');
     setCurrentView('dashboard');
@@ -190,9 +209,10 @@ function AppInner() {
       <ErrorBoundary>
         <ThemeProvider>
           <PortalThemeProvider portalType={selectedPortal}>
-            <RegisterScreen 
+            <RegisterScreen
               onBack={handleBackToLogin}
               onRegisterComplete={handleRegisterComplete}
+              onRegisteredAndLoggedIn={handleRegisteredAndLoggedIn}
               portalType={selectedPortal === 'admin' ? 'taxidermy' : selectedPortal === 'outfitter' ? 'outfitter' : 'hunter'}
             />
             <Toaster />

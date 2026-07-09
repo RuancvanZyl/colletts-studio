@@ -12,12 +12,14 @@ import { supabase } from '../../../lib/supabase';
 interface RegisterScreenProps {
   onBack: () => void;
   onRegisterComplete: () => void;
+  onRegisteredAndLoggedIn?: () => void;
   portalType?: 'hunter' | 'outfitter' | 'taxidermy';
 }
 
-export function RegisterScreen({ 
-  onBack, 
+export function RegisterScreen({
+  onBack,
   onRegisterComplete,
+  onRegisteredAndLoggedIn,
   portalType = 'hunter'
 }: RegisterScreenProps) {
   const [formData, setFormData] = useState({
@@ -90,6 +92,14 @@ export function RegisterScreen({
       }).onConflict('id').ignore();
     }
 
+    // Email confirmation is OFF → session returned immediately → go straight to portal
+    if (authData.session) {
+      toast.success(`Welcome, ${formData.firstName}! Your account is ready.`);
+      onRegisteredAndLoggedIn?.();
+      return;
+    }
+
+    // Email confirmation is ON → show "check your email" screen
     setRegistered(true);
   };
 
