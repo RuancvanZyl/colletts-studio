@@ -306,7 +306,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
             onClick={() => setCurrentView('messages')}
           >
             <MessageCircle className="w-5 h-5 mr-3" />
-            Ask the Workshop
+            Ask the Taxidermy
           </Button>
           <Button
             variant="ghost"

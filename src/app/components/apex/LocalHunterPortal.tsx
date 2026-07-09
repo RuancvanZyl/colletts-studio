@@ -95,7 +95,7 @@ export function LocalHunterPortal({ onLogout }: LocalHunterPortalProps) {
       <nav className="hidden md:block fixed left-0 top-16 bottom-0 w-56 bg-white/90 dark:bg-stone-900/90 backdrop-blur-lg border-r border-amber-200 dark:border-amber-900 p-4 space-y-1">
         {[
           { view: 'home' as LocalView,             icon: Home,          label: 'My Trophies' },
-          { view: 'messages' as LocalView,         icon: MessageCircle, label: 'Ask the Workshop' },
+          { view: 'messages' as LocalView,         icon: MessageCircle, label: 'Ask the Taxidermy' },
           { view: 'special-requests' as LocalView, icon: Wand2,         label: 'Special Requests' },
           { view: 'notifications' as LocalView,    icon: Bell,          label: 'Notifications', badge: unreadCount },
           { view: 'profile' as LocalView,          icon: User,          label: 'Profile' },

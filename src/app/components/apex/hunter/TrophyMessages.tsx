@@ -143,7 +143,7 @@ export function TrophyMessages() {
     <div className="space-y-6 max-w-2xl mx-auto">
       {/* Header */}
       <div>
-        <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">Ask the Workshop</h1>
+        <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">Ask the Taxidermy</h1>
         <p className="text-sm text-slate-500 mt-1">Ask questions about your mounts, request updates, or explore creative options</p>
       </div>
 
@@ -224,7 +224,7 @@ export function TrophyMessages() {
             <div className="text-center py-10">
               <MessageCircle className="w-10 h-10 text-slate-300 mx-auto mb-3" />
               <p className="text-slate-500 font-medium text-sm">No messages yet</p>
-              <p className="text-slate-400 text-xs mt-1">Ask the workshop anything about your trophies</p>
+              <p className="text-slate-400 text-xs mt-1">Ask the taxidermy anything about your trophies</p>
             </div>
           ) : (
             messages.map(msg => (
