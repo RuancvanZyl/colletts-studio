@@ -92,6 +92,20 @@ export function RegisterScreen({
       }).onConflict('id').ignore();
     }
 
+    // Fire welcome email — fire-and-forget, never blocks the UI
+    fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-client-welcome`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify({
+        email: formData.email,
+        name: fullName,
+        portalType,
+      }),
+    }).catch(() => {});
+
     // Email confirmation is OFF → session returned immediately → go straight to portal
     if (authData.session) {
       toast.success(`Welcome, ${formData.firstName}! Your account is ready.`);
