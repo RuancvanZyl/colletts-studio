@@ -75,7 +75,7 @@ export function RegisterScreen({
       return;
     }
 
-    // Create client record immediately for hunters
+    // Create client record for hunters
     if (portalType === 'hunter' && authData.user) {
       await createClientRecord(
         authData.user.id,
@@ -84,6 +84,16 @@ export function RegisterScreen({
         formData.phone,
         clientType,
       );
+    }
+
+    // Create staff profile for taxidermy registrations
+    if (portalType === 'taxidermy' && authData.user) {
+      await (supabase as any).from('staff_profiles').insert({
+        id: authData.user.id,
+        full_name: fullName,
+        role: 'receiving',
+        is_active: true,
+      }).onConflict('id').ignore();
     }
 
     // Fire welcome email — fire-and-forget, never blocks registration
