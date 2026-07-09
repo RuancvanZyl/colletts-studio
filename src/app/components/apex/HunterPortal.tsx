@@ -122,6 +122,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
         clientEmail={client.email ?? user?.email ?? ''}
         clientType={(client as any).client_type ?? 'export'}
         onComplete={() => { refreshHunts(); setFlow('main'); }}
+        onCancel={() => setFlow('main')}
       />
     );
   }

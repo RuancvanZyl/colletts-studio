@@ -58,9 +58,10 @@ interface Props {
   clientEmail: string;
   clientType: 'local' | 'export';
   onComplete: () => void;
+  onCancel?: () => void;
 }
 
-export function HunterHuntCreationWizard({ clientId, clientName, clientEmail, clientType, onComplete }: Props) {
+export function HunterHuntCreationWizard({ clientId, clientName, clientEmail, clientType, onComplete, onCancel }: Props) {
   const [step, setStep] = useState<Step>('hunt');
   const [submitting, setSubmitting] = useState(false);
 
@@ -160,8 +161,18 @@ export function HunterHuntCreationWizard({ clientId, clientName, clientEmail, cl
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-4 max-w-2xl mx-auto">
 
+      {/* Back button */}
+      {onCancel && (
+        <button
+          onClick={onCancel}
+          className="flex items-center gap-1.5 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 text-sm mb-4 transition-colors"
+        >
+          <ChevronLeft className="w-4 h-4" /> Back
+        </button>
+      )}
+
       {/* Progress bar */}
-      <div className="flex gap-1 mb-8 mt-4">
+      <div className="flex gap-1 mb-8 mt-2">
         {(['hunt', 'trophies', 'review'] as Step[]).map((s, i) => (
           <div key={s} className={`flex-1 h-1.5 rounded-full transition-colors ${
             step === s ? 'bg-[#0073ea]' :
