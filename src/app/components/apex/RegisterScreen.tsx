@@ -109,7 +109,12 @@ export function RegisterScreen({
       }),
     }).catch(() => {});
 
-    toast.success('Account created! Please check your email and click the confirmation link before logging in.');
+    // Auto sign-in immediately after registration (no email confirmation required)
+    if (authData.user) {
+      await supabase.auth.signInWithPassword({ email: formData.email, password: formData.password });
+    }
+
+    toast.success('Account created! Welcome to Apex Trophy Solutions.');
     onRegisterComplete();
   };
 
