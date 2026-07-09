@@ -215,7 +215,7 @@ export function LoginScreen({
                   onClick={async () => {
                     if (!email) { toast.error('Enter your email first'); return; }
                     await supabase.auth.resetPasswordForEmail(email, {
-                      redirectTo: `${window.location.origin}/reset-password`,
+                      redirectTo: window.location.origin,
                     });
                     setForgotSent(true);
                     toast.success('Password reset email sent!');

@@ -7,6 +7,7 @@ import { LandingPage } from './components/apex/LandingPage';
 import { ApexDashboard } from './components/apex/ApexDashboard';
 import { LoginScreen } from './components/apex/LoginScreen';
 import { RegisterScreen } from './components/apex/RegisterScreen';
+import { ResetPasswordScreen } from './components/apex/ResetPasswordScreen';
 import { ErrorBoundary } from './components/apex/ErrorBoundary';
 import { ThemeProvider } from './components/apex/ThemeProvider';
 import { PortalThemeProvider, PortalType } from './components/apex/PortalThemeProvider';
@@ -16,7 +17,7 @@ import { supabase } from '../lib/supabase';
 
 export type UserRole = 'hunter' | 'local-hunter' | 'admin' | 'outfitter' | 'taxidermy' | 'unified' | null;
 
-type AppView = 'landing' | 'login' | 'register' | 'portal' | 'dashboard';
+type AppView = 'landing' | 'login' | 'register' | 'portal' | 'dashboard' | 'reset-password';
 
 function AppInner() {
   const { user, profile, loading, signOut } = useAuth();
@@ -24,6 +25,16 @@ function AppInner() {
   void profile; // used in useEffect below
   const [currentView, setCurrentView] = useState<AppView>('landing');
   const [selectedPortal, setSelectedPortal] = useState<PortalType | null>(null);
+
+  // Detect PASSWORD_RECOVERY event (user clicked reset link in email)
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setCurrentView('reset-password');
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   // Auto-redirect authenticated users to their portal
   useEffect(() => {
@@ -104,6 +115,18 @@ function AppInner() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
       </div>
+    );
+  }
+
+  // Password Reset (arrived via email link)
+  if (currentView === 'reset-password') {
+    return (
+      <ErrorBoundary>
+        <ThemeProvider>
+          <ResetPasswordScreen onDone={() => setCurrentView('landing')} />
+          <Toaster />
+        </ThemeProvider>
+      </ErrorBoundary>
     );
   }
 
