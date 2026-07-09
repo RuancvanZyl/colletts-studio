@@ -64,11 +64,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signIn(email: string, password: string) {
     if (!HAS_SUPABASE) {
-      // Demo mode: accept any credentials when Supabase is not configured
       return { error: null };
     }
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error?.message ?? null };
+    if (!error) return { error: null };
+    if (error.message.toLowerCase().includes('email not confirmed')) {
+      return { error: 'Please confirm your email first — check your inbox and click the verification link.' };
+    }
+    if (error.message.toLowerCase().includes('invalid login credentials')) {
+      return { error: 'Incorrect email or password. Please try again.' };
+    }
+    return { error: error.message };
   }
 
   async function signOut() {
