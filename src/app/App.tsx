@@ -25,13 +25,27 @@ function AppInner() {
   const [currentView, setCurrentView] = useState<AppView>('landing');
   const [selectedPortal, setSelectedPortal] = useState<PortalType | null>(null);
 
-  // Auto-redirect authenticated staff to their portal
+  // Auto-redirect authenticated users to their portal
   useEffect(() => {
-    if (!loading && user && profile && currentView === 'landing') {
-      setSelectedPortal('admin');
-      setCurrentView('portal');
+    if (user && currentView === 'landing') {
+      if (profile) {
+        // Staff → taxidermy portal
+        setSelectedPortal('admin');
+        setCurrentView('portal');
+      } else {
+        // Hunter / outfitter — route by portal_type stored in user metadata
+        const portalType = user.user_metadata?.portal_type;
+        if (portalType === 'outfitter') {
+          setSelectedPortal('outfitter');
+          setCurrentView('portal');
+        } else {
+          // Default non-staff users to hunter portal
+          setSelectedPortal('hunter');
+          setCurrentView('portal');
+        }
+      }
     }
-  }, [loading, user, profile]);
+  }, [user, profile, currentView]);
 
   const handleSelectPortal = (portal: 'hunter' | 'outfitter' | 'taxidermy') => {
     const mappedPortal = portal === 'taxidermy' ? 'admin' : portal;

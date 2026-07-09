@@ -60,6 +60,7 @@ export function RegisterScreen({
       email: formData.email,
       password: formData.password,
       options: {
+        emailRedirectTo: 'https://app.apextrophysolutions.com',
         data: {
           full_name: fullName,
           phone: formData.phone,
@@ -109,12 +110,7 @@ export function RegisterScreen({
       }),
     }).catch(() => {});
 
-    // Auto sign-in immediately after registration (no email confirmation required)
-    if (authData.user) {
-      await supabase.auth.signInWithPassword({ email: formData.email, password: formData.password });
-    }
-
-    toast.success('Account created! Welcome to Apex Trophy Solutions.');
+    toast.success('Account created! Check your email and click the verification link to activate your account.');
     onRegisterComplete();
   };
 
