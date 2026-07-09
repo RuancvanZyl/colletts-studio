@@ -30,6 +30,7 @@ export function LoginScreen({
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
   const [mkOpen, setMkOpen] = useState(false);
   const [mkPin, setMkPin] = useState('');
   const [mkError, setMkError] = useState(false);
@@ -204,9 +205,31 @@ export function LoginScreen({
               {submitting ? 'Signing in…' : 'SIGN IN'}
             </button>
 
+            {/* Forgot Password */}
+            <p className="text-center text-xs text-[#7AADB8]">
+              {forgotSent ? (
+                <span className="text-green-400">Reset email sent — check your inbox</span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!email) { toast.error('Enter your email first'); return; }
+                    await supabase.auth.resetPasswordForEmail(email, {
+                      redirectTo: `${window.location.origin}/reset-password`,
+                    });
+                    setForgotSent(true);
+                    toast.success('Password reset email sent!');
+                  }}
+                  className="text-[#3AAECC] hover:underline"
+                >
+                  Forgot password?
+                </button>
+              )}
+            </p>
+
             {/* Register Link */}
             {onRegister && (
-              <p className="text-center text-xs text-[#7AADB8] pt-2">
+              <p className="text-center text-xs text-[#7AADB8]">
                 Don't have an account?{' '}
                 <button type="button" onClick={onRegister} className="text-[#3AAECC] hover:underline font-medium">
                   Register here
