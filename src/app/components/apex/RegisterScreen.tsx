@@ -4,11 +4,10 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Card } from '../ui/card';
 import { Checkbox } from '../ui/checkbox';
-import { ArrowLeft, Compass, User, Package, Upload, Loader2 } from 'lucide-react';
+import { ArrowLeft, Compass, User, Package, Upload, Loader2, Mail } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 import { toast } from 'sonner';
 import { supabase } from '../../../lib/supabase';
-import { createClientRecord } from '../../../lib/hooks/useHunterSelfService';
 
 interface RegisterScreenProps {
   onBack: () => void;
@@ -35,6 +34,7 @@ export function RegisterScreen({
   const [clientType, setClientType] = useState<'local' | 'export'>('export');
   const { theme } = useTheme();
   const [submitting, setSubmitting] = useState(false);
+  const [registered, setRegistered] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,19 +76,12 @@ export function RegisterScreen({
       return;
     }
 
-    // Create client record for hunters
-    if (portalType === 'hunter' && authData.user) {
-      await createClientRecord(
-        authData.user.id,
-        fullName,
-        formData.email,
-        formData.phone,
-        clientType,
-      );
-    }
+    // Client record for hunters is created lazily by useHunterClient when they
+    // first open the portal — we cannot insert here because there is no auth
+    // session yet (email confirmation is required first).
 
-    // Create staff profile for taxidermy registrations
-    if (portalType === 'taxidermy' && authData.user) {
+    // Create staff profile for taxidermy registrations — only if session exists
+    if (portalType === 'taxidermy' && authData.user && authData.session) {
       await (supabase as any).from('staff_profiles').insert({
         id: authData.user.id,
         full_name: fullName,
@@ -97,21 +90,7 @@ export function RegisterScreen({
       }).onConflict('id').ignore();
     }
 
-    // Fire welcome email — fire-and-forget, never blocks registration
-    fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-client-welcome`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify({
-        email: formData.email,
-        name: `${formData.firstName} ${formData.lastName}`.trim(),
-      }),
-    }).catch(() => {});
-
-    toast.success('Account created! Check your email and click the verification link to activate your account.');
-    onRegisterComplete();
+    setRegistered(true);
   };
 
   const getPortalConfig = () => {
@@ -151,6 +130,41 @@ export function RegisterScreen({
 
   const config = getPortalConfig();
   const PortalIcon = config.icon;
+
+  // ── Email confirmation screen ──────────────────────────────────────────────
+  if (registered) {
+    return (
+      <div className="min-h-screen bg-[#080C0C] flex items-center justify-center p-4">
+        <div className="w-full max-w-sm text-center space-y-6">
+          <div className="w-20 h-20 bg-[#0F2A20] border border-[rgba(58,174,204,0.3)] rounded-full flex items-center justify-center mx-auto">
+            <Mail className="w-10 h-10 text-[#3AAECC]" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-white tracking-widest mb-2">CHECK YOUR EMAIL</h1>
+            <p className="text-[#7AADB8] text-sm leading-relaxed">
+              We sent a verification link to <span className="text-white font-medium">{formData.email}</span>
+            </p>
+            <p className="text-[#7AADB8] text-sm mt-3 leading-relaxed">
+              Click the link in that email to activate your account and access the {portalType} portal.
+            </p>
+          </div>
+          <div className="bg-[#0F1A1C] border border-[rgba(58,174,204,0.15)] rounded-xl p-4 text-left space-y-2">
+            <p className="text-xs text-[#7AADB8] font-medium uppercase tracking-wider">What to do next</p>
+            <ol className="text-sm text-[#EDF6F9] space-y-1.5 list-none">
+              <li className="flex gap-2"><span className="text-[#3AAECC] font-bold">1.</span> Open your email inbox</li>
+              <li className="flex gap-2"><span className="text-[#3AAECC] font-bold">2.</span> Find the email from Apex Trophy Solutions</li>
+              <li className="flex gap-2"><span className="text-[#3AAECC] font-bold">3.</span> Click <strong>"Confirm your email"</strong></li>
+              <li className="flex gap-2"><span className="text-[#3AAECC] font-bold">4.</span> You will be taken straight to your portal</li>
+            </ol>
+          </div>
+          <p className="text-xs text-[#4a6a75]">
+            Didn't receive it? Check your spam folder or{' '}
+            <button onClick={onBack} className="text-[#3AAECC] hover:underline">go back and try again</button>.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`min-h-screen bg-gradient-to-br ${config.bgGradient} flex items-center justify-center p-4 relative overflow-hidden`}>
