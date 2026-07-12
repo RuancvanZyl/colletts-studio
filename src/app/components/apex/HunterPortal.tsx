@@ -211,10 +211,8 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
 
 
       {/* Content */}
-      <main className="px-4 py-6 pb-24 md:pb-6 md:ml-64">
-        <div className="max-w-5xl mx-auto">
-          {renderView()}
-        </div>
+      <main className="md:ml-64 px-4 py-6 pb-24 md:pb-6 min-w-0 overflow-x-hidden">
+        {renderView()}
       </main>
 
       {/* Mobile Bottom Navigation */}
