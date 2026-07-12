@@ -211,8 +211,10 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
 
 
       {/* Content */}
-      <main className="container mx-auto px-4 py-6 pb-24 md:pb-6">
-        {renderView()}
+      <main className="px-4 py-6 pb-24 md:pb-6 md:ml-64">
+        <div className="max-w-5xl mx-auto">
+          {renderView()}
+        </div>
       </main>
 
       {/* Mobile Bottom Navigation */}
@@ -333,14 +335,6 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
         </div>
       </nav>
 
-      {/* Desktop Content Offset */}
-      <style>{`
-        @media (min-width: 768px) {
-          main {
-            margin-left: 16rem;
-          }
-        }
-      `}</style>
 
       {/* Universal AI Assistant */}
       <UniversalAIAssistant />
