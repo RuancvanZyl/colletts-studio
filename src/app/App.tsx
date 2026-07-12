@@ -24,7 +24,16 @@ function AppInner() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   void profile; // used in useEffect below
   const [currentView, setCurrentView] = useState<AppView>('landing');
-  const [selectedPortal, setSelectedPortal] = useState<PortalType | null>(null);
+  const [selectedPortal, setSelectedPortal] = useState<PortalType | null>(
+    () => (localStorage.getItem('apex_portal') as PortalType | null)
+  );
+
+  // Persist portal selection so refresh sends user back to the right portal
+  const setPortalAndPersist = useCallback((portal: PortalType | null) => {
+    if (portal) localStorage.setItem('apex_portal', portal);
+    else localStorage.removeItem('apex_portal');
+    setSelectedPortal(portal);
+  }, []);
 
   // Detect PASSWORD_RECOVERY event (user clicked reset link in email)
   useEffect(() => {
@@ -40,27 +49,28 @@ function AppInner() {
   useEffect(() => {
     if (user && currentView === 'landing') {
       if (profile) {
-        // Staff → taxidermy portal
-        setSelectedPortal('admin');
+        setPortalAndPersist('admin');
         setCurrentView('portal');
       } else {
-        // Hunter / outfitter — route by portal_type stored in user metadata
         const portalType = user.user_metadata?.portal_type;
         if (portalType === 'outfitter') {
-          setSelectedPortal('outfitter');
+          setPortalAndPersist('outfitter');
           setCurrentView('portal');
         } else {
-          // Default non-staff users to hunter portal
-          setSelectedPortal('hunter');
+          setPortalAndPersist('hunter');
           setCurrentView('portal');
         }
       }
     }
-  }, [user, profile, currentView]);
+    // On refresh: user is already logged in and portal is persisted → go straight to portal
+    if (user && currentView === 'landing' && selectedPortal) {
+      setCurrentView('portal');
+    }
+  }, [user, profile, currentView, selectedPortal, setPortalAndPersist]);
 
   const handleSelectPortal = (portal: 'hunter' | 'outfitter' | 'taxidermy') => {
     const mappedPortal = portal === 'taxidermy' ? 'admin' : portal;
-    setSelectedPortal(mappedPortal as PortalType);
+    setPortalAndPersist(mappedPortal as PortalType);
     setCurrentView('login');
   };
 
@@ -75,21 +85,21 @@ function AppInner() {
           .eq('auth_user_id', u.id)
           .maybeSingle();
         if (client?.client_type === 'local') {
-          setSelectedPortal('local-hunter' as any);
+          setPortalAndPersist('local-hunter' as any);
         }
       }
     }
     setCurrentView('portal');
-  }, [selectedPortal]);
+  }, [selectedPortal, setPortalAndPersist]);
 
   const handleLogout = async () => {
     await signOut();
-    setSelectedPortal(null);
+    setPortalAndPersist(null);
     setCurrentView('landing');
   };
 
   const handleBackToLanding = () => {
-    setSelectedPortal(null);
+    setPortalAndPersist(null);
     setCurrentView('landing');
   };
 
@@ -117,15 +127,15 @@ function AppInner() {
           .eq('auth_user_id', u.id)
           .maybeSingle();
         if (client?.client_type === 'local') {
-          setSelectedPortal('local-hunter' as any);
+          setPortalAndPersist('local-hunter' as any);
         }
       }
     }
     setCurrentView('portal');
-  }, [selectedPortal]);
+  }, [selectedPortal, setPortalAndPersist]);
 
   const handleGoToDashboard = () => {
-    setSelectedPortal('unified');
+    setPortalAndPersist('unified');
     setCurrentView('dashboard');
   };
 
@@ -170,7 +180,7 @@ function AppInner() {
         <ThemeProvider>
           <PortalThemeProvider portalType="unified">
             <ApexDashboard onSelectPortal={(portal) => {
-              setSelectedPortal(portal as PortalType);
+              setPortalAndPersist(portal as PortalType);
               setCurrentView('login');
             }} />
             <Toaster />
@@ -192,7 +202,7 @@ function AppInner() {
               portalType={selectedPortal === 'admin' ? 'taxidermy' : selectedPortal === 'outfitter' ? 'outfitter' : 'hunter'}
               onPortalChange={(portal) => {
                 const mappedPortal = portal === 'taxidermy' ? 'admin' : portal;
-                setSelectedPortal(mappedPortal as PortalType);
+                setPortalAndPersist(mappedPortal as PortalType);
               }}
               onRegister={handleGoToRegister}
             />
@@ -230,7 +240,7 @@ function AppInner() {
           <PortalThemeProvider 
             portalType={selectedPortal}
             onPortalChange={(type) => {
-              setSelectedPortal(type);
+              setPortalAndPersist(type);
               setCurrentView('login');
             }}
           >
