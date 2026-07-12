@@ -123,7 +123,7 @@ export function OutfitterPortal({ onLogout }: OutfitterPortalProps) {
     <div className="min-h-screen bg-gradient-to-br from-stone-100 via-green-50 to-lime-50 dark:from-stone-950 dark:via-green-950 dark:to-stone-900">
       {/* Header */}
       <header className="bg-white/90 dark:bg-stone-900/90 backdrop-blur-lg border-b border-green-200 dark:border-green-900 sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
+        <div className="px-4 py-4 md:pl-68 flex items-center justify-between">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className={`w-10 h-10 bg-gradient-to-br ${portalTheme.gradient} rounded-lg flex items-center justify-center shadow-md`}>
@@ -201,7 +201,7 @@ export function OutfitterPortal({ onLogout }: OutfitterPortalProps) {
       </header>
 
       {/* Content */}
-      <main className="container mx-auto px-4 py-6 pb-24 md:pb-6">{renderView()}</main>
+      <main className="md:ml-64 px-4 py-6 pb-24 md:pb-6 min-w-0 overflow-x-hidden">{renderView()}</main>
 
       {/* Mobile Bottom Navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-stone-900/90 backdrop-blur-lg border-t border-green-200 dark:border-green-900 z-50">

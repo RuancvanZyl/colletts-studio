@@ -38,7 +38,7 @@ import {
   LayoutDashboard, Scan, ClipboardCheck, Droplet, Skull,
   Warehouse, Scissors, Paintbrush, CheckCircle2, Package,
   List, Settings, Search, LogOut, Menu, X, Moon, Sun,
-  Users, FileText, ChevronRight, BarChart3, ClipboardList, ListTodo, FolderOpen, CreditCard, Calendar, MessageCircle,
+  Users, FileText, ChevronRight, ChevronLeft, BarChart3, ClipboardList, ListTodo, FolderOpen, CreditCard, Calendar, MessageCircle,
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 
@@ -327,7 +327,13 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
 
           {/* Breadcrumb */}
           <div className="hidden sm:flex items-center gap-1 text-sm text-[#7AADB8]">
-            <span>Workshop</span>
+            <button
+              onClick={() => navigate('tasks')}
+              className="hover:text-[#EDF6F9] transition-colors flex items-center gap-1"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              Workshop
+            </button>
             <ChevronRight className="w-3.5 h-3.5" />
             <span className="text-[#EDF6F9] font-medium capitalize">
               {currentView.replace(/-/g, ' ')}

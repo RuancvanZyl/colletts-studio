@@ -3,12 +3,14 @@ import { supabase } from '../../../lib/supabase';
 import { toast } from 'sonner';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
+import { ArrowLeft } from 'lucide-react';
 
 interface ResetPasswordScreenProps {
   onDone: () => void;
+  onBack?: () => void;
 }
 
-export function ResetPasswordScreen({ onDone }: ResetPasswordScreenProps) {
+export function ResetPasswordScreen({ onDone, onBack }: ResetPasswordScreenProps) {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -67,6 +69,16 @@ export function ResetPasswordScreen({ onDone }: ResetPasswordScreenProps) {
             </button>
           </form>
         </div>
+
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1.5 text-[#7AADB8] hover:text-[#EDF6F9] text-sm transition-colors mx-auto"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to login
+          </button>
+        )}
       </div>
     </div>
   );

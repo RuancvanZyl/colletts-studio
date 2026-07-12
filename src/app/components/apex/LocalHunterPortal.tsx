@@ -39,7 +39,7 @@ export function LocalHunterPortal({ onLogout }: LocalHunterPortalProps) {
 
       {/* Header */}
       <header className="bg-white/90 dark:bg-stone-900/90 backdrop-blur-lg border-b border-amber-200 dark:border-amber-900 sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="px-4 py-4 flex items-center justify-between md:pl-60">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-gradient-to-br from-amber-700 to-amber-500 rounded-lg flex items-center justify-center shadow-md">
               <Package className="w-5 h-5 text-white" />
@@ -61,7 +61,7 @@ export function LocalHunterPortal({ onLogout }: LocalHunterPortalProps) {
       </header>
 
       {/* Content */}
-      <main className="container mx-auto px-4 py-6 pb-24 md:pb-6 md:ml-56">
+      <main className="md:ml-56 px-4 py-6 pb-24 md:pb-6 min-w-0 overflow-x-hidden">
         {renderView()}
       </main>
 

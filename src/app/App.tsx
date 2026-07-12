@@ -152,7 +152,7 @@ function AppInner() {
     return (
       <ErrorBoundary>
         <ThemeProvider>
-          <ResetPasswordScreen onDone={() => setCurrentView('landing')} />
+          <ResetPasswordScreen onDone={() => setCurrentView('landing')} onBack={() => setCurrentView('landing')} />
           <Toaster />
         </ThemeProvider>
       </ErrorBoundary>
