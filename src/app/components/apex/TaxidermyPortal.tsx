@@ -32,6 +32,7 @@ import { WorkshopInstructions } from './taxidermy/WorkshopInstructions';
 import { PaymentConfirmation } from './taxidermy/PaymentConfirmation';
 import { DailyTodoList } from './taxidermy/DailyTodoList';
 import { StaffManagement } from './taxidermy/StaffManagement';
+import { HuntArchive } from './taxidermy/HuntArchive';
 import { StaffOverview } from './taxidermy/StaffOverview';
 import { NoticeBoard } from './shared/NoticeBoard';
 import { GlobalSearch } from './shared/GlobalSearch';
@@ -76,7 +77,8 @@ type TaxidermyView =
   | 'invoices'
   | 'admin'
   | 'staff-management'
-  | 'staff-overview';
+  | 'staff-overview'
+  | 'hunt-archive';
 
 interface NavItem {
   view: TaxidermyView;
@@ -225,7 +227,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     // Everyone gets their tasks + daily list + workshop instructions
     if (['daily-todo', 'tasks', 'workshop-brief'].includes(view)) return true;
     if (isBookkeeper) {
-      return ['summary', 'dashboard', 'client-inbox', 'payment-confirmation', 'invoices', 'inventory', 'clients'].includes(view);
+      return ['summary', 'dashboard', 'client-inbox', 'payment-confirmation', 'invoices', 'inventory', 'clients', 'hunt-archive'].includes(view);
     }
     // Department staff / ground staff: only stations in their departments
     const deptsNeeded = VIEW_DEPT[view];
@@ -281,6 +283,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
         { view: 'photos-admin',  icon: FileText, label: 'Photos & Dispatch' },
         { view: 'ready-to-ship', icon: Package, label: 'Ready to Ship' },
         { view: 'inventory',     icon: List,    label: 'Job Tracker' },
+        { view: 'hunt-archive',  icon: FolderOpen, label: 'Hunt Archive' },
         { view: 'clients',      icon: Users,   label: 'Clients' },
       ],
     },
@@ -341,6 +344,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'invoices':        return <InvoiceManagement />;
       case 'admin':             return <AdminConfiguration />;
       case 'staff-overview':    return <StaffOverview />;
+      case 'hunt-archive':      return <HuntArchive />;
       case 'staff-management':  return <StaffManagement />;
       default:                  return <SummarySheet onNavigate={navigate} />;
     }
