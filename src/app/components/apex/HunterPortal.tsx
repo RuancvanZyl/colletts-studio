@@ -235,9 +235,9 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
             <span className="text-xs">Trophies</span>
           </Button>
           <Button
-            variant={currentView === 'trophy-selection' ? 'default' : 'ghost'}
+            variant="ghost"
             className="flex flex-col items-center gap-1 h-auto py-2"
-            onClick={() => setCurrentView('trophy-selection')}
+            onClick={() => setFlow('create-hunt')}
           >
             <Plus className="w-5 h-5" />
             <span className="text-xs">Add</span>
@@ -294,12 +294,12 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
             My Trophies
           </Button>
           <Button
-            variant={currentView === 'trophy-selection' ? 'default' : 'ghost'}
+            variant="ghost"
             className="w-full justify-start"
-            onClick={() => setCurrentView('trophy-selection')}
+            onClick={() => setFlow('create-hunt')}
           >
             <Plus className="w-5 h-5 mr-3" />
-            Add Trophy
+            Add Trophy / Hunt
           </Button>
           <Button
             variant={currentView === 'messages' ? 'default' : 'ghost'}

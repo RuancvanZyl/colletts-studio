@@ -156,6 +156,7 @@ interface Task {
   instructions: string;
   currentDept: string;
   receivedAt: string;
+  adminNotes: string;
   stageHistory: { dept: string; completedBy: string; completedAt: string; photoPaths?: string[] }[];
 }
 
@@ -177,18 +178,33 @@ export function MyTasks() {
   const [showAlerts, setShowAlerts] = useState(true);
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
-  const myDepts = getStaffDepartments(profile?.full_name ?? '');
+  const myDepts = getStaffDepartments(profile?.full_name ?? '', profile?.department_name);
 
   const load = useCallback(async () => {
-    if (!myDepts.length) { setLoading(false); return; }
     setLoading(true);
     try {
-      const { data: docs, error } = await (supabase as any)
+      // Prefer assigned tasks; fall back to department-based tasks for unassigned jobs
+      const userId = profile?.id ?? (await (supabase as any).auth.getUser()).data?.user?.id;
+      let query = (supabase as any)
         .from('hunt_documents')
-        .select('id, hunt_id, current_department, status, form_data')
+        .select('id, hunt_id, current_department, status, form_data, assigned_to, admin_notes')
         .eq('doc_type', 'job_card')
-        .in('current_department', myDepts)
         .neq('status', 'complete');
+
+      if (userId) {
+        // Show tasks assigned directly to this staff member OR (unassigned tasks in their department)
+        const deptFilter = myDepts.length
+          ? `assigned_to.eq.${userId},and(assigned_to.is.null,current_department.in.(${myDepts.join(',')}))`
+          : `assigned_to.eq.${userId}`;
+        query = query.or(deptFilter);
+      } else if (myDepts.length) {
+        query = query.in('current_department', myDepts);
+      } else {
+        setLoading(false);
+        return;
+      }
+
+      const { data: docs, error } = await query;
 
       if (error) throw error;
 
@@ -213,6 +229,7 @@ export function MyTasks() {
           instructions:   fd.instructions ?? '',
           currentDept:    doc.current_department,
           receivedAt:     fd.received_at ?? '',
+          adminNotes:     doc.admin_notes ?? '',
           stageHistory:   fd.stage_history ?? [],
         });
       }
@@ -466,6 +483,14 @@ export function MyTasks() {
                       )}
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* Admin notes — shown prominently above client instructions */}
+              {task.adminNotes && (
+                <div className="bg-blue-950/40 border border-blue-500/40 rounded-lg px-3 py-2">
+                  <p className="text-xs font-semibold text-blue-400 mb-0.5">📋 Admin Instructions</p>
+                  <p className="text-sm text-blue-200">{task.adminNotes}</p>
                 </div>
               )}
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../../lib/supabase';
-import { getStaffDepartments } from '../../../lib/pipeline';
+import { getStaffDepartments, STALL_HOURS } from '../../../lib/pipeline';
+import { toast } from 'sonner';
 import { MyTasks } from './taxidermy/MyTasks';
 import { WorkshopDashboard } from './taxidermy/WorkshopDashboard';
 import { SummarySheet } from './taxidermy/SummarySheet';
@@ -30,6 +31,8 @@ import { ClientInbox } from './taxidermy/ClientInbox';
 import { WorkshopInstructions } from './taxidermy/WorkshopInstructions';
 import { PaymentConfirmation } from './taxidermy/PaymentConfirmation';
 import { DailyTodoList } from './taxidermy/DailyTodoList';
+import { StaffManagement } from './taxidermy/StaffManagement';
+import { StaffOverview } from './taxidermy/StaffOverview';
 import { NoticeBoard } from './shared/NoticeBoard';
 import { GlobalSearch } from './shared/GlobalSearch';
 import { useAuth } from '../../../lib/auth';
@@ -71,7 +74,9 @@ type TaxidermyView =
   | 'inventory'
   | 'clients'
   | 'invoices'
-  | 'admin';
+  | 'admin'
+  | 'staff-management'
+  | 'staff-overview';
 
 interface NavItem {
   view: TaxidermyView;
@@ -91,6 +96,7 @@ interface TaxidermyPortalProps {
 
 export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
   const [currentView, setCurrentView] = useState<TaxidermyView>('tasks');
+  const [landed, setLanded] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [navClientId, setNavClientId] = useState<string | undefined>(undefined);
@@ -101,7 +107,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
   // Live task count badge for the sidebar
   useEffect(() => {
     if (!profile?.full_name) return;
-    const depts = getStaffDepartments(profile.full_name);
+    const depts = getStaffDepartments(profile.full_name, profile.department_name);
     if (!depts.length) return;
     (supabase as any)
       .from('hunt_documents')
@@ -111,6 +117,68 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       .neq('status', 'complete')
       .then(({ count }: { count: number | null }) => setMyTaskCount(count ?? 0));
   }, [profile?.full_name]);
+
+  // Role-based landing page: admins land on Summary, bookkeepers on Payments,
+  // everyone else on My Tasks
+  useEffect(() => {
+    if (!profile?.role || landed) return;
+    setLanded(true);
+    if (['admin', 'studio_manager'].includes(profile.role)) setCurrentView('summary');
+    else if (profile.role === 'bookkeeper') setCurrentView('payment-confirmation');
+    else setCurrentView('tasks');
+  }, [profile?.role, landed]);
+
+  // Login alerts — once per session, tell the staff member what's waiting for them
+  useEffect(() => {
+    if (!profile?.id) return;
+    const alertKey = `apex_login_alert_${profile.id}`;
+    if (sessionStorage.getItem(alertKey)) return;
+    sessionStorage.setItem(alertKey, '1');
+
+    (async () => {
+      const depts = getStaffDepartments(profile.full_name ?? '', profile.department_name);
+      const isAdminRole = ['admin', 'studio_manager'].includes(profile.role ?? '');
+
+      // Tasks assigned directly to this staff member or unassigned in their departments
+      let query = (supabase as any)
+        .from('hunt_documents')
+        .select('id, current_department, last_moved_at, assigned_to, admin_notes')
+        .eq('doc_type', 'job_card')
+        .eq('status', 'in_progress');
+
+      if (!isAdminRole) {
+        query = depts.length
+          ? query.or(`assigned_to.eq.${profile.id},and(assigned_to.is.null,current_department.in.(${depts.join(',')}))`)
+          : query.eq('assigned_to', profile.id);
+      }
+
+      const { data: docs } = await query;
+      const myDocs: any[] = docs ?? [];
+      if (myDocs.length === 0) {
+        toast.success(`Welcome back, ${profile.full_name?.split(' ')[0]}! No open tasks right now.`);
+        return;
+      }
+
+      const now = Date.now();
+      const stalled = myDocs.filter(d => {
+        if (!d.last_moved_at) return false;
+        const hrs = (now - new Date(d.last_moved_at).getTime()) / 3_600_000;
+        return hrs > (STALL_HOURS[d.current_department] ?? 72) * 2;
+      }).length;
+      const withNotes = myDocs.filter(d => d.admin_notes).length;
+
+      toast.info(
+        `Welcome back, ${profile.full_name?.split(' ')[0]}! ${myDocs.length} task${myDocs.length !== 1 ? 's' : ''} waiting${isAdminRole ? ' in the workshop' : ' for you'}.`,
+        { duration: 6000 }
+      );
+      if (stalled > 0) {
+        toast.error(`⚠ ${stalled} task${stalled !== 1 ? 's are' : ' is'} critically overdue — please prioritise.`, { duration: 8000 });
+      }
+      if (withNotes > 0 && !isAdminRole) {
+        toast.warning(`📋 ${withNotes} task${withNotes !== 1 ? 's have' : ' has'} admin instructions attached.`, { duration: 8000 });
+      }
+    })();
+  }, [profile?.id]);
 
   const navigate = (view: string, clientId?: string) => {
     setCurrentView(view as TaxidermyView);
@@ -122,6 +190,48 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
   const isAdmin      = role === 'admin' || role === 'studio_manager';
   const isBookkeeper = role === 'bookkeeper';
   const canSeeBusiness = isAdmin || isBookkeeper;
+
+  // ── Role tiers ────────────────────────────────────────────────────────────
+  // admin / studio_manager : everything
+  // bookkeeper             : overview + business (no processing stations)
+  // ground_staff           : intake + their departments
+  // department_staff       : only their own department stations + tasks
+  const myDepts = getStaffDepartments(profile?.full_name ?? '', profile?.department_name);
+
+  // Which departments unlock which station views
+  const VIEW_DEPT: Record<string, string[]> = {
+    'scan':             ['receiving'],
+    'arrival':          ['receiving'],
+    'receiving':        ['receiving'],
+    'quick-entry':      ['receiving'],
+    'dropbox-import':   ['receiving'],
+    'skinning':         ['skinning'],
+    'salting':          ['salting'],
+    'tannery':          ['tannery'],
+    'skin-processing':  ['cleaning_bleach'],
+    'skull-processing': ['cleaning_bleach'],
+    'dip-pack':         ['dip_pack'],
+    'storage':          ['storage'],
+    'mounting':         ['mounting'],
+    'finishing':        ['finishing'],
+    'quality':          ['quality_check'],
+    'packing':          ['packing'],
+    'photos-admin':     ['photos'],
+    'ready-to-ship':    ['packing', 'administration'],
+  };
+
+  const canSeeView = (view: TaxidermyView): boolean => {
+    if (isAdmin) return true;
+    // Everyone gets their tasks + daily list + workshop instructions
+    if (['daily-todo', 'tasks', 'workshop-brief'].includes(view)) return true;
+    if (isBookkeeper) {
+      return ['summary', 'dashboard', 'client-inbox', 'payment-confirmation', 'invoices', 'inventory', 'clients'].includes(view);
+    }
+    // Department staff / ground staff: only stations in their departments
+    const deptsNeeded = VIEW_DEPT[view];
+    if (deptsNeeded) return deptsNeeded.some(d => myDepts.includes(d));
+    return false; // summary, dashboard, job tracker, clients, business, staff — admin/bookkeeper only
+  };
 
   const allNavGroups: (NavGroup & { roles?: string[] })[] = [
     {
@@ -183,11 +293,23 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
         ...(isAdmin ? [{ view: 'admin' as TaxidermyView, icon: Settings, label: 'Admin' }] : []),
       ],
     }] : []),
+    ...(isAdmin ? [{
+      heading: 'Staff',
+      items: [
+        { view: 'staff-overview' as TaxidermyView,    icon: Users,    label: 'Staff Overview' },
+        { view: 'staff-management' as TaxidermyView,  icon: Settings, label: 'Manage Staff' },
+      ],
+    }] : []),
   ];
 
-  const navGroups = allNavGroups;
+  // Filter every group's items by role tier; drop empty groups
+  const navGroups = allNavGroups
+    .map(g => ({ ...g, items: g.items.filter(i => canSeeView(i.view)) }))
+    .filter(g => g.items.length > 0);
 
   const renderView = () => {
+    // Enforce role tier — even if a view is reached programmatically
+    if (!canSeeView(currentView)) return <MyTasks />;
     switch (currentView) {
       case 'daily-todo':      return <DailyTodoList onNavigateDept={navigate} />;
       case 'tasks':           return <MyTasks />;
@@ -217,8 +339,10 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'inventory':              return <JobTracker />;
       case 'clients':         return <ClientManagement initialClientId={navClientId} />;
       case 'invoices':        return <InvoiceManagement />;
-      case 'admin':           return <AdminConfiguration />;
-      default:                return <SummarySheet onNavigate={navigate} />;
+      case 'admin':             return <AdminConfiguration />;
+      case 'staff-overview':    return <StaffOverview />;
+      case 'staff-management':  return <StaffManagement />;
+      default:                  return <SummarySheet onNavigate={navigate} />;
     }
   };
 

@@ -19,9 +19,9 @@ interface LoginScreenProps {
   onRegister?: () => void;
 }
 
-export function LoginScreen({ 
-  onLogin, 
-  onBack, 
+export function LoginScreen({
+  onLogin,
+  onBack,
   portalType = 'hunter',
   onPortalChange,
   onRegister
@@ -35,6 +35,11 @@ export function LoginScreen({
   const [mkPin, setMkPin] = useState('');
   const [mkError, setMkError] = useState(false);
   const mkInputRef = useRef<HTMLInputElement>(null);
+  const emailInputRef = useRef<HTMLInputElement>(null);
+
+  // For taxidermy portal: PIN must be verified before staff can log in
+  const isStaffPortal = portalType === 'taxidermy' || portalType === 'admin';
+  const [pinVerified, setPinVerified] = useState(false);
 
   const handleMasterKey = () => {
     setMkOpen(true);
@@ -45,21 +50,16 @@ export function LoginScreen({
 
   const submitMasterKey = async () => {
     const correctPin = import.meta.env.VITE_MASTER_PIN;
-    const masterEmail = import.meta.env.VITE_MASTER_EMAIL;
-    const masterPassword = import.meta.env.VITE_MASTER_PASSWORD;
 
     if (mkPin === correctPin) {
-      // Sign in with master account so RLS passes and real data loads
-      if (masterEmail && masterPassword) {
-        const { error } = await supabase.auth.signInWithPassword({ email: masterEmail, password: masterPassword });
-        if (error) {
-          console.error('Master key auth error:', error.message);
-        }
-      }
       setMkOpen(false);
-      // Small delay to let Supabase session propagate before loading data
-      await new Promise(r => setTimeout(r, 300));
-      onLogin();
+      if (isStaffPortal) {
+        // PIN verified — now show individual staff login form
+        setPinVerified(true);
+        setTimeout(() => emailInputRef.current?.focus(), 100);
+      } else {
+        onLogin();
+      }
     } else {
       setMkError(true);
       setMkPin('');
@@ -126,6 +126,49 @@ export function LoginScreen({
   const config = getPortalConfig();
   const PortalIcon = config.icon;
 
+  // Staff portal: show PIN gate first, then individual login
+  if (isStaffPortal && !pinVerified) {
+    return (
+      <div className="min-h-screen bg-[#080C0C] flex items-center justify-center p-4 relative overflow-hidden">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-[#3AAECC]/5 rounded-full blur-[120px] pointer-events-none" />
+        <div className="relative z-10 w-full max-w-sm space-y-8">
+          <div className="text-center">
+            <img src="/apex-logo.png" alt="Apex Trophy Solutions" className="w-24 h-24 object-contain mx-auto mb-5 drop-shadow-[0_0_30px_rgba(58,174,204,0.3)]" />
+            <h1 className="text-xl font-bold tracking-[0.25em] text-white mb-1">STAFF ACCESS</h1>
+            <p className="text-[#3AAECC] text-xs tracking-[0.3em] uppercase">Taxidermy Workshop</p>
+            <p className="text-[#7AADB8] text-sm mt-3">Enter your workshop PIN to continue</p>
+          </div>
+          <div className="bg-[#0F1A1C] border border-[rgba(58,174,204,0.2)] rounded-2xl p-7 shadow-2xl space-y-5">
+            <input
+              ref={mkInputRef}
+              type="password"
+              inputMode="numeric"
+              maxLength={4}
+              value={mkPin}
+              onChange={e => { setMkPin(e.target.value.replace(/\D/g, '')); setMkError(false); }}
+              onKeyDown={e => { if (e.key === 'Enter') submitMasterKey(); }}
+              placeholder="• • • •"
+              className={`w-full text-center text-3xl tracking-[0.8em] border-2 rounded-xl px-4 py-4 bg-[#142028] text-white outline-none transition-colors ${
+                mkError ? 'border-red-500' : 'border-[rgba(58,174,204,0.3)] focus:border-[#3AAECC]'
+              }`}
+              autoFocus
+            />
+            {mkError && <p className="text-center text-xs text-red-400 font-medium">Incorrect PIN — access denied</p>}
+            <button
+              onClick={submitMasterKey}
+              className="w-full h-11 rounded-lg bg-[#3AAECC] hover:bg-[#2E9EB8] text-[#080C0C] font-bold text-sm tracking-wider transition-all shadow-[0_0_20px_rgba(58,174,204,0.3)]"
+            >
+              ENTER WORKSHOP
+            </button>
+          </div>
+          <button onClick={onBack} className="flex items-center gap-1.5 text-[#7AADB8] hover:text-[#EDF6F9] text-sm transition-colors mx-auto">
+            <ArrowLeft className="w-4 h-4" /> Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#080C0C] flex items-center justify-center p-4 relative overflow-hidden">
 
@@ -144,15 +187,17 @@ export function LoginScreen({
           />
           <h1 className="text-2xl font-bold tracking-[0.25em] text-white mb-1">APEX</h1>
           <p className="text-[#3AAECC] text-xs tracking-[0.3em] uppercase">Trophy Solutions</p>
-          <p className="text-[#7AADB8] text-sm mt-3">Sign in to your workspace</p>
+          <p className="text-[#7AADB8] text-sm mt-3">
+            {isStaffPortal ? 'Sign in with your staff account' : 'Sign in to your workspace'}
+          </p>
         </div>
 
         {/* Login Card */}
         <div className="bg-[#0F1A1C] border border-[rgba(58,174,204,0.2)] rounded-2xl p-7 shadow-2xl wildtrack-animate-slide wildtrack-animate-delay-1">
           <form onSubmit={handleSubmit} className="space-y-5">
 
-            {/* Portal Selector */}
-            {onPortalChange && (
+            {/* Portal Selector — hide for staff (already PIN-gated) */}
+            {onPortalChange && !isStaffPortal && (
               <div className="space-y-1.5">
                 <Label className="text-[#7AADB8] text-xs uppercase tracking-wider">Portal</Label>
                 <Select value={portalType} onValueChange={(value) => onPortalChange(value as any)}>
@@ -168,16 +213,25 @@ export function LoginScreen({
               </div>
             )}
 
+            {/* Staff badge */}
+            {isStaffPortal && (
+              <div className="flex items-center gap-2 bg-[#3AAECC]/10 border border-[#3AAECC]/20 rounded-lg px-3 py-2">
+                <Package className="w-4 h-4 text-[#3AAECC]" />
+                <span className="text-xs text-[#3AAECC] font-medium tracking-wide">WORKSHOP STAFF LOGIN</span>
+              </div>
+            )}
+
             {/* Email */}
             <div className="space-y-1.5">
               <Label className="text-[#7AADB8] text-xs uppercase tracking-wider">Email</Label>
-              <Input
+              <input
+                ref={emailInputRef}
                 id="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="your@email.com"
-                className="h-11 bg-[#142028] border-[rgba(58,174,204,0.2)] text-[#EDF6F9] placeholder:text-[#4a7a8a] focus:border-[#3AAECC]"
+                className="h-11 w-full rounded-lg border bg-[#142028] border-[rgba(58,174,204,0.2)] text-[#EDF6F9] placeholder:text-[#4a7a8a] focus:border-[#3AAECC] focus:outline-none px-3 text-sm"
                 required
               />
             </div>
@@ -227,8 +281,8 @@ export function LoginScreen({
               )}
             </p>
 
-            {/* Register Link */}
-            {onRegister && (
+            {/* Register Link — hunters only */}
+            {onRegister && !isStaffPortal && (
               <p className="text-center text-xs text-[#7AADB8]">
                 Don't have an account?{' '}
                 <button type="button" onClick={onRegister} className="text-[#3AAECC] hover:underline font-medium">
@@ -241,22 +295,27 @@ export function LoginScreen({
 
         {/* Back + footer */}
         <div className="flex items-center justify-between">
-          <button onClick={onBack} className="flex items-center gap-1.5 text-[#7AADB8] hover:text-[#EDF6F9] text-sm transition-colors">
+          <button
+            onClick={isStaffPortal ? () => setPinVerified(false) : onBack}
+            className="flex items-center gap-1.5 text-[#7AADB8] hover:text-[#EDF6F9] text-sm transition-colors"
+          >
             <ArrowLeft className="w-4 h-4" />
-            Back
+            {isStaffPortal ? 'Back to PIN' : 'Back'}
           </button>
           <p className="text-[#4a6a75] text-xs">
             Secure authentication
-            <span
-              onClick={handleMasterKey}
-              className="ml-1 inline-block w-1 h-1 rounded-full bg-transparent cursor-default select-none"
-              aria-hidden="true"
-            />
+            {!isStaffPortal && (
+              <span
+                onClick={handleMasterKey}
+                className="ml-1 inline-block w-1 h-1 rounded-full bg-transparent cursor-default select-none"
+                aria-hidden="true"
+              />
+            )}
           </p>
         </div>
 
-        {/* PIN modal */}
-        {mkOpen && (
+        {/* PIN modal — hidden admin override for non-staff portals */}
+        {mkOpen && !isStaffPortal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
             <div className="bg-[#0F1A1C] border border-[rgba(58,174,204,0.25)] rounded-2xl shadow-2xl p-8 w-80 space-y-5">
               <div className="text-center">
@@ -279,16 +338,10 @@ export function LoginScreen({
               />
               {mkError && <p className="text-center text-xs text-red-400 font-medium">Incorrect PIN — access denied</p>}
               <div className="flex gap-3">
-                <button
-                  onClick={() => setMkOpen(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-[rgba(58,174,204,0.2)] text-sm text-[#7AADB8] hover:bg-[rgba(58,174,204,0.07)] transition-colors"
-                >
+                <button onClick={() => setMkOpen(false)} className="flex-1 py-2.5 rounded-xl border border-[rgba(58,174,204,0.2)] text-sm text-[#7AADB8] hover:bg-[rgba(58,174,204,0.07)] transition-colors">
                   Cancel
                 </button>
-                <button
-                  onClick={submitMasterKey}
-                  className="flex-1 py-2.5 rounded-xl bg-[#3AAECC] hover:bg-[#2E9EB8] text-[#080C0C] text-sm font-bold transition-colors"
-                >
+                <button onClick={submitMasterKey} className="flex-1 py-2.5 rounded-xl bg-[#3AAECC] hover:bg-[#2E9EB8] text-[#080C0C] text-sm font-bold transition-colors">
                   Unlock
                 </button>
               </div>

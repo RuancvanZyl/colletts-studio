@@ -9,6 +9,7 @@ import {
 import { useWorkshopStats } from '../../../../lib/hooks/useWorkshopStats';
 import { useHuntDashboard } from '../../../../lib/hooks/useHuntDashboard';
 import { useFloorTime } from '../../../../lib/hooks/useFloorTime';
+import { useAttentionItems } from '../../../../lib/hooks/useAttentionItems';
 import { DEPT_COLORS } from '../../../../lib/pipeline';
 
 interface SummarySheetProps {
@@ -29,6 +30,14 @@ export function SummarySheet({ onNavigate }: SummarySheetProps) {
   const { stats, loading, refresh } = useWorkshopStats();
   const { stats: huntStats, loading: huntLoading } = useHuntDashboard();
   const { data: floorTime, loading: floorLoading } = useFloorTime();
+  const { items: attention } = useAttentionItems();
+
+  const attentionCards = [
+    { count: attention?.newHunterSubmissions ?? 0, label: 'new hunter submission',  plural: 'new hunter submissions',  action: 'Review in Job Tracker',    view: 'inventory',       color: '#8b5cf6' },
+    { count: attention?.unassignedActive ?? 0,     label: 'unassigned active job',  plural: 'unassigned active jobs',  action: 'Assign in Staff Overview', view: 'staff-overview',  color: '#f59e0b' },
+    { count: attention?.unreadMessages ?? 0,       label: 'unread client message',  plural: 'unread client messages',  action: 'Open Client Messages',     view: 'client-inbox',    color: '#0073ea' },
+    { count: attention?.stalledRed ?? 0,           label: 'critically stalled job', plural: 'critically stalled jobs', action: 'View Daily Tasks',         view: 'daily-todo',      color: '#ef4444' },
+  ].filter(c => c.count > 0);
 
   const kpiCards = [
     { label: 'Active Job Cards',    value: stats?.totalActive        ?? 0, icon: TrendingUp,  color: '#0073ea' },
@@ -51,6 +60,33 @@ export function SummarySheet({ onNavigate }: SummarySheetProps) {
           <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />Refresh
         </Button>
       </div>
+
+      {/* Needs Attention */}
+      {attentionCards.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Needs Attention</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {attentionCards.map(c => (
+              <button
+                key={c.label}
+                onClick={() => onNavigate(c.view)}
+                className="flex items-center gap-3 p-3 rounded-xl border-2 text-left hover:shadow-md transition-all bg-white dark:bg-[#1c2b3a]"
+                style={{ borderColor: c.color + '60' }}
+              >
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: c.color + '20' }}>
+                  <AlertTriangle className="w-4 h-4" style={{ color: c.color }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    {c.count} {c.count === 1 ? c.label : c.plural}
+                  </p>
+                  <p className="text-xs" style={{ color: c.color }}>{c.action} →</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* KPI row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

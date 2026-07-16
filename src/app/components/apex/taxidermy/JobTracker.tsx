@@ -174,7 +174,7 @@ export function JobTracker() {
   const [hunts,    setHunts]   = useState<HuntRow[]>([]);
   const [loading,  setLoading] = useState(true);
   const [search,   setSearch]  = useState('');
-  const [filter,   setFilter]  = useState<StatusFilter>('active');
+  const [filter,   setFilter]  = useState<StatusFilter>('all');
   const [yearFilter, setYearFilter] = useState<string>('all');
 
   useEffect(() => { load(); }, []);

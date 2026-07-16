@@ -83,7 +83,7 @@ function TodoRow({ job, level, onAdvance }: {
 
 export function DailyTodoList({ onNavigateDept }: { onNavigateDept?: (dept: string) => void }) {
   const { profile } = useAuth();
-  const depts = getStaffDepartments(profile?.full_name ?? '');
+  const depts = getStaffDepartments(profile?.full_name ?? '', profile?.department_name);
   const { jobs, loading, load } = useDeptJobs(depts.length > 0 ? depts : ['receiving']);
 
   const red    = jobs.filter(j => stallLevel(j.currentDept, j.lastMovedAt) === 'red');

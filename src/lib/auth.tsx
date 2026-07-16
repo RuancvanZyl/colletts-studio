@@ -13,6 +13,7 @@ interface StaffProfile {
   full_name: string;
   role: StaffRole;
   department_id: string | null;
+  department_name?: string | null;
   is_active: boolean;
 }
 
@@ -35,12 +36,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false);
 
   async function loadProfile(userId: string) {
-    const { data } = await supabase
+    const { data } = await (supabase as any)
       .from('staff_profiles')
-      .select('*')
+      .select('*, departments(name)')
       .eq('id', userId)
       .single();
-    setProfile(data ?? null);
+    if (data) {
+      setProfile({ ...data, department_name: data.departments?.name ?? null });
+    } else {
+      setProfile(null);
+    }
   }
 
   useEffect(() => {

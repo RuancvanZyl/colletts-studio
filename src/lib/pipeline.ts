@@ -65,10 +65,27 @@ export const STAFF_DEPARTMENTS: Record<string, string[]> = {
   'Cecilia': ['administration'],
 };
 
-export function getStaffDepartments(fullName: string): string[] {
-  // Match by first name or full name
+// Maps DB `departments.name` values to pipeline stage keys
+const DB_DEPT_TO_STAGES: Record<string, string[]> = {
+  'Receiving':          ['receiving'],
+  'Skin Processing':    ['skinning', 'salting', 'cleaning_bleach', 'dip_pack'],
+  'Skull Processing':   ['cleaning_bleach'],
+  'Storage':            ['storage'],
+  'Tannery':            ['tannery'],
+  'Mounting':           ['mounting'],
+  'Finishing':          ['finishing'],
+  'Quality Control':    ['quality_check', 'photos'],
+  'Packing & Shipping': ['packing', 'administration'],
+};
+
+export function getStaffDepartments(fullName: string, departmentName?: string | null): string[] {
+  // 1. Hardcoded map by name (legacy staff)
   const firstName = fullName.split(' ')[0];
-  return STAFF_DEPARTMENTS[fullName] ?? STAFF_DEPARTMENTS[firstName] ?? [];
+  const fromName = STAFF_DEPARTMENTS[fullName] ?? STAFF_DEPARTMENTS[firstName];
+  if (fromName) return fromName;
+  // 2. Fall back to the department assigned on their staff profile
+  if (departmentName && DB_DEPT_TO_STAGES[departmentName]) return DB_DEPT_TO_STAGES[departmentName];
+  return [];
 }
 
 export const DEPT_LABELS: Record<string, string> = {

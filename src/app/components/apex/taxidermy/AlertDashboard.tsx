@@ -61,7 +61,7 @@ export function AlertDashboard({ onNavigate }: { onNavigate?: (view: string) => 
   const [loading,   setLoading]   = useState(true);
   const [resolving, setResolving] = useState<string | null>(null);
 
-  const myDepts = profile?.full_name ? getStaffDepartments(profile.full_name) : [];
+  const myDepts = profile?.full_name ? getStaffDepartments(profile.full_name, profile.department_name) : [];
 
   useEffect(() => { load(); }, [profile?.full_name]);
 
