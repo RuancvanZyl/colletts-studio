@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "race:pull": "node scripts/sync-race-data.mjs pull",
+    "race:push": "node scripts/sync-race-data.mjs push"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -23,6 +25,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.12",
+    "pg": "^8.13.1",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.7.0",

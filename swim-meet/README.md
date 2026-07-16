@@ -90,8 +90,29 @@ Recommended race-day station layout:
 - **1 device** at registration/chip pickup → `/admin/events/:eventId/chips`
 - **1+ devices** at the funnel entrance → `/timing/:categoryId/staging`
 - **1 device** with the starter → `/timing/:categoryId/start`
-- **1+ devices** at the finish chute → `/timing/:categoryId/finish`
+- **2-3 devices** at the finish chute → `/timing/:categoryId/finish` (see below)
 - **Optional big screen** on the public results board → `/events/:eventId/results`
+
+### Affordable option for large fields (150+ finishers)
+
+A single fixed RFID antenna array at the finish (the setup professional
+timing companies use) costs several thousand rand in reader + antenna
+hardware alone. The cheaper alternative that needs **zero extra software**:
+run **2-3 handheld Bluetooth/USB UHF RFID readers** (keyboard-wedge mode,
+roughly R1,000-2,500 each) with a volunteer on each, spread across a
+slightly widened finish chute. Each just opens the Finish Scan page on
+their own phone/tablet — scans from every station merge into one shared
+result set automatically, since they're keyed by race session, not device.
+This comfortably handles normal open-water finishes, where swimmers spread
+out over the course rather than arriving in one instant; it can lag behind
+a truly simultaneous mass finish, which only a fixed antenna array fully
+solves — you can add one later without changing any code.
+
+### Offline / no-signal venues
+
+See [`docs/RACE_DAY_OFFLINE_MODE.md`](./docs/RACE_DAY_OFFLINE_MODE.md) for
+running the whole platform locally at a venue with no internet, and syncing
+results to the cloud project afterward.
 
 ## What's not built yet
 
