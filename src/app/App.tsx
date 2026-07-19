@@ -153,7 +153,7 @@ function AppInner() {
       <ErrorBoundary>
         <ThemeProvider>
           <ResetPasswordScreen onDone={() => setCurrentView('landing')} onBack={() => setCurrentView('landing')} />
-          <Toaster />
+          <Toaster closeButton toastOptions={{ duration: 9000 }} />
         </ThemeProvider>
       </ErrorBoundary>
     );
@@ -166,7 +166,7 @@ function AppInner() {
         <ThemeProvider>
           <PortalThemeProvider portalType="unified">
             <LandingPage onSelectPortal={handleSelectPortal} />
-            <Toaster />
+            <Toaster closeButton toastOptions={{ duration: 9000 }} />
           </PortalThemeProvider>
         </ThemeProvider>
       </ErrorBoundary>
@@ -183,7 +183,7 @@ function AppInner() {
               setPortalAndPersist(portal as PortalType);
               setCurrentView('login');
             }} />
-            <Toaster />
+            <Toaster closeButton toastOptions={{ duration: 9000 }} />
           </PortalThemeProvider>
         </ThemeProvider>
       </ErrorBoundary>
@@ -206,7 +206,7 @@ function AppInner() {
               }}
               onRegister={handleGoToRegister}
             />
-            <Toaster />
+            <Toaster closeButton toastOptions={{ duration: 9000 }} />
           </PortalThemeProvider>
         </ThemeProvider>
       </ErrorBoundary>
@@ -225,7 +225,7 @@ function AppInner() {
               onRegisteredAndLoggedIn={handleRegisteredAndLoggedIn}
               portalType={selectedPortal === 'admin' ? 'taxidermy' : selectedPortal === 'outfitter' ? 'outfitter' : 'hunter'}
             />
-            <Toaster />
+            <Toaster closeButton toastOptions={{ duration: 9000 }} />
           </PortalThemeProvider>
         </ThemeProvider>
       </ErrorBoundary>
@@ -248,7 +248,7 @@ function AppInner() {
             {selectedPortal === ('local-hunter' as any) && <LocalHunterPortal onLogout={handleLogout} />}
             {selectedPortal === 'outfitter' && <OutfitterPortal onLogout={handleLogout} />}
             {selectedPortal === 'admin' && <TaxidermyPortal onLogout={handleLogout} />}
-            <Toaster />
+            <Toaster closeButton toastOptions={{ duration: 9000 }} />
           </PortalThemeProvider>
         </ThemeProvider>
       </ErrorBoundary>
@@ -261,7 +261,7 @@ function AppInner() {
       <ThemeProvider>
         <PortalThemeProvider portalType="unified">
           <LandingPage onSelectPortal={handleSelectPortal} />
-          <Toaster />
+          <Toaster closeButton toastOptions={{ duration: 9000 }} />
         </PortalThemeProvider>
       </ThemeProvider>
     </ErrorBoundary>

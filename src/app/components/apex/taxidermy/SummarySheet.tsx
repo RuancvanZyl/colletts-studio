@@ -51,7 +51,7 @@ export function SummarySheet({ onNavigate }: SummarySheetProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-slate-900 dark:text-slate-100 text-2xl font-bold">Workshop Overview</h1>
+          <h1 className="text-slate-900 dark:text-slate-100 text-2xl font-bold">Workshop Whiteboard</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-0.5">
             {new Date().toLocaleDateString('en-ZA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </p>

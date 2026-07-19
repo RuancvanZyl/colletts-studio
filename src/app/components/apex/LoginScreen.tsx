@@ -37,9 +37,14 @@ export function LoginScreen({
   const mkInputRef = useRef<HTMLInputElement>(null);
   const emailInputRef = useRef<HTMLInputElement>(null);
 
-  // For taxidermy portal: PIN must be verified before staff can log in
+  // For taxidermy portal: PIN must be verified before staff can log in.
+  // Once entered correctly, the PIN is remembered on this device for 30 days.
   const isStaffPortal = portalType === 'taxidermy' || portalType === 'admin';
-  const [pinVerified, setPinVerified] = useState(false);
+  const PIN_KEY = 'apex_pin_verified_until';
+  const [pinVerified, setPinVerified] = useState(() => {
+    const until = Number(localStorage.getItem(PIN_KEY) ?? 0);
+    return until > Date.now();
+  });
 
   const handleMasterKey = () => {
     setMkOpen(true);
@@ -54,7 +59,8 @@ export function LoginScreen({
     if (mkPin === correctPin) {
       setMkOpen(false);
       if (isStaffPortal) {
-        // PIN verified — now show individual staff login form
+        // PIN verified — remember for 30 days on this device
+        localStorage.setItem(PIN_KEY, String(Date.now() + 30 * 24 * 3600 * 1000));
         setPinVerified(true);
         setTimeout(() => emailInputRef.current?.focus(), 100);
       } else {

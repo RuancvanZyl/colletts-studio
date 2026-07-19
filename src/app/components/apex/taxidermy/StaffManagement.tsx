@@ -186,12 +186,23 @@ export function StaffManagement() {
                   {s.email ?? 'No email'}{s.department_name ? ` · ${s.department_name}` : ''}
                 </p>
               </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <Button variant="ghost" size="icon" onClick={() => openEdit(s)} title="Edit">
-                  <Pencil className="w-3.5 h-3.5" />
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Button variant="outline" size="sm" onClick={() => openEdit(s)} className="gap-1.5">
+                  <Pencil className="w-3.5 h-3.5" /> Edit
                 </Button>
-                <Button variant="ghost" size="icon" onClick={() => toggleActive(s)} title={s.is_active ? 'Deactivate' : 'Reactivate'}>
-                  <Power className={`w-3.5 h-3.5 ${s.is_active ? 'text-green-500' : 'text-slate-400'}`} />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const msg = s.is_active
+                      ? `Deactivate ${s.full_name}? They will no longer be able to log in.`
+                      : `Reactivate ${s.full_name}? They will be able to log in again.`;
+                    if (window.confirm(msg)) toggleActive(s);
+                  }}
+                  className="gap-1.5"
+                >
+                  <Power className={`w-3.5 h-3.5 ${s.is_active ? 'text-red-500' : 'text-green-500'}`} />
+                  {s.is_active ? 'Deactivate' : 'Reactivate'}
                 </Button>
               </div>
             </div>

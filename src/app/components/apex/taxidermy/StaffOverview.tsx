@@ -234,27 +234,28 @@ export function StaffOverview() {
                           )}
                         </div>
                       </div>
-                      <div className="flex gap-1 shrink-0">
+                      <div className="flex gap-1.5 shrink-0 flex-wrap justify-end">
                         <button
                           onClick={() => { setNoteModal({ jobId: j.id, currentNote: j.admin_notes ?? '' }); setNoteText(j.admin_notes ?? ''); }}
-                          className="text-xs text-slate-400 hover:text-amber-600 px-2 py-1 rounded transition-colors"
-                          title="Add note"
+                          className="text-xs font-medium border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 px-2.5 py-1.5 rounded-lg transition-colors"
                         >
-                          📝
+                          Note
                         </button>
                         <button
                           onClick={() => setAssignModal({ jobId: j.id, jobTitle: j.title })}
-                          className="text-xs text-slate-400 hover:text-blue-600 px-2 py-1 rounded transition-colors"
-                          title="Reassign"
+                          className="text-xs font-medium border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 px-2.5 py-1.5 rounded-lg transition-colors"
                         >
-                          ↔
+                          Reassign
                         </button>
                         <button
-                          onClick={() => unassignJob(j.id)}
-                          className="text-xs text-slate-400 hover:text-red-500 px-2 py-1 rounded transition-colors"
-                          title="Unassign"
+                          onClick={() => {
+                            if (window.confirm(`Take "${j.title}" away from ${staff.full_name}? It will go back to the unassigned pool.`)) {
+                              unassignJob(j.id);
+                            }
+                          }}
+                          className="text-xs font-medium border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 px-2.5 py-1.5 rounded-lg transition-colors"
                         >
-                          <X className="w-3 h-3" />
+                          Remove
                         </button>
                       </div>
                     </div>

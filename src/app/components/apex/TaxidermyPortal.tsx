@@ -130,6 +130,13 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     else setCurrentView('tasks');
   }, [profile?.role, landed]);
 
+  // Larger base text for the whole staff portal — easier reading on the floor
+  useEffect(() => {
+    const prev = document.documentElement.style.fontSize;
+    document.documentElement.style.fontSize = '17px';
+    return () => { document.documentElement.style.fontSize = prev; };
+  }, []);
+
   // Login alerts — once per session, tell the staff member what's waiting for them
   useEffect(() => {
     if (!profile?.id) return;
@@ -239,10 +246,9 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     {
       heading: 'Overview',
       items: [
+        { view: 'summary',   icon: BarChart3,       label: 'Workshop Whiteboard' },
         { view: 'daily-todo', icon: Calendar,        label: 'Daily Tasks' },
         { view: 'tasks',     icon: ListTodo,        label: 'My Tasks', badge: myTaskCount },
-        { view: 'summary',   icon: BarChart3,       label: 'Summary' },
-        { view: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
       ],
     },
     {
