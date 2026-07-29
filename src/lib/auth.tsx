@@ -21,6 +21,7 @@ interface AuthContextValue {
   user: User | null;
   session: Session | null;
   profile: StaffProfile | null;
+  profileError: string | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
@@ -32,20 +33,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<StaffProfile | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
   // Never block the UI — start false, update in background
   const [loading, setLoading] = useState(false);
 
   async function loadProfile(userId: string) {
-    const { data } = await (supabase as any)
+    // Try with the department join first
+    const joined = await (supabase as any)
       .from('staff_profiles')
       .select('*, departments(name)')
       .eq('id', userId)
-      .single();
-    if (data) {
-      setProfile({ ...data, department_name: data.departments?.name ?? null });
-    } else {
-      setProfile(null);
+      .maybeSingle();
+
+    if (joined.data) {
+      setProfile({ ...joined.data, department_name: joined.data.departments?.name ?? null });
+      return;
     }
+
+    // The join can fail on its own (RLS on departments) — retry without it
+    const plain = await (supabase as any)
+      .from('staff_profiles')
+      .select('id, full_name, email, role, department_id, is_active')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (plain.data) {
+      setProfile({ ...plain.data, department_name: null });
+      return;
+    }
+
+    // Genuinely no profile — surface why instead of silently downgrading access
+    const err = plain.error ?? joined.error;
+    if (err) {
+      console.error('[auth] Could not load staff profile:', err.message);
+      setProfileError(err.message);
+    }
+    setProfile(null);
   }
 
   useEffect(() => {
@@ -87,7 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, profile, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, profile, profileError, loading, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

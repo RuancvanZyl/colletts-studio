@@ -104,7 +104,15 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
   const [navClientId, setNavClientId] = useState<string | undefined>(undefined);
   const [myTaskCount, setMyTaskCount] = useState<number | null>(null);
   const { theme, toggleTheme } = useTheme();
-  const { profile } = useAuth();
+  const { profile, profileError } = useAuth();
+
+  // If the profile could not be read, say so loudly — otherwise a manager
+  // silently looks like a worker and nobody knows why.
+  useEffect(() => {
+    if (profileError) {
+      toast.error(`Could not load your access level: ${profileError}`, { duration: 20000 });
+    }
+  }, [profileError]);
 
   // Live task count badge for the sidebar
   useEffect(() => {

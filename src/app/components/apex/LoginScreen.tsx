@@ -37,14 +37,9 @@ export function LoginScreen({
   const mkInputRef = useRef<HTMLInputElement>(null);
   const emailInputRef = useRef<HTMLInputElement>(null);
 
-  // For taxidermy portal: PIN must be verified before staff can log in.
-  // Once entered correctly, the PIN is remembered on this device for 30 days.
+  // Staff sign in with their own email + password — no workshop PIN.
   const isStaffPortal = portalType === 'taxidermy' || portalType === 'admin';
-  const PIN_KEY = 'apex_pin_verified_until';
-  const [pinVerified, setPinVerified] = useState(() => {
-    const until = Number(localStorage.getItem(PIN_KEY) ?? 0);
-    return until > Date.now();
-  });
+  const pinVerified = true;
 
   const handleMasterKey = () => {
     setMkOpen(true);
@@ -58,14 +53,7 @@ export function LoginScreen({
 
     if (mkPin === correctPin) {
       setMkOpen(false);
-      if (isStaffPortal) {
-        // PIN verified — remember for 30 days on this device
-        localStorage.setItem(PIN_KEY, String(Date.now() + 30 * 24 * 3600 * 1000));
-        setPinVerified(true);
-        setTimeout(() => emailInputRef.current?.focus(), 100);
-      } else {
-        onLogin();
-      }
+      onLogin();
     } else {
       setMkError(true);
       setMkPin('');
@@ -194,7 +182,7 @@ export function LoginScreen({
           <h1 className="text-2xl font-bold tracking-[0.25em] text-white mb-1">APEX</h1>
           <p className="text-[#3AAECC] text-xs tracking-[0.3em] uppercase">Trophy Solutions</p>
           <p className="text-[#7AADB8] text-sm mt-3">
-            {isStaffPortal ? 'Sign in with your staff account' : 'Sign in to your workspace'}
+            {isStaffPortal ? 'Sign in to the workshop' : 'Sign in to your workspace'}
           </p>
         </div>
 
@@ -223,7 +211,7 @@ export function LoginScreen({
             {isStaffPortal && (
               <div className="flex items-center gap-2 bg-[#3AAECC]/10 border border-[#3AAECC]/20 rounded-lg px-3 py-2">
                 <Package className="w-4 h-4 text-[#3AAECC]" />
-                <span className="text-xs text-[#3AAECC] font-medium tracking-wide">WORKSHOP STAFF LOGIN</span>
+                <span className="text-xs text-[#3AAECC] font-medium tracking-wide">MANAGEMENT &amp; WORKSHOP</span>
               </div>
             )}
 
@@ -302,11 +290,11 @@ export function LoginScreen({
         {/* Back + footer */}
         <div className="flex items-center justify-between">
           <button
-            onClick={isStaffPortal ? () => setPinVerified(false) : onBack}
+            onClick={onBack}
             className="flex items-center gap-1.5 text-[#7AADB8] hover:text-[#EDF6F9] text-sm transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            {isStaffPortal ? 'Back to PIN' : 'Back'}
+            Back
           </button>
           <p className="text-[#4a6a75] text-xs">
             Secure authentication
