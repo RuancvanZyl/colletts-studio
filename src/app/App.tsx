@@ -20,7 +20,7 @@ export type UserRole = 'hunter' | 'local-hunter' | 'admin' | 'outfitter' | 'taxi
 type AppView = 'landing' | 'login' | 'register' | 'portal' | 'dashboard' | 'reset-password';
 
 function AppInner() {
-  const { user, profile, loading, signOut } = useAuth();
+  const { user, profile, profileResolved, loading, signOut } = useAuth();
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   void profile; // used in useEffect below
   const [currentView, setCurrentView] = useState<AppView>('landing');
@@ -53,6 +53,10 @@ function AppInner() {
       setCurrentView('portal');
       return;
     }
+    // Wait until we know whether this user is staff — routing before the
+    // profile lands sends staff to the hunter portal, which spins forever.
+    if (user && !profileResolved) return;
+
     if (user && currentView === 'landing') {
       if (profile) {
         setPortalAndPersist('admin');
@@ -72,7 +76,7 @@ function AppInner() {
     if (user && currentView === 'landing' && selectedPortal) {
       setCurrentView('portal');
     }
-  }, [user, profile, currentView, selectedPortal, setPortalAndPersist]);
+  }, [user, profile, profileResolved, currentView, selectedPortal, setPortalAndPersist]);
 
   const handleSelectPortal = (portal: 'hunter' | 'outfitter' | 'taxidermy') => {
     const mappedPortal = portal === 'taxidermy' ? 'admin' : portal;

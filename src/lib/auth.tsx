@@ -22,6 +22,7 @@ interface AuthContextValue {
   session: Session | null;
   profile: StaffProfile | null;
   profileError: string | null;
+  profileResolved: boolean;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
@@ -48,6 +49,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<StaffProfile | null>(DEV_ADMIN_PREVIEW);
   const [profileError, setProfileError] = useState<string | null>(null);
+  // False until we know whether this user is staff — routing must wait for it
+  const [profileResolved, setProfileResolved] = useState(!!DEV_ADMIN_PREVIEW);
   // Never block the UI — start false, update in background
   const [loading, setLoading] = useState(false);
 
@@ -61,6 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (joined.data) {
       setProfile({ ...joined.data, department_name: joined.data.departments?.name ?? null });
+      setProfileResolved(true);
       return;
     }
 
@@ -73,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (plain.data) {
       setProfile({ ...plain.data, department_name: null });
+      setProfileResolved(true);
       return;
     }
 
@@ -83,6 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfileError(err.message);
     }
     setProfile(null);
+    setProfileResolved(true);
   }
 
   useEffect(() => {
@@ -92,13 +98,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) loadProfile(session.user.id);
-    }).catch(() => {});
+      else setProfileResolved(true);
+    }).catch(() => setProfileResolved(true));
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
-      if (session?.user) loadProfile(session.user.id);
-      else setProfile(DEV_ADMIN_PREVIEW);
+      if (session?.user) { setProfileResolved(false); loadProfile(session.user.id); }
+      else { setProfile(DEV_ADMIN_PREVIEW); setProfileResolved(true); }
     });
 
     return () => subscription.unsubscribe();
@@ -124,7 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, profile, profileError, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, profile, profileError, profileResolved, loading, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

@@ -84,10 +84,25 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
     );
   }
 
+  // Loading has finished and there is still no client record. Never spin
+  // forever here — staff accounts land here by mistake and would be stuck.
   if (!client) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center gap-5">
+        <div className="w-14 h-14 rounded-full bg-amber-100 dark:bg-amber-950/50 flex items-center justify-center">
+          <AlertCircle className="w-7 h-7 text-amber-500" />
+        </div>
+        <div className="max-w-sm">
+          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+            We couldn't open your hunter profile
+          </h2>
+          <p className="text-sm text-slate-500 mt-2">
+            If you're a member of Apex staff, sign out and choose the
+            <strong> Taxidermy Portal</strong> instead. Otherwise please contact
+            us and we'll get this sorted.
+          </p>
+        </div>
+        <Button onClick={onLogout} variant="outline">Sign out</Button>
       </div>
     );
   }
