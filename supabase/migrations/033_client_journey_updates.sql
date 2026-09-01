@@ -7,7 +7,7 @@
 -- ── Friendly, hunter-facing copy for each stage ──────────────────────────────
 CREATE OR REPLACE FUNCTION public.client_stage_message(p_dept text, p_species text)
 RETURNS TABLE (title text, body text) LANGUAGE sql IMMUTABLE AS $$
-  SELECT * FROM (VALUES
+  SELECT t.title, t.body FROM (VALUES
     ('receiving',       'Your ' || COALESCE(p_species,'trophy') || ' has arrived',
                         'Good news — your trophy has arrived safely at our workshop and has been logged, tagged and photographed. We will keep you posted as it moves through each stage.'),
     ('skinning',        'Skinning has started',
