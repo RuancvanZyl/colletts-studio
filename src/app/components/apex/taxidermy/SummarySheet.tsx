@@ -10,6 +10,7 @@ import { useWorkshopStats } from '../../../../lib/hooks/useWorkshopStats';
 import { useHuntDashboard } from '../../../../lib/hooks/useHuntDashboard';
 import { useFloorTime } from '../../../../lib/hooks/useFloorTime';
 import { useAttentionItems } from '../../../../lib/hooks/useAttentionItems';
+import { useClientCare } from '../../../../lib/hooks/useClientCare';
 import { DEPT_COLORS } from '../../../../lib/pipeline';
 
 interface SummarySheetProps {
@@ -31,12 +32,15 @@ export function SummarySheet({ onNavigate }: SummarySheetProps) {
   const { stats: huntStats, loading: huntLoading } = useHuntDashboard();
   const { data: floorTime, loading: floorLoading } = useFloorTime();
   const { items: attention } = useAttentionItems();
+  const { overdue: careOverdue, due: careDue } = useClientCare();
 
   const attentionCards = [
     { count: attention?.newHunterSubmissions ?? 0, label: 'new hunter submission',  plural: 'new hunter submissions',  action: 'Review in Job Tracker',    view: 'inventory',       color: '#8b5cf6' },
     { count: attention?.unassignedActive ?? 0,     label: 'unassigned active job',  plural: 'unassigned active jobs',  action: 'Assign in Staff Overview', view: 'staff-overview',  color: '#f59e0b' },
     { count: attention?.unreadMessages ?? 0,       label: 'unread client message',  plural: 'unread client messages',  action: 'Open Client Messages',     view: 'client-inbox',    color: '#0073ea' },
     { count: attention?.stalledRed ?? 0,           label: 'critically stalled job', plural: 'critically stalled jobs', action: 'View Daily Tasks',         view: 'daily-todo',      color: '#ef4444' },
+    { count: careOverdue,                          label: 'hunter needs contact',   plural: 'hunters need contact',    action: 'Open Client Care',         view: 'client-care',     color: '#ec4899' },
+    { count: careDue,                              label: 'hunter due an update',   plural: 'hunters due an update',   action: 'Open Client Care',         view: 'client-care',     color: '#f97316' },
   ].filter(c => c.count > 0);
 
   const kpiCards = [

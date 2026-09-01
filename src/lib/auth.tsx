@@ -29,10 +29,24 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+// DEV-ONLY preview: lets you walk the management UI locally without signing in.
+// import.meta.env.DEV is false in every production build, so this cannot ship.
+const DEV_ADMIN_PREVIEW: StaffProfile | null =
+  import.meta.env.DEV && localStorage.getItem('apex_dev_admin') === '1'
+    ? {
+        id: 'dev-preview',
+        full_name: 'Preview Admin',
+        role: 'admin' as StaffRole,
+        department_id: null,
+        department_name: null,
+        is_active: true,
+      }
+    : null;
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<StaffProfile | null>(null);
+  const [profile, setProfile] = useState<StaffProfile | null>(DEV_ADMIN_PREVIEW);
   const [profileError, setProfileError] = useState<string | null>(null);
   // Never block the UI — start false, update in background
   const [loading, setLoading] = useState(false);
@@ -84,7 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) loadProfile(session.user.id);
-      else setProfile(null);
+      else setProfile(DEV_ADMIN_PREVIEW);
     });
 
     return () => subscription.unsubscribe();

@@ -47,6 +47,12 @@ function AppInner() {
 
   // Auto-redirect authenticated users to their portal
   useEffect(() => {
+    // DEV-ONLY: profile without a session means the local admin preview is on
+    if (import.meta.env.DEV && !user && profile && currentView === 'landing') {
+      setPortalAndPersist('admin');
+      setCurrentView('portal');
+      return;
+    }
     if (user && currentView === 'landing') {
       if (profile) {
         setPortalAndPersist('admin');
