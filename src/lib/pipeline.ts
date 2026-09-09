@@ -53,16 +53,23 @@ export function getNextDepartment(mountType: string, currentDept: string): strin
   return stages[idx + 1];
 }
 
-// Maps each staff member's name to the departments they lead
+// Every pipeline stage — for owners / managers who oversee the whole floor
+export const ALL_DEPARTMENTS = [
+  'receiving', 'skinning', 'salting', 'cleaning_bleach', 'dip_pack', 'storage',
+  'tannery', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration',
+];
+
+// Maps each staff member's name to the departments they lead.
+// Ruan, Steve, Abri and Cecilia oversee every department.
 export const STAFF_DEPARTMENTS: Record<string, string[]> = {
-  'Abri':    ['receiving', 'quality_check', 'administration', 'packing'],
-  'Steve':   ['receiving', 'quality_check', 'photos', 'administration'],
+  'Ruan':    ALL_DEPARTMENTS,
+  'Steve':   ALL_DEPARTMENTS,
+  'Abri':    ALL_DEPARTMENTS,
+  'Cecilia': ALL_DEPARTMENTS,
   'Vince':   ['receiving', 'skinning', 'salting', 'cleaning_bleach', 'storage', 'dip_pack'],
-  'Ruan':    ['receiving', 'photos'],
   'Divine':  ['tannery'],
   'Emanuel': ['mounting'],
-  'Kyle':    ['finishing'],
-  'Cecilia': ['administration'],
+  'Kyle':    ['mounting', 'finishing'],
 };
 
 // Maps DB `departments.name` values to pipeline stage keys

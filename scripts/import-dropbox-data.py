@@ -18,7 +18,7 @@ Usage:
   3. Remove the key from this file when done — NEVER commit it
 """
 
-import os, re, zipfile, xml.etree.ElementTree as ET, requests, json, sys
+import os, re, zipfile, xml.etree.ElementTree as ET, requests, json, sys, getpass
 from pathlib import Path
 from datetime import datetime
 
@@ -32,6 +32,14 @@ SCAN_ROOTS = {
     "01 Export Client Invoices": "export",
     "02 Local Clients Invoices": "local",
 }
+
+# Only import these years. Empty set () = import every year.
+# Field test: current year + previous year (trophies can take 12-18 months).
+ONLY_YEARS = {"2025", "2026"}
+
+# Dry run: scan and print everything but write NOTHING to Supabase.
+# Default is a dry run. Pass  --run  on the command line to actually write.
+DRY_RUN = "--run" not in sys.argv
 
 # ── FILE CATEGORISATION ──────────────────────────────────────────────────────
 def categorise_file(name: str) -> object:
@@ -226,6 +234,9 @@ def sb_get(path: str):
     return r.json() if r.status_code == 200 else []
 
 def sb_post(table: str, payload: dict) -> dict:
+    if DRY_RUN:
+        # Pretend the insert worked so the scan can continue and show totals
+        return {"id": f"dry-{table}-{abs(hash(json.dumps(payload, sort_keys=True))) % 10**8}"}
     r = requests.post(f"{SUPABASE_URL}/rest/v1/{table}", headers=headers(), json=payload)
     if r.status_code in (200, 201):
         rows = r.json()
@@ -233,6 +244,8 @@ def sb_post(table: str, payload: dict) -> dict:
     return {"_error": r.text[:200]}
 
 def sb_patch(table: str, match: str, payload: dict):
+    if DRY_RUN:
+        return True
     r = requests.patch(f"{SUPABASE_URL}/rest/v1/{table}?{match}",
                        headers=headers(), json=payload)
     return r.status_code in (200, 204)
@@ -242,9 +255,37 @@ def main():
     print("\n🦌  Apex Trophy Solutions — Dropbox Full Import v4")
     print("=" * 60)
 
-    if not SUPABASE_KEY:
-        print("\n❌  Paste your service_role key into SUPABASE_KEY on line 37 first!")
-        sys.exit(1)
+    global SUPABASE_KEY
+
+    if DRY_RUN:
+        print("\n🧪  DRY RUN — scanning only, nothing will be written to Supabase.")
+        print(f"    Years: {', '.join(sorted(ONLY_YEARS)) if ONLY_YEARS else 'ALL'}")
+        print("    To actually import, re-run with:  python3 scripts/import-dropbox-data.py --run\n")
+    else:
+        if not SUPABASE_KEY:
+            SUPABASE_KEY = os.environ.get("SB_KEY", "").strip()
+        if not SUPABASE_KEY:
+            print("\n🔑  Paste your Supabase service_role (or sb_secret_...) key, then press Enter.")
+            print("    Settings → API keys. It will not show as you paste.")
+            SUPABASE_KEY = getpass.getpass("    key: ").strip()
+        if not SUPABASE_KEY:
+            print("\n❌  No key entered — nothing to do.")
+            sys.exit(1)
+
+        # Show enough to confirm it read correctly, without revealing the key
+        k = SUPABASE_KEY
+        print(f"\n🔎  Key read: {len(k)} chars, starts {k[:6]}…, ends …{k[-4:]}")
+
+        # Fail fast with a clear message if the key is wrong
+        test = requests.get(f"{SUPABASE_URL}/rest/v1/clients?select=id&limit=1", headers=headers())
+        if test.status_code != 200:
+            print(f"\n❌  Supabase rejected the key ({test.status_code}): {test.text[:160]}")
+            print("    Fixes:")
+            print("    • Make sure you copied the whole key (they are long — scroll the field)")
+            print("    • Settings → API keys → use the 'service_role' secret, or a 'sb_secret_...' key")
+            print("    • If 'Legacy API keys' shows as Disabled, create/enable a new secret key and use that")
+            sys.exit(1)
+        print(f"✅  Key accepted. LIVE IMPORT — Years: {', '.join(sorted(ONLY_YEARS)) if ONLY_YEARS else 'ALL'}")
 
     if not DROPBOX_ROOT.exists():
         print(f"\n❌  Dropbox not found at: {DROPBOX_ROOT}")
@@ -289,6 +330,8 @@ def main():
             if not year_dir.is_dir() or not re.match(r'^\d{4}$', year_dir.name):
                 continue
             year = year_dir.name
+            if ONLY_YEARS and year not in ONLY_YEARS:
+                continue
 
             # Iterate client folders inside year
             for folder in sorted(year_dir.iterdir()):
