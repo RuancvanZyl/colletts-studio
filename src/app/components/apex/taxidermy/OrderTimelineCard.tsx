@@ -32,19 +32,24 @@ const STATUS_STYLE = {
   upcoming:  { icon: Calendar,      color: 'text-slate-400',  chip: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400' },
 } as const;
 
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
 export function OrderTimelineCard({ hunt, onRefresh }: { hunt: HuntTimelineFields; onRefresh: () => void }) {
   const { profile } = useAuth();
   const isManagement = ['admin', 'studio_manager'].includes(profile?.role ?? '');
   const [starting, setStarting] = useState(false);
+  const [startDate, setStartDate] = useState(todayISO());
   const [amendOpen, setAmendOpen] = useState(false);
   const [newDate, setNewDate] = useState(hunt.deadline_current ?? '');
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
 
   async function startTimeline() {
+    if (!startDate) { toast.error('Pick the deposit-paid date'); return; }
     setStarting(true);
     const { data, error } = await (supabase as any).rpc('start_order_timeline', {
       p_hunt_id: hunt.id,
+      p_start_at: new Date(startDate).toISOString(),
     });
     setStarting(false);
     if (error) { toast.error(error.message); return; }
@@ -72,16 +77,31 @@ export function OrderTimelineCard({ hunt, onRefresh }: { hunt: HuntTimelineField
   // Not started yet
   if (!hunt.timeline_started_at) {
     return (
-      <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-600 p-3 flex items-center justify-between gap-3 flex-wrap">
+      <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-600 p-3 space-y-2">
         <div>
           <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">Production timeline not started</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Starts automatically once the deposit is confirmed via Xero, or manually below for cash payments.</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">
+            Starts automatically once the deposit is confirmed via Xero, or manually below —
+            pick the date the deposit was actually paid (defaults to today; use a past date to backfill an older hunt).
+          </p>
         </div>
         {isManagement && (
-          <Button size="sm" onClick={startTimeline} disabled={starting} className="gap-1.5 shrink-0">
-            {starting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PlayCircle className="w-3.5 h-3.5" />}
-            Start Timeline (Cash Received)
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <label className="text-[11px] text-slate-500 flex items-center gap-1.5">
+              Deposit paid on
+              <input
+                type="date"
+                value={startDate}
+                max={todayISO()}
+                onChange={e => setStartDate(e.target.value)}
+                className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1 text-xs"
+              />
+            </label>
+            <Button size="sm" onClick={startTimeline} disabled={starting} className="gap-1.5 shrink-0">
+              {starting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PlayCircle className="w-3.5 h-3.5" />}
+              Start Timeline
+            </Button>
+          </div>
         )}
       </div>
     );
