@@ -45,7 +45,6 @@ export function OrderTimelineCard({ hunt, onRefresh }: { hunt: HuntTimelineField
     setStarting(true);
     const { data, error } = await (supabase as any).rpc('start_order_timeline', {
       p_hunt_id: hunt.id,
-      p_via: 'cash_manual',
     });
     setStarting(false);
     if (error) { toast.error(error.message); return; }

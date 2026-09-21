@@ -415,7 +415,7 @@ function HuntCard({ hunt, onRefresh }: { hunt: ClientHunt; onRefresh: () => void
           <div className="px-4 py-3 space-y-3">
 
             {/* Production timeline */}
-            <OrderTimelineCard hunt={hunt as any} onRefresh={onRefresh} />
+            <OrderTimelineCard hunt={hunt} onRefresh={onRefresh} />
 
             {/* Staff work documents */}
             <div>

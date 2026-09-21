@@ -29,6 +29,15 @@ export type ClientHunt = {
   notes: string | null;
   created_at: string;
   documents: HuntDocument[];
+  // Production timeline (migration 034)
+  order_size: 'small' | 'medium' | 'large' | null;
+  timeline_started_at: string | null;
+  timeline_started_by: string | null;
+  timeline_started_via: 'xero' | 'cash_manual' | null;
+  deadline_original: string | null;
+  deadline_current: string | null;
+  milestones: { key: string; label: string; due_date: string; completed: boolean }[] | null;
+  deadline_amendments: { amended_at: string; amended_by: string; previous_deadline: string; new_deadline: string; reason: string }[] | null;
 };
 
 const DOC_TYPES: HuntDocument['doc_type'][] = [

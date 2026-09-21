@@ -3,8 +3,11 @@
 -- The production clock starts when the deposit is confirmed. That can happen
 -- two ways:
 --   1. Automatically via a Xero payment webhook (not yet connected — see
---      supabase/functions/xero-payment-webhook once Xero credentials exist)
---   2. Manually by management, for cash payments — via start_order_timeline()
+--      supabase/functions/xero-payment-webhook once Xero credentials exist).
+--      That path uses start_order_timeline_xero(), which is NOT reachable by
+--      any logged-in app user — only the service role can call it.
+--   2. Manually by management, for cash payments — via start_order_timeline(),
+--      which any admin/studio_manager can call from the app.
 --
 -- Order size (small/medium/large) is classified from the hunt's mount types
 -- and determines the milestone schedule. Only admin/studio_manager can amend
@@ -23,36 +26,35 @@ ALTER TABLE client_hunts
 COMMENT ON COLUMN client_hunts.deadline_amendments IS
   'Array of {amended_at, amended_by, previous_deadline, new_deadline, reason}';
 
--- ── Start the production clock for a hunt ────────────────────────────────────
--- Classifies order size from the hunt's job cards' mount types, sets the
--- timeline start date, and computes the milestone schedule + deadline.
-CREATE OR REPLACE FUNCTION public.start_order_timeline(
+-- ── Shared logic: classify + compute + write the timeline for a hunt ────────
+-- Private helper — not exposed directly, only called by the two entry points
+-- below, each of which enforces its own caller check first.
+CREATE OR REPLACE FUNCTION public._apply_order_timeline(
   p_hunt_id uuid,
-  p_via     text DEFAULT 'cash_manual'  -- 'xero' | 'cash_manual'
+  p_via     text,
+  p_started_by uuid
 )
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
-  v_role          text;
-  v_mount_types   text[];
-  v_full_count    int;
+  v_mount_types    text[];
+  v_full_count     int;
   v_shoulder_count int;
-  v_total         int;
-  v_size          text;
-  v_start         timestamptz := now();
+  v_total          int;
+  v_size           text;
+  v_start          timestamptz := now();
   v_m1 date; v_m2 date; v_m3 date; v_m4 date;
-  v_milestones    jsonb;
-  v_deadline      date;
+  v_milestones     jsonb;
+  v_deadline       date;
+  v_rows_updated   int;
 BEGIN
-  -- Only staff (any active) can trigger this — the Xero webhook runs as
-  -- service role, cash-manual is called from the app by a logged-in user.
-  IF p_via = 'cash_manual' THEN
-    SELECT role INTO v_role FROM staff_profiles WHERE id = auth.uid() AND is_active;
-    IF v_role IS NULL OR v_role NOT IN ('admin','studio_manager') THEN
-      RAISE EXCEPTION 'Only management can start an order timeline';
-    END IF;
+  IF NOT EXISTS (SELECT 1 FROM client_hunts WHERE id = p_hunt_id) THEN
+    RAISE EXCEPTION 'Hunt % not found', p_hunt_id;
   END IF;
 
-  -- Gather mount types for every job card on this hunt
+  IF EXISTS (SELECT 1 FROM client_hunts WHERE id = p_hunt_id AND timeline_started_at IS NOT NULL) THEN
+    RAISE EXCEPTION 'This hunt''s timeline has already started. Use amend_order_deadline to change the deadline instead.';
+  END IF;
+
   SELECT array_agg(form_data->>'mount_type') INTO v_mount_types
   FROM hunt_documents
   WHERE hunt_id = p_hunt_id AND doc_type = 'job_card';
@@ -104,20 +106,57 @@ BEGIN
   END IF;
 
   UPDATE client_hunts SET
-    order_size          = v_size,
-    timeline_started_at = v_start,
-    timeline_started_by = auth.uid(),
+    order_size           = v_size,
+    timeline_started_at  = v_start,
+    timeline_started_by  = p_started_by,
     timeline_started_via = p_via,
-    deadline_original   = v_deadline,
-    deadline_current    = v_deadline,
-    milestones          = v_milestones
+    deadline_original    = v_deadline,
+    deadline_current      = v_deadline,
+    milestones            = v_milestones
   WHERE id = p_hunt_id;
+  GET DIAGNOSTICS v_rows_updated = ROW_COUNT;
+
+  IF v_rows_updated = 0 THEN
+    RAISE EXCEPTION 'Failed to update hunt %', p_hunt_id;
+  END IF;
 
   RETURN jsonb_build_object('order_size', v_size, 'deadline', v_deadline, 'milestones', v_milestones);
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.start_order_timeline(uuid, text) TO authenticated;
+-- Never callable directly by app users — only the two entry points below use it.
+REVOKE ALL ON FUNCTION public._apply_order_timeline(uuid, text, uuid) FROM PUBLIC;
+
+-- ── Entry point 1: cash payment, triggered by management from the app ───────
+CREATE OR REPLACE FUNCTION public.start_order_timeline(p_hunt_id uuid)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_role text;
+BEGIN
+  SELECT role INTO v_role FROM staff_profiles WHERE id = auth.uid() AND is_active;
+  IF v_role IS NULL OR v_role NOT IN ('admin','studio_manager') THEN
+    RAISE EXCEPTION 'Only management can start an order timeline';
+  END IF;
+
+  RETURN public._apply_order_timeline(p_hunt_id, 'cash_manual', auth.uid());
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.start_order_timeline(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.start_order_timeline(uuid) TO authenticated;
+
+-- ── Entry point 2: Xero payment webhook — service role only, no app user ────
+-- Deliberately NOT granted to `authenticated`. Once a Xero webhook Edge
+-- Function exists, it calls this using the service-role key.
+CREATE OR REPLACE FUNCTION public.start_order_timeline_xero(p_hunt_id uuid)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  RETURN public._apply_order_timeline(p_hunt_id, 'xero', NULL);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.start_order_timeline_xero(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.start_order_timeline_xero(uuid) TO service_role;
 
 -- ── Amend a deadline — management only, reason required ──────────────────────
 CREATE OR REPLACE FUNCTION public.amend_order_deadline(
@@ -130,6 +169,7 @@ DECLARE
   v_role  text;
   v_prev  date;
   v_entry jsonb;
+  v_rows_updated int;
 BEGIN
   SELECT role INTO v_role FROM staff_profiles WHERE id = auth.uid() AND is_active;
   IF v_role IS NULL OR v_role NOT IN ('admin','studio_manager') THEN
@@ -138,6 +178,14 @@ BEGIN
 
   IF p_reason IS NULL OR length(trim(p_reason)) = 0 THEN
     RAISE EXCEPTION 'A reason is required to amend a deadline';
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM client_hunts WHERE id = p_hunt_id) THEN
+    RAISE EXCEPTION 'Hunt % not found', p_hunt_id;
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM client_hunts WHERE id = p_hunt_id AND timeline_started_at IS NULL) THEN
+    RAISE EXCEPTION 'This hunt has no timeline yet — start it before amending a deadline';
   END IF;
 
   SELECT deadline_current INTO v_prev FROM client_hunts WHERE id = p_hunt_id;
@@ -151,12 +199,18 @@ BEGIN
   );
 
   UPDATE client_hunts SET
-    deadline_current   = p_new_date,
-    deadline_amendments = deadline_amendments || jsonb_build_array(v_entry)
+    deadline_current     = p_new_date,
+    deadline_amendments  = deadline_amendments || jsonb_build_array(v_entry)
   WHERE id = p_hunt_id;
+  GET DIAGNOSTICS v_rows_updated = ROW_COUNT;
+
+  IF v_rows_updated = 0 THEN
+    RAISE EXCEPTION 'Failed to update hunt %', p_hunt_id;
+  END IF;
 
   RETURN v_entry;
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.amend_order_deadline(uuid, date, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.amend_order_deadline(uuid, date, text) TO authenticated;
