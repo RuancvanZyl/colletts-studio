@@ -12,6 +12,7 @@ import {
 import { useClientHunts, type ClientHunt, type HuntDocument } from '../../../../lib/hooks/useClientHunts';
 import { supabase } from '../../../../lib/supabase';
 import { toast } from 'sonner';
+import { OrderTimelineCard } from './OrderTimelineCard';
 
 // ── Doc type metadata ───────────────────────────────────────────────────────
 const DOC_META: Record<string, { label: string; icon: typeof FileText; color: string; staffOnly?: boolean }> = {
@@ -412,6 +413,9 @@ function HuntCard({ hunt, onRefresh }: { hunt: ClientHunt; onRefresh: () => void
 
         {open && (
           <div className="px-4 py-3 space-y-3">
+
+            {/* Production timeline */}
+            <OrderTimelineCard hunt={hunt as any} onRefresh={onRefresh} />
 
             {/* Staff work documents */}
             <div>
