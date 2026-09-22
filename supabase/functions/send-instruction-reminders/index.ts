@@ -84,11 +84,15 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
-    // Optional: restrict to one hunt (manual "send now" button) via body { hunt_id }
+    // Optional: restrict to one hunt (manual "send now" button) via body { hunt_id }.
+    // custom_body lets staff send the exact text they reviewed/edited in the app
+    // instead of the default template — only honoured for a single-hunt send.
     let targetHuntId: string | null = null;
+    let customBody: string | null = null;
     try {
       const body = await req.json();
       targetHuntId = body?.hunt_id ?? null;
+      customBody   = body?.custom_body ?? null;
     } catch { /* no body — process all due reminders */ }
 
     let query = adminClient
@@ -113,6 +117,13 @@ serve(async (req) => {
       }
 
       const firstName = hunt.client_name?.split(' ')[0] ?? 'there';
+      const subject = `Your trophies are ready — we need your mounting instructions (${hunt.ref_number})`;
+      // A staff-edited body only applies to a single-hunt send (they reviewed it in
+      // the app first) — bulk sends always use the standard template.
+      const useCustom = targetHuntId && customBody && hunt.hunt_id === targetHuntId;
+      const html = useCustom
+        ? `<div style="font-family:Arial,sans-serif;white-space:pre-wrap;">${customBody.replace(/</g, '&lt;')}</div>`
+        : reminderHtml(firstName, hunt.ref_number);
       let sent = false;
 
       if (RESEND_API_KEY) {
@@ -122,8 +133,8 @@ serve(async (req) => {
           body: JSON.stringify({
             from: `${FROM_NAME} <${FROM_EMAIL}>`,
             to: hunt.client_email,
-            subject: `Your trophies are ready — we need your mounting instructions (${hunt.ref_number})`,
-            html: reminderHtml(firstName, hunt.ref_number),
+            subject,
+            html,
           }),
         });
         sent = res.ok;
@@ -135,8 +146,8 @@ serve(async (req) => {
         hunt_id:   hunt.hunt_id,
         direction: 'outbound',
         channel:   'email',
-        subject:   `Mounting instructions needed — ${hunt.ref_number}`,
-        body:      `Automated 2-week check-in: trophies are waiting on mounting instructions from the client.`,
+        subject,
+        body:      useCustom ? customBody : `Automated 2-week check-in: trophies are waiting on mounting instructions from the client.`,
         status:    sent ? 'sent' : 'failed',
       });
 
