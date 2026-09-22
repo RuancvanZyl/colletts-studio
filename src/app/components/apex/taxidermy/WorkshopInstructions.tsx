@@ -39,6 +39,7 @@ export function WorkshopInstructions() {
   const [pendingCards, setPendingCards] = useState<JobCard[]>([]);
   const [loading, setLoading]     = useState(true);
   const [expanded, setExpanded]   = useState<string | null>(null);
+  const [expandedClient, setExpandedClient] = useState<string | null>(null);
   const [completing, setCompleting] = useState<string | null>(null);
   const [activating, setActivating] = useState<string | null>(null);
   const [photos, setPhotos]       = useState<Record<string, File[]>>({});
@@ -323,10 +324,12 @@ export function WorkshopInstructions() {
                 {grouped[dept].length}
               </span>
             </div>
-            <CardList
+            <ClientGroupedCardList
               cards={grouped[dept]}
               expanded={expanded}
               toggle={toggle}
+              expandedClient={expandedClient}
+              setExpandedClient={setExpandedClient}
               completing={completing}
               markDone={markDone}
               photos={photos}
@@ -339,10 +342,12 @@ export function WorkshopInstructions() {
         ))
       ) : (
         // ── Staff: flat list, their department only ──
-        <CardList
+        <ClientGroupedCardList
           cards={cards}
           expanded={expanded}
           toggle={toggle}
+          expandedClient={expandedClient}
+          setExpandedClient={setExpandedClient}
           completing={completing}
           markDone={markDone}
           photos={photos}
@@ -352,6 +357,63 @@ export function WorkshopInstructions() {
           timeInDept={timeInDept}
         />
       )}
+    </div>
+  );
+}
+
+// ── Client-grouped wrapper — collapses a big order into one summary row ────────
+interface ClientGroupedCardListProps extends Omit<CardListProps, 'cards'> {
+  cards: JobCard[];
+  expandedClient: string | null;
+  setExpandedClient: (id: string | null) => void;
+}
+
+function ClientGroupedCardList({ cards, expandedClient, setExpandedClient, ...rest }: ClientGroupedCardListProps) {
+  const byClient: Record<string, JobCard[]> = {};
+  for (const card of cards) {
+    const key = card.clientNumber !== '—' ? card.clientNumber : card.clientName;
+    if (!byClient[key]) byClient[key] = [];
+    byClient[key].push(card);
+  }
+  const clientKeys = Object.keys(byClient).sort((a, b) => byClient[b].length - byClient[a].length);
+
+  // Single-client group (e.g. staff view already filtered) — skip the extra header
+  if (clientKeys.length <= 1) {
+    return <CardList cards={cards} {...rest} />;
+  }
+
+  return (
+    <div className="space-y-2">
+      {clientKeys.map(key => {
+        const clientCards = byClient[key];
+        const isOpen = expandedClient === key;
+        const withInstructions = clientCards.filter(c => c.instructions || c.specialRequests.length > 0).length;
+        return (
+          <div key={key} className="bg-white dark:bg-[#1c2b3a] rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+            <button
+              onClick={() => setExpandedClient(isOpen ? null : key)}
+              className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40"
+            >
+              <span className="font-mono text-xs font-bold text-white bg-slate-700 dark:bg-slate-600 px-2 py-0.5 rounded flex-shrink-0">
+                {clientCards[0].clientNumber}
+              </span>
+              <span className="font-bold text-slate-900 dark:text-slate-100 text-sm flex-1 truncate">{clientCards[0].clientName}</span>
+              <span className="text-xs bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                {clientCards.length} trophies
+              </span>
+              {withInstructions > 0 && (
+                <span className="text-[10px] text-blue-500 flex-shrink-0 hidden sm:block">{withInstructions} with instructions</span>
+              )}
+              {isOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+            </button>
+            {isOpen && (
+              <div className="border-t border-slate-100 dark:border-slate-800">
+                <CardList cards={clientCards} {...rest} />
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
