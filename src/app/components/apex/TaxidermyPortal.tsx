@@ -34,6 +34,8 @@ import { DailyTodoList } from './taxidermy/DailyTodoList';
 import { StaffManagement } from './taxidermy/StaffManagement';
 import { HuntArchive } from './taxidermy/HuntArchive';
 import { ClientCare } from './taxidermy/ClientCare';
+import { DeadlineWatch } from './taxidermy/DeadlineWatch';
+import { AwaitingInstruction } from './taxidermy/AwaitingInstruction';
 import { StaffOverview } from './taxidermy/StaffOverview';
 import { NoticeBoard } from './shared/NoticeBoard';
 import { GlobalSearch } from './shared/GlobalSearch';
@@ -80,7 +82,9 @@ type TaxidermyView =
   | 'staff-management'
   | 'staff-overview'
   | 'hunt-archive'
-  | 'client-care';
+  | 'client-care'
+  | 'deadline-watch'
+  | 'awaiting-instruction';
 
 interface NavItem {
   view: TaxidermyView;
@@ -199,6 +203,35 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     })();
   }, [profile?.id]);
 
+  // Strict deadline alert — management only, does not auto-dismiss.
+  // Checked every login so an overdue client can never quietly slip by.
+  useEffect(() => {
+    const role = profile?.role;
+    if (!profile?.id || !['admin', 'studio_manager'].includes(role ?? '')) return;
+    const alertKey = `apex_deadline_alert_${profile.id}`;
+    if (sessionStorage.getItem(alertKey)) return;
+    sessionStorage.setItem(alertKey, '1');
+
+    (async () => {
+      const { data } = await (supabase as any)
+        .from('client_hunts')
+        .select('deadline_current, clients!inner(full_name)')
+        .eq('status', 'active')
+        .eq('client_type', 'export')
+        .not('deadline_current', 'is', null)
+        .lt('deadline_current', new Date().toISOString().slice(0, 10));
+
+      const overdue = data ?? [];
+      if (overdue.length === 0) return;
+
+      const names = overdue.slice(0, 3).map((h: any) => h.clients?.full_name).filter(Boolean).join(', ');
+      toast.error(
+        `⚠ ${overdue.length} client hunt${overdue.length !== 1 ? 's have' : ' has'} missed their deadline${names ? ` — ${names}${overdue.length > 3 ? '…' : ''}` : ''}. Open Deadline Watch to review.`,
+        { duration: Infinity, closeButton: true }
+      );
+    })();
+  }, [profile?.id, profile?.role]);
+
   const navigate = (view: string, clientId?: string) => {
     setCurrentView(view as TaxidermyView);
     setNavClientId(clientId);
@@ -244,7 +277,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     // Everyone gets their tasks + daily list + workshop instructions
     if (['daily-todo', 'tasks', 'workshop-brief'].includes(view)) return true;
     if (isBookkeeper) {
-      return ['summary', 'dashboard', 'client-inbox', 'payment-confirmation', 'invoices', 'inventory', 'clients', 'hunt-archive', 'client-care'].includes(view);
+      return ['summary', 'dashboard', 'client-inbox', 'payment-confirmation', 'invoices', 'inventory', 'clients', 'hunt-archive', 'client-care', 'deadline-watch', 'awaiting-instruction'].includes(view);
     }
     // Department staff / ground staff: only stations in their departments
     const deptsNeeded = VIEW_DEPT[view];
@@ -302,6 +335,8 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
         { view: 'hunt-archive',  icon: FolderOpen, label: 'Hunt Archive' },
         { view: 'clients',      icon: Users,   label: 'Clients' },
         { view: 'client-care',   icon: MessageCircle, label: 'Client Care' },
+        { view: 'deadline-watch', icon: AlertTriangle, label: 'Deadline Watch' },
+        { view: 'awaiting-instruction', icon: Clock, label: 'Awaiting Instruction' },
       ],
     },
     ...(canSeeBusiness ? [{
@@ -363,6 +398,8 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'staff-overview':    return <StaffOverview />;
       case 'hunt-archive':      return <HuntArchive />;
       case 'client-care':       return <ClientCare />;
+      case 'deadline-watch':    return <DeadlineWatch onOpenHunt={() => navigate('hunt-archive')} />;
+      case 'awaiting-instruction': return <AwaitingInstruction />;
       case 'staff-management':  return <StaffManagement />;
       default:                  return <SummarySheet onNavigate={navigate} />;
     }

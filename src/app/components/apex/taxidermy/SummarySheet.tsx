@@ -11,6 +11,8 @@ import { useHuntDashboard } from '../../../../lib/hooks/useHuntDashboard';
 import { useFloorTime } from '../../../../lib/hooks/useFloorTime';
 import { useAttentionItems } from '../../../../lib/hooks/useAttentionItems';
 import { useClientCare } from '../../../../lib/hooks/useClientCare';
+import { useDeadlineWatch } from '../../../../lib/hooks/useDeadlineWatch';
+import { useAwaitingInstruction } from '../../../../lib/hooks/useAwaitingInstruction';
 import { DEPT_COLORS } from '../../../../lib/pipeline';
 
 interface SummarySheetProps {
@@ -33,6 +35,8 @@ export function SummarySheet({ onNavigate }: SummarySheetProps) {
   const { data: floorTime, loading: floorLoading } = useFloorTime();
   const { items: attention } = useAttentionItems();
   const { overdue: careOverdue, due: careDue } = useClientCare();
+  const { overdue: deadlinesOverdue } = useDeadlineWatch();
+  const { due: instructionsDue } = useAwaitingInstruction();
 
   const attentionCards = [
     { count: attention?.newHunterSubmissions ?? 0, label: 'new hunter submission',  plural: 'new hunter submissions',  action: 'Review in Job Tracker',    view: 'inventory',       color: '#8b5cf6' },
@@ -41,6 +45,8 @@ export function SummarySheet({ onNavigate }: SummarySheetProps) {
     { count: attention?.stalledRed ?? 0,           label: 'critically stalled job', plural: 'critically stalled jobs', action: 'View Daily Tasks',         view: 'daily-todo',      color: '#ef4444' },
     { count: careOverdue,                          label: 'hunter needs contact',   plural: 'hunters need contact',    action: 'Open Client Care',         view: 'client-care',     color: '#ec4899' },
     { count: careDue,                              label: 'hunter due an update',   plural: 'hunters due an update',   action: 'Open Client Care',         view: 'client-care',     color: '#f97316' },
+    { count: deadlinesOverdue.length,              label: 'hunt past deadline',     plural: 'hunts past deadline',     action: 'Open Deadline Watch',      view: 'deadline-watch',  color: '#dc2626' },
+    { count: instructionsDue.length,               label: 'client silent 2+ weeks', plural: 'clients silent 2+ weeks', action: 'Open Awaiting Instruction', view: 'awaiting-instruction', color: '#d97706' },
   ].filter(c => c.count > 0);
 
   const kpiCards = [
