@@ -55,7 +55,8 @@ export function StaffOverview() {
   const [unassigned, setUnassigned]       = useState<UnassignedJob[]>([]);
   const [loading, setLoading]             = useState(true);
   const [expanded, setExpanded]           = useState<Record<string, boolean>>({});
-  const [assignModal, setAssignModal]     = useState<{ jobId: string; jobTitle: string } | null>(null);
+  const [assignModal, setAssignModal]     = useState<{ jobId: string | string[]; jobTitle: string } | null>(null);
+  const [expandedClient, setExpandedClient] = useState<string | null>(null);
   const [noteModal, setNoteModal]         = useState<{ jobId: string; currentNote: string } | null>(null);
   const [noteText, setNoteText]           = useState('');
   const [saving, setSaving]               = useState(false);
@@ -105,10 +106,14 @@ export function StaffOverview() {
     setLoading(false);
   }
 
-  async function assignJob(jobId: string, staffId: string) {
+  async function assignJob(jobId: string | string[], staffId: string) {
     setSaving(true);
-    const { error } = await (supabase as any).from('hunt_documents').update({ assigned_to: staffId }).eq('id', jobId);
-    if (error) { toast.error(error.message); } else { toast.success('Task assigned'); setAssignModal(null); load(); }
+    const ids = Array.isArray(jobId) ? jobId : [jobId];
+    const { error } = await (supabase as any).from('hunt_documents').update({ assigned_to: staffId }).in('id', ids);
+    if (error) { toast.error(error.message); } else {
+      toast.success(ids.length > 1 ? `${ids.length} tasks assigned` : 'Task assigned');
+      setAssignModal(null); load();
+    }
     setSaving(false);
   }
 
@@ -165,30 +170,70 @@ export function StaffOverview() {
         </div>
       </div>
 
-      {/* Unassigned pool */}
-      {unassigned.length > 0 && (
-        <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 space-y-3">
-          <h3 className="font-semibold text-amber-800 dark:text-amber-300 text-sm flex items-center gap-2">
-            <Trophy className="w-4 h-4" /> {unassigned.length} Unassigned Trophy{unassigned.length !== 1 ? 'ies' : ''}
-          </h3>
-          <div className="space-y-2">
-            {unassigned.map(j => (
-              <div key={j.id} className="flex items-center gap-3 bg-white dark:bg-slate-900 border border-amber-100 dark:border-amber-900 rounded-lg p-3">
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-slate-900 dark:text-slate-100 text-sm truncate">{j.title}</p>
-                  <p className="text-xs text-slate-500">{j.client_name} · Hunt {j.hunt_year} · {DEPT_LABELS[j.current_department] ?? j.current_department}</p>
-                </div>
-                <button
-                  onClick={() => setAssignModal({ jobId: j.id, jobTitle: j.title })}
-                  className="flex items-center gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg transition-colors shrink-0"
-                >
-                  <Plus className="w-3 h-3" /> Assign
-                </button>
-              </div>
-            ))}
+      {/* Unassigned pool — grouped by client so a big order doesn't bury the rest */}
+      {unassigned.length > 0 && (() => {
+        const byClient: Record<string, UnassignedJob[]> = {};
+        for (const j of unassigned) (byClient[j.client_name] ??= []).push(j);
+        const clients = Object.entries(byClient).sort((a, b) => b[1].length - a[1].length);
+
+        return (
+          <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 space-y-3">
+            <h3 className="font-semibold text-amber-800 dark:text-amber-300 text-sm flex items-center gap-2">
+              <Trophy className="w-4 h-4" /> {unassigned.length} Unassigned Trophy{unassigned.length !== 1 ? 'ies' : ''} across {clients.length} client{clients.length !== 1 ? 's' : ''}
+            </h3>
+            <div className="space-y-2">
+              {clients.map(([clientName, jobs]) => {
+                const isOpen = expandedClient === clientName;
+                return (
+                  <div key={clientName} className="bg-white dark:bg-slate-900 border border-amber-100 dark:border-amber-900 rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => setExpandedClient(isOpen ? null : clientName)}
+                      className="w-full flex items-center justify-between p-3 text-left hover:bg-amber-50/50 dark:hover:bg-amber-950/20 transition-colors"
+                    >
+                      <div>
+                        <p className="font-medium text-slate-900 dark:text-slate-100 text-sm">{clientName}</p>
+                        <p className="text-xs text-slate-500">Hunt {jobs[0].hunt_year}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 px-2.5 py-1 rounded-full">
+                          {jobs.length}
+                        </span>
+                        {jobs.length > 1 && (
+                          <button
+                            onClick={e => { e.stopPropagation(); setAssignModal({ jobId: jobs.map(j => j.id), jobTitle: `all ${jobs.length} trophies for ${clientName}` }); }}
+                            className="flex items-center gap-1 text-xs bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1.5 rounded-lg transition-colors"
+                          >
+                            <Plus className="w-3 h-3" /> Assign All
+                          </button>
+                        )}
+                        {isOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                      </div>
+                    </button>
+                    {isOpen && (
+                      <div className="border-t border-amber-100 dark:border-amber-900 p-2 space-y-1.5">
+                        {jobs.map(j => (
+                          <div key={j.id} className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5">
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-slate-900 dark:text-slate-100 text-sm truncate">{j.title}</p>
+                              <p className="text-xs text-slate-500">{DEPT_LABELS[j.current_department] ?? j.current_department}</p>
+                            </div>
+                            <button
+                              onClick={() => setAssignModal({ jobId: j.id, jobTitle: j.title })}
+                              className="flex items-center gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1.5 rounded-lg transition-colors shrink-0"
+                            >
+                              <Plus className="w-3 h-3" /> Assign
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Staff cards */}
       <div className="space-y-3">

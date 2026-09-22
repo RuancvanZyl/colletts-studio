@@ -176,6 +176,7 @@ export function MyTasks() {
   const [completeOpen, setCompleteOpen] = useState<string | null>(null);
   const [completeState, setCompleteState] = useState<Record<string, CompleteState>>({});
   const [showAlerts, setShowAlerts] = useState(true);
+  const [selectedClient, setSelectedClient] = useState<string | null>(null);
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const myDepts = getStaffDepartments(profile?.full_name ?? '', profile?.department_name);
@@ -408,8 +409,51 @@ export function MyTasks() {
         </p>
       )}
 
-      {/* Task cards */}
-      {!loading && tasks.map(task => {
+      {/* Client picker — grouped so one big order doesn't bury everyone else */}
+      {!loading && tasks.length > 0 && !selectedClient && (() => {
+        const byClient: Record<string, { name: string; number: string; count: number }> = {};
+        for (const t of tasks) {
+          const key = t.clientNumber || t.clientName;
+          if (!byClient[key]) byClient[key] = { name: t.clientName, number: t.clientNumber, count: 0 };
+          byClient[key].count++;
+        }
+        const clients = Object.entries(byClient).sort((a, b) => b[1].count - a[1].count);
+        return (
+          <div className="space-y-2">
+            {clients.map(([key, c]) => (
+              <button
+                key={key}
+                onClick={() => setSelectedClient(key)}
+                className="w-full flex items-center justify-between bg-[#0F1A1C] rounded-xl border border-[rgba(58,174,204,0.15)] px-4 py-3.5 text-left hover:border-[#3AAECC]/50 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  {c.number && <span className="font-bold text-[#3AAECC] text-sm">{c.number}</span>}
+                  <span className="text-[#EDF6F9] font-semibold">{c.name}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold bg-[rgba(58,174,204,0.15)] text-[#3AAECC] px-2.5 py-1 rounded-full">
+                    {c.count} trophy{c.count !== 1 ? 'ies' : ''}
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-[#7AADB8]" />
+                </div>
+              </button>
+            ))}
+          </div>
+        );
+      })()}
+
+      {/* Back to client list */}
+      {!loading && selectedClient && (
+        <button
+          onClick={() => setSelectedClient(null)}
+          className="flex items-center gap-1.5 text-sm text-[#7AADB8] hover:text-[#EDF6F9] transition-colors"
+        >
+          <ChevronRight className="w-4 h-4 rotate-180" /> All clients
+        </button>
+      )}
+
+      {/* Task cards — only this client's, once one is picked */}
+      {!loading && selectedClient && tasks.filter(t => (t.clientNumber || t.clientName) === selectedClient).map(task => {
         const pipeline = getPipeline(task.mountType);
         const stageIdx = pipeline.indexOf(task.currentDept);
         const progress = stageIdx >= 0 ? Math.round((stageIdx / (pipeline.length - 1)) * 100) : 0;
