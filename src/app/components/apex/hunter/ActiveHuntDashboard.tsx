@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Button } from '../../ui/button';
 import { Card } from '../../ui/card';
 import { Badge } from '../../ui/badge';
-import { Plus, MapPin, Calendar, User, Trophy as TrophyIcon, CheckCircle, ArrowRight } from 'lucide-react';
+import { Plus, MapPin, Calendar, User, Trophy, CheckCircle, ArrowRight } from 'lucide-react';
 import { formatDate as format } from '../utils/dateUtils';
 
 interface TrophyItem {
