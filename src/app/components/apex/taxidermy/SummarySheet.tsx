@@ -14,9 +14,10 @@ import { useClientCare } from '../../../../lib/hooks/useClientCare';
 import { useDeadlineWatch } from '../../../../lib/hooks/useDeadlineWatch';
 import { useAwaitingInstruction } from '../../../../lib/hooks/useAwaitingInstruction';
 import { DEPT_COLORS } from '../../../../lib/pipeline';
+import { ClientStatusBoard } from './ClientStatusBoard';
 
 interface SummarySheetProps {
-  onNavigate: (view: string) => void;
+  onNavigate: (view: string, clientId?: string) => void;
 }
 
 function timeAgo(iso: string) {
@@ -275,6 +276,9 @@ export function SummarySheet({ onNavigate }: SummarySheetProps) {
           )}
         </div>
       </div>
+
+      {/* Client Status Board */}
+      <ClientStatusBoard onNavigate={onNavigate} />
 
       {/* Stalled alerts + Recent activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
