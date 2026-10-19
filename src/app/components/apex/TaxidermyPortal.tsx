@@ -398,7 +398,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'staff-overview':    return <StaffOverview />;
       case 'hunt-archive':      return <HuntArchive />;
       case 'client-care':       return <ClientCare />;
-      case 'deadline-watch':    return <DeadlineWatch onOpenHunt={() => navigate('hunt-archive')} />;
+      case 'deadline-watch':    return <DeadlineWatch onOpenHunt={(clientId) => navigate('clients', clientId)} />;
       case 'awaiting-instruction': return <AwaitingInstruction />;
       case 'staff-management':  return <StaffManagement />;
       default:                  return <SummarySheet onNavigate={navigate} />;

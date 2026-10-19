@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 import { OrderTimelineCard } from './OrderTimelineCard';
 
 // ── Doc type metadata ───────────────────────────────────────────────────────
-const DOC_META: Record<string, { label: string; icon: typeof FileText; color: string; staffOnly?: boolean }> = {
+export const DOC_META: Record<string, { label: string; icon: typeof FileText; color: string; staffOnly?: boolean }> = {
   permit:           { label: 'Hunting Permit',    icon: ShieldCheck,   color: 'text-green-600' },
   cites:            { label: 'CITES Permit',       icon: ShieldCheck,   color: 'text-emerald-600' },
   import_permit:    { label: 'Import Permit',      icon: ShieldCheck,   color: 'text-teal-600' },
@@ -35,7 +35,7 @@ const STATUS_ICON = {
 const DROPBOX_WEB_ROOT =
   'https://www.dropbox.com/home/Colletts%20SA';
 
-function dropboxUrl(path: string) {
+export function dropboxUrl(path: string) {
   return `${DROPBOX_WEB_ROOT}/${encodeURIComponent(path).replace(/%2F/g, '/')}`;
 }
 
@@ -342,7 +342,12 @@ function StaffDocDialog({ hunt, docType, onSaved, onClose }: {
 
 // ── Hunt Card ───────────────────────────────────────────────────────────────
 function HuntCard({ hunt, onRefresh }: { hunt: ClientHunt; onRefresh: () => void }) {
-  const [open, setOpen] = useState(false);
+  const daysLate = hunt.status === 'active' && hunt.deadline_current
+    ? Math.floor((Date.now() - new Date(hunt.deadline_current).getTime()) / 86_400_000) : 0;
+  const lateMilestones = hunt.status === 'active'
+    ? (hunt.milestones ?? []).filter(m => !m.completed && new Date(m.due_date).getTime() < Date.now()) : [];
+  const isOverdue = daysLate > 0 || lateMilestones.length > 0;
+  const [open, setOpen] = useState(isOverdue);
   const [addDocOpen, setAddDocOpen] = useState(false);
   const [staffDocType, setStaffDocType] = useState<'job_card' | 'receiving_sheet' | 'packing_list' | null>(null);
   const { deleteDocument } = useClientHunts(hunt.client_id);
@@ -367,7 +372,8 @@ function HuntCard({ hunt, onRefresh }: { hunt: ClientHunt; onRefresh: () => void
     active: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
     completed: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300',
     cancelled: 'bg-slate-100 text-slate-500',
-  }[hunt.status];
+    stock: 'bg-purple-100 text-purple-700',
+  }[hunt.status] ?? 'bg-slate-100 text-slate-500';
 
   return (
     <>
@@ -381,6 +387,11 @@ function HuntCard({ hunt, onRefresh }: { hunt: ClientHunt; onRefresh: () => void
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-semibold text-sm text-slate-900 dark:text-slate-100">{hunt.ref_number}</span>
               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${statusColor}`}>{hunt.status}</span>
+              {isOverdue && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-600 text-white">
+                  {daysLate > 0 ? `OVERDUE ${daysLate}d` : `${lateMilestones.length} milestone${lateMilestones.length !== 1 ? 's' : ''} late`}
+                </span>
+              )}
               {hunt.operator && <span className="text-xs text-slate-500">{hunt.operator}</span>}
               {hunt.country  && <span className="text-xs text-slate-400">· {hunt.country}</span>}
             </div>
@@ -413,6 +424,18 @@ function HuntCard({ hunt, onRefresh }: { hunt: ClientHunt; onRefresh: () => void
 
         {open && (
           <div className="px-4 py-3 space-y-3">
+
+            {isOverdue && (
+              <div className="rounded-lg border border-red-300 bg-red-50 dark:bg-red-950/30 px-3 py-2 text-xs text-red-700 dark:text-red-300">
+                <p className="font-bold">This order is overdue</p>
+                {daysLate > 0 && hunt.deadline_current && (
+                  <p>Final deadline was {new Date(hunt.deadline_current).toLocaleDateString()} — {daysLate} day{daysLate !== 1 ? 's' : ''} ago.</p>
+                )}
+                {lateMilestones.map(m => (
+                  <p key={m.key}>{m.label} — due {new Date(m.due_date).toLocaleDateString()}</p>
+                ))}
+              </div>
+            )}
 
             {/* Production timeline */}
             <OrderTimelineCard hunt={hunt} onRefresh={onRefresh} />

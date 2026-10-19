@@ -23,6 +23,9 @@ export interface DeadlineWatchHunt {
   status:        DeadlineStatus;
   timelineStartedAt: string | null;
   amendedCount:  number;
+  dropboxPath:   string | null;
+  milestones:    { key: string; label: string; due_date: string; completed: boolean }[];
+  documents:     { id: string; doc_type: string; title: string; status: string; dropbox_path: string | null; storage_path: string | null }[];
 }
 
 const DAY = 86_400_000;
@@ -38,7 +41,8 @@ export function useDeadlineWatch() {
       .from('client_hunts')
       .select(`
         id, ref_number, year, order_size, deadline_current, timeline_started_at,
-        deadline_amendments,
+        deadline_amendments, dropbox_path, milestones,
+        documents:hunt_documents(id, doc_type, title, status, dropbox_path, storage_path),
         clients!inner(id, full_name, client_number)
       `)
       .eq('status', 'active')
@@ -70,6 +74,9 @@ export function useDeadlineWatch() {
         status,
         timelineStartedAt: h.timeline_started_at,
         amendedCount: (h.deadline_amendments ?? []).length,
+        dropboxPath:  h.dropbox_path ?? null,
+        milestones:   h.milestones ?? [],
+        documents:    h.documents ?? [],
       };
     });
 
