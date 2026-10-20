@@ -341,7 +341,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     {
       heading: 'Logistics',
       items: [
-        { view: 'workshop-brief', icon: ClipboardList, label: 'Workshop Instructions' },
+        { view: 'workshop-brief', icon: ClipboardList, label: 'Job Cards' },
         { view: 'packing',       icon: Package, label: 'Packing & Crating' },
         { view: 'photos-admin',  icon: FileText, label: 'Photos & Dispatch' },
         { view: 'ready-to-ship', icon: Package, label: 'Ready to Ship' },
