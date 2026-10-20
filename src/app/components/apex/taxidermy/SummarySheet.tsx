@@ -102,7 +102,12 @@ export function SummarySheet({ onNavigate }: SummarySheetProps) {
       {/* KPI row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {kpiCards.map((kpi, i) => (
-          <div key={i} className="bg-white dark:bg-[#1c2b3a] rounded-xl border border-slate-200 dark:border-slate-700 p-4 flex flex-col gap-2">
+          <div
+            key={i}
+            onClick={kpi.label === 'Active Job Cards' ? () => onNavigate('workshop-brief') : undefined}
+            className={`bg-white dark:bg-[#1c2b3a] rounded-xl border border-slate-200 dark:border-slate-700 p-4 flex flex-col gap-2 ${
+              kpi.label === 'Active Job Cards' ? 'cursor-pointer hover:border-[#0073ea] hover:shadow-md transition-all' : ''}`}
+          >
             <div className="flex items-center justify-between">
               <span className="text-xs text-slate-500 dark:text-slate-400 leading-tight">{kpi.label}</span>
               <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: kpi.color + '20' }}>
@@ -113,6 +118,11 @@ export function SummarySheet({ onNavigate }: SummarySheetProps) {
               ? <div className="h-7 w-12 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />
               : <span className="text-2xl font-bold text-slate-900 dark:text-slate-100">{kpi.value}</span>
             }
+            {kpi.label === 'Active Job Cards' && !loading && (
+              <span className="text-[11px] font-medium text-[#0073ea] flex items-center gap-1">
+                {(stats?.byDept.length ?? 0)} departments · View all job cards <ArrowRight className="w-3 h-3" />
+              </span>
+            )}
           </div>
         ))}
       </div>

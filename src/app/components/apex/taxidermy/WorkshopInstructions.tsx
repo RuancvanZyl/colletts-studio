@@ -57,63 +57,49 @@ export function WorkshopInstructions() {
   async function load() {
     setLoading(true);
 
-    // Fetch active (in_progress) jobs
-    let query = (supabase as any)
-      .from('hunt_documents')
-      .select('id, hunt_id, form_data, current_department, status')
-      .eq('doc_type', 'job_card')
-      .eq('status', 'in_progress')
-      .order('created_at', { ascending: true });
+    // One joined query per page (client + hunt come with each job card) — no long id lists in the URL,
+    // and paged so more than 1000 job cards still load.
+    const EMBED = 'id, hunt_id, form_data, current_department, status, client_hunts(client_id, year, operator, clients(id, full_name, client_number, email))';
+    const fetchAll = async (build: () => any) => {
+      const rows: any[] = [];
+      for (let from = 0; ; from += 1000) {
+        const { data } = await build().range(from, from + 999);
+        rows.push(...(data ?? []));
+        if (!data || data.length < 1000) break;
+      }
+      return rows;
+    };
 
-    if (!seeAll && myDepts.length > 0) {
-      query = query.in('current_department', myDepts);
-    }
-
-    const [{ data: docs }, { data: pendingDocs }, { data: custDocs }] = await Promise.all([
-      query,
+    const [docs, pendingDocs, custDocs] = await Promise.all([
+      fetchAll(() => {
+        let q = (supabase as any).from('hunt_documents').select(EMBED)
+          .eq('doc_type', 'job_card').eq('status', 'in_progress').order('created_at', { ascending: true });
+        if (!seeAll && myDepts.length > 0) q = q.in('current_department', myDepts);
+        return q;
+      }),
       // Admin also fetches pending_payment (hunter-submitted, not yet activated)
       seeAll
-        ? (supabase as any).from('hunt_documents')
-            .select('id, hunt_id, form_data, current_department, status')
-            .eq('doc_type', 'job_card')
-            .eq('status', 'pending_payment')
-            .order('created_at', { ascending: false })
-        : Promise.resolve({ data: [] }),
-      (supabase as any).from('hunt_documents')
-        .select('hunt_id, title, form_data').eq('doc_type', 'customisation'),
+        ? fetchAll(() => (supabase as any).from('hunt_documents').select(EMBED)
+            .eq('doc_type', 'job_card').eq('status', 'pending_payment').order('created_at', { ascending: false }))
+        : Promise.resolve([] as any[]),
+      fetchAll(() => (supabase as any).from('hunt_documents')
+        .select('hunt_id, title, form_data').eq('doc_type', 'customisation').order('created_at', { ascending: true })),
     ]);
 
-    const allDocs = [...(docs ?? []), ...(pendingDocs ?? [])];
+    const allDocs = [...docs, ...pendingDocs];
     if (allDocs.length === 0) { setCards([]); setPendingCards([]); setLoading(false); return; }
 
-    const huntIds = [...new Set(allDocs.map((d: any) => d.hunt_id))];
-    const { data: hunts } = await (supabase as any)
-      .from('client_hunts').select('id, client_id, year, operator').in('id', huntIds);
-    const clientIds = [...new Set((hunts ?? []).map((h: any) => h.client_id))];
-    const { data: clients } = await (supabase as any)
-      .from('clients').select('id, full_name, client_number, email').in('id', clientIds);
-
-    const huntToClient: Record<string, string> = {};
-    const huntMeta: Record<string, { year: string; operator: string | null }> = {};
-    for (const h of hunts ?? []) {
-      huntToClient[h.id] = h.client_id;
-      huntMeta[h.id] = { year: h.year, operator: h.operator };
-    }
-    const clientMap: Record<string, any> = {};
-    for (const c of clients ?? []) clientMap[c.id] = c;
-
     const custByHunt: Record<string, string[]> = {};
-    for (const c of custDocs ?? []) {
+    for (const c of custDocs) {
       if (!custByHunt[c.hunt_id]) custByHunt[c.hunt_id] = [];
       const desc = c.form_data?.description ? `${c.title}: ${c.form_data.description}` : c.title;
       custByHunt[c.hunt_id].push(desc);
     }
 
     const toCard = (doc: any, isPending = false): JobCard => {
-      const clientId = huntToClient[doc.hunt_id];
-      const cl = clientMap[clientId] ?? {};
+      const cl = doc.client_hunts?.clients ?? {};
       const fd = doc.form_data ?? {};
-      const meta = huntMeta[doc.hunt_id] ?? {};
+      const meta = { year: doc.client_hunts?.year ?? null, operator: doc.client_hunts?.operator ?? null };
       return {
         docId:           doc.id,
         huntId:          doc.hunt_id,
@@ -133,8 +119,8 @@ export function WorkshopInstructions() {
       };
     };
 
-    setCards((docs ?? []).map((d: any) => toCard(d, false)));
-    setPendingCards((pendingDocs ?? []).map((d: any) => toCard(d, true)));
+    setCards(docs.map((d: any) => toCard(d, false)));
+    setPendingCards(pendingDocs.map((d: any) => toCard(d, true)));
     setLoading(false);
   }
 
@@ -261,7 +247,7 @@ export function WorkshopInstructions() {
           <h1 className="text-slate-900 dark:text-slate-100 text-xl font-bold">Job Cards</h1>
           <p className="text-slate-500 text-sm">
             {seeAll
-              ? `${cards.length} active · ${pendingCards.length} incoming`
+              ? `${cards.length} active job cards · ${new Set(cards.map(c => c.clientName)).size} clients · ${pendingCards.length} incoming`
               : myDepts.length > 0
                 ? `${myDepts.map(d => DEPT_LABELS[d] ?? d).join(', ')} — ${cards.length} job${cards.length !== 1 ? 's' : ''}`
                 : 'No department assigned'

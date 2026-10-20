@@ -26,12 +26,19 @@ export function useWorkshopStats() {
   async function load() {
     setLoading(true);
 
-    // Active job cards
-    const { data: active } = await (supabase as any)
-      .from('hunt_documents')
-      .select('id, current_department, last_moved_at, status')
-      .eq('doc_type', 'job_card')
-      .eq('status', 'in_progress');
+    // Active job cards (paged so more than 1000 still count correctly)
+    const active: any[] = [];
+    for (let from = 0; ; from += 1000) {
+      const { data: page } = await (supabase as any)
+        .from('hunt_documents')
+        .select('id, current_department, last_moved_at, status')
+        .eq('doc_type', 'job_card')
+        .eq('status', 'in_progress')
+        .order('id', { ascending: true })
+        .range(from, from + 999);
+      active.push(...(page ?? []));
+      if (!page || page.length < 1000) break;
+    }
 
     // Pending payment
     const { count: pendingCount } = await (supabase as any)
