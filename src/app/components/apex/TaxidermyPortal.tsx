@@ -40,6 +40,7 @@ import { StaffOverview } from './taxidermy/StaffOverview';
 import { DispatchBoard } from './taxidermy/DispatchBoard';
 import { OfflineBanner } from './shared/OfflineBanner';
 import { Messages } from './taxidermy/Messages';
+import { WorkshopSetup } from './taxidermy/WorkshopSetup';
 import { useUnreadMessages, canCommunicate } from '../../../lib/hooks/useMessages';
 import { NoticeBoard } from './shared/NoticeBoard';
 import { GlobalSearch } from './shared/GlobalSearch';
@@ -87,6 +88,7 @@ type TaxidermyView =
   | 'staff-overview'
   | 'dispatch'
   | 'messages'
+  | 'workshop-setup'
   | 'hunt-archive'
   | 'client-care'
   | 'deadline-watch'
@@ -366,6 +368,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
         { view: 'dispatch' as TaxidermyView,           icon: ListTodo, label: 'Dispatch Board' },
         { view: 'staff-overview' as TaxidermyView,    icon: Users,    label: 'Staff Overview' },
         { view: 'staff-management' as TaxidermyView,  icon: Settings, label: 'Manage Staff' },
+        { view: 'workshop-setup' as TaxidermyView,    icon: ClipboardCheck, label: 'Workshop Setup' },
       ],
     }] : []),
   ];
@@ -411,6 +414,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'staff-overview':    return <StaffOverview />;
       case 'dispatch':          return <DispatchBoard />;
       case 'messages':          return <Messages />;
+      case 'workshop-setup':    return <WorkshopSetup />;
       case 'hunt-archive':      return <HuntArchive />;
       case 'client-care':       return <ClientCare />;
       case 'deadline-watch':    return <DeadlineWatch onOpenHunt={(clientId) => navigate('clients', clientId)} />;
