@@ -51,90 +51,64 @@ export function ReceivingSheet({ onNavigate }: { onNavigate: (v: string) => void
   const [activeId, setActiveId]   = useState<string | null>(null);
   const [tab, setTab]             = useState<'pending' | 'received'>('pending');
   const [received, setReceived]   = useState<PendingHunt[]>([]);
+  const [search, setSearch]       = useState('');
 
   useEffect(() => { loadHunts(); }, [tab]);
 
   async function loadHunts() {
     setLoading(true);
-    const column = tab === 'pending' ? 'checked_in_at' : 'received_at';
-    const { data } = await (supabase as any)
-      .from('v_recent_checkins')
-      .select('*')
-      .order('checked_in_at', { ascending: false })
-      .limit(50)
-      .catch(() => ({ data: null }));
-
-    // fallback: query via hunt_documents
-    if (!data) {
-      // Pending = awaiting_arrival (pre-registered export) OR in_progress at receiving
-      const { data: activeDocs } = await (supabase as any)
-        .from('hunt_documents')
-        .select('hunt_id')
-        .eq('doc_type', 'job_card')
-        .in('status', ['awaiting_arrival', 'in_progress'])
-        .eq('current_department', 'receiving');
-
-      const activeHuntIds = [...new Set((activeDocs ?? []).map((d: any) => d.hunt_id))];
-
-      // Get hunt_ids that have passed receiving
-      const { data: pastReceiving } = await (supabase as any)
-        .from('hunt_documents')
-        .select('hunt_id')
-        .eq('doc_type', 'job_card')
-        .eq('status', 'in_progress')
-        .neq('current_department', 'receiving');
-
-      const pastSet = new Set((pastReceiving ?? []).map((d: any) => d.hunt_id));
-
-      if (activeHuntIds.length === 0 && tab === 'pending') {
-        setHunts([]);
-        setLoading(false);
-        return;
+    try {
+      // One joined query: job cards in/after Receiving with their hunt + client attached.
+      // Paged (1000/page), no id lists in the URL, and always clears the spinner.
+      const rows: any[] = [];
+      for (let from = 0; from < 5000; from += 1000) {
+        let q = (supabase as any)
+          .from('hunt_documents')
+          .select('hunt_id, client_hunts(id, year, client_type, operator, created_at, status, clients(full_name, client_number, email))')
+          .eq('doc_type', 'job_card');
+        q = tab === 'pending'
+          ? q.in('status', ['awaiting_arrival', 'in_progress']).eq('current_department', 'receiving')
+          : q.eq('status', 'in_progress').neq('current_department', 'receiving');
+        const { data, error } = await q.order('hunt_id', { ascending: true }).range(from, from + 999);
+        if (error) throw error;
+        rows.push(...(data ?? []));
+        if (!data || data.length < 1000) break;
       }
 
-      const idsToFetch = tab === 'pending' ? activeHuntIds : [...pastSet];
-      if (idsToFetch.length === 0) {
-        if (tab === 'pending') setHunts([]);
-        else setReceived([]);
-        setLoading(false);
-        return;
+      const seen = new Set<string>();
+      const mapped: PendingHunt[] = [];
+      for (const r of rows) {
+        const h = r.client_hunts;
+        if (!h || seen.has(h.id) || h.status === 'cancelled') continue;
+        seen.add(h.id);
+        mapped.push({
+          id:            h.id,
+          year:          h.year,
+          client_type:   h.client_type ?? 'export',
+          client_name:   h.clients?.full_name ?? 'Unknown',
+          client_number: h.clients?.client_number ?? null,
+          client_email:  h.clients?.email ?? null,
+          operator:      h.operator ?? null,
+          checked_in_at: h.created_at,
+        });
       }
-
-      const { data: raw } = await (supabase as any)
-        .from('client_hunts')
-        .select(`
-          id, year, client_type, operator, created_at,
-          clients!inner(full_name, client_number, email)
-        `)
-        .in('id', idsToFetch)
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      const mapped: PendingHunt[] = (raw ?? []).map((r: any) => ({
-        id:             r.id,
-        year:           r.year,
-        client_type:    r.client_type ?? 'export',
-        client_name:    r.clients?.full_name ?? 'Unknown',
-        client_number:  r.clients?.client_number ?? null,
-        client_email:   r.clients?.email ?? null,
-        operator:       r.operator ?? null,
-        checked_in_at:  r.created_at,
-      }));
+      mapped.sort((a, b) => a.client_name.localeCompare(b.client_name));
 
       if (tab === 'pending') setHunts(mapped);
       else setReceived(mapped);
-    } else {
-      if (tab === 'pending') setHunts(data);
-      else setReceived(data);
+    } catch (err: any) {
+      toast.error('Could not load receiving list: ' + (err?.message ?? 'unknown error'));
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   if (activeId) {
     return <ReceivingChecklist huntId={activeId} onBack={() => { setActiveId(null); loadHunts(); }} />;
   }
 
-  const list = tab === 'pending' ? hunts : received;
+  const list = (tab === 'pending' ? hunts : received)
+    .filter(h => !search || h.client_name.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div className="space-y-5 max-w-2xl">
@@ -159,6 +133,13 @@ export function ReceivingSheet({ onNavigate }: { onNavigate: (v: string) => void
           </button>
         ))}
       </div>
+
+      <input
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder="Search client…"
+        className="w-full max-w-md rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm"
+      />
 
       {loading ? (
         <div className="flex items-center gap-2 text-slate-400 py-8"><Loader2 className="w-4 h-4 animate-spin" />Loading…</div>
