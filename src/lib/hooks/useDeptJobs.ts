@@ -35,7 +35,7 @@ export function useDeptJobs(dept: string | string[]) {
     try {
       const { data: docs, error } = await (supabase as any)
         .from('hunt_documents')
-        .select('id, hunt_id, current_department, status, form_data, last_moved_at')
+        .select('id, hunt_id, current_department, status, form_data, last_moved_at, client_hunts(clients(full_name, client_number))')
         .eq('doc_type', 'job_card')
         .in('current_department', depts)
         .eq('status', 'in_progress')
@@ -45,11 +45,7 @@ export function useDeptJobs(dept: string | string[]) {
 
       const result: DeptJob[] = [];
       for (const doc of docs ?? []) {
-        const { data: hunt } = await (supabase as any)
-          .from('client_hunts').select('client_id').eq('id', doc.hunt_id).single();
-        const { data: client } = hunt
-          ? await (supabase as any).from('clients').select('full_name, client_number').eq('id', hunt.client_id).single()
-          : { data: null };
+        const client = (doc as any).client_hunts?.clients ?? null;
 
         const fd = doc.form_data ?? {};
         result.push({
