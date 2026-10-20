@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { completeStage as completeStageAction } from '../../../../lib/offline/completeStage';
 import { supabase } from '../../../../lib/supabase';
 import { useAuth } from '../../../../lib/auth';
 import { getNextDepartment, getStaffDepartments, DEPT_LABELS } from '../../../../lib/pipeline';
@@ -155,43 +156,35 @@ export function WorkshopInstructions() {
     if (completing) return;
     setCompleting(card.docId);
 
-    const now = new Date().toISOString();
     const by  = profile?.full_name ?? 'Staff';
     const cardPhotos = photos[card.docId] ?? [];
-    const uploadedPaths: string[] = [];
-
-    for (const file of cardPhotos) {
-      const ext  = file.name.split('.').pop();
-      const path = `completion/${card.docId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const { error } = await (supabase as any).storage.from('client-photos').upload(path, file, { upsert: true });
-      if (!error) uploadedPaths.push(path);
-    }
-
-    const historyEntry: any = { dept: card.department, completedAt: now, completedBy: by, photoPaths: uploadedPaths };
-    const newHistory = [...card.stageHistory, historyEntry];
     const next = getNextDepartment(card.mountType, card.department);
 
-    const { data: doc } = await (supabase as any)
-      .from('hunt_documents').select('form_data').eq('id', card.docId).single();
-
-    const { error } = await (supabase as any).from('hunt_documents').update({
-      current_department:     next ?? 'done',
-      status:                 next ? 'in_progress' : 'completed',
-      completion_photo_paths: uploadedPaths,
-      completed_by_name:      by,
-      form_data: { ...(doc?.form_data ?? {}), stage_history: newHistory },
-    }).eq('id', card.docId);
-
-    if (error) { toast.error('Could not mark as done'); setCompleting(null); return; }
-
-    await (supabase as any).from('trophy_stage_history').insert({
-      hunt_doc_id: card.docId, department: card.department,
-      completed_by: profile?.id ?? null, completed_by_name: by,
-      photo_paths: uploadedPaths, notes: null,
+    // Same path as My Tasks and the stations: photos kept on the device, checklist rule enforced, works offline
+    const r = await completeStageAction({
+      doc: card.docId, dept: card.department, mountType: card.mountType, notes: '',
+      files: cardPhotos, staffId: profile?.id ?? null, staffName: by,
     });
 
+    if (r.error) {
+      if (/checklist incomplete/i.test(r.error) && isAdmin) {
+        // admins may override, but must say why (it is recorded on the job card)
+        const reason = window.prompt(`${r.error}\n\nAs an admin you can move this job on anyway. Why? (this is recorded)`);
+        if (reason && reason.trim()) {
+          const { error: ovErr } = await (supabase as any).rpc('job_force_advance', {
+            p_doc: card.docId, p_next: next ?? 'done', p_status: next ? 'in_progress' : 'completed', p_reason: reason.trim(),
+          });
+          if (ovErr) { toast.error(ovErr.message); setCompleting(null); return; }
+        } else { setCompleting(null); return; }
+      } else {
+        toast.error(r.error);
+        setCompleting(null);
+        return;
+      }
+    }
+
     // Fire-and-forget email to client at checkpoint stages
-    if (card.clientEmail) {
+    if (card.clientEmail && !r.queued) {
       fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-trophy-update`, {
         method: 'POST',
         headers: {
@@ -211,7 +204,7 @@ export function WorkshopInstructions() {
     }
 
     const nextLabel = next ? (DEPT_LABELS[next] ?? next) : null;
-    toast.success(`${card.species} done${nextLabel ? ` → moving to ${nextLabel}` : ' — job complete!'}`);
+    toast.success(r.queued ? 'Saved on this device — it will be sent when the connection returns' : `${card.species} done${nextLabel ? ` → moving to ${nextLabel}` : ' — job complete!'}`);
 
     setPhotos(prev => { const n = { ...prev }; delete n[card.docId]; return n; });
     setExpanded(null);
