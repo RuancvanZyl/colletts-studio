@@ -61,7 +61,7 @@ export function DeadlineWatch({ onOpenHunt }: DeadlineWatchProps) {
           <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Deadline Watch</h2>
           <p className="text-sm text-slate-500">Every active export order, checked against its deadline</p>
         </div>
-        <Button variant="ghost" size="icon" onClick={refresh} disabled={loading}>
+        <Button variant="ghost" size="icon" onClick={refresh} disabled={loading} title="Refresh" aria-label="Refresh">
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
         </Button>
       </div>
@@ -154,8 +154,8 @@ export function DeadlineWatch({ onOpenHunt }: DeadlineWatchProps) {
                       {h.status === 'not-started' && 'Timeline not started yet'}
                       {h.status !== 'not-started' && h.deadline && (
                         h.status === 'overdue'
-                          ? `Deadline was ${new Date(h.deadline).toLocaleDateString()} — ${h.daysOverdue} day${h.daysOverdue !== 1 ? 's' : ''} overdue`
-                          : `Due ${new Date(h.deadline).toLocaleDateString()}${h.daysOverdue < 0 ? ` — ${-h.daysOverdue} days left` : ''}`
+                          ? `Deadline was ${new Date(h.deadline).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })} — ${h.daysOverdue} day${h.daysOverdue !== 1 ? 's' : ''} overdue`
+                          : `Due ${new Date(h.deadline).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}${h.daysOverdue < 0 ? ` — ${-h.daysOverdue} days left` : ''}`
                       )}
                     </p>
                   </div>
@@ -190,7 +190,7 @@ export function DeadlineWatch({ onOpenHunt }: DeadlineWatchProps) {
                                   : <Clock className="w-4 h-4 text-slate-400 shrink-0" />}
                                 <span className={st === 'overdue' ? 'font-semibold text-red-700 dark:text-red-300' : 'text-slate-700 dark:text-slate-300'}>{m.label}</span>
                                 <span className="text-xs text-slate-500">
-                                  {st === 'done' ? 'done' : `due ${new Date(m.due_date).toLocaleDateString()}`}
+                                  {st === 'done' ? 'done' : `due ${new Date(m.due_date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}`}
                                   {st === 'overdue' && ` — ${late} day${late !== 1 ? 's' : ''} late`}
                                 </span>
                               </li>

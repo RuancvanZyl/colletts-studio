@@ -94,7 +94,7 @@ function ClientRow({ e, onOpen, onResolve, onReopen }: {
                 <button
                   key={k}
                   onClick={() => onReopen(k)}
-                  title={`Resolved${r.by ? ` by ${r.by}` : ''} on ${new Date(r.at).toLocaleDateString()}${r.note ? ` — ${r.note}` : ''}. Click to reopen.`}
+                  title={`Resolved${r.by ? ` by ${r.by}` : ''} on ${new Date(r.at).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}${r.note ? ` — ${r.note}` : ''}. Click to reopen.`}
                   className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 flex items-center gap-1 hover:opacity-80"
                 >
                   <CheckCircle2 className="w-3 h-3" />{FLAG_META[k].label} resolved
@@ -108,7 +108,7 @@ function ClientRow({ e, onOpen, onResolve, onReopen }: {
           <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-0.5 truncate">
             {done.map(k => {
               const r = e.resolutions[k]!;
-              return `${FLAG_META[k].label}: ${r.by ?? 'staff'}, ${new Date(r.at).toLocaleDateString()}${r.note ? ` — ${r.note}` : ''}`;
+              return `${FLAG_META[k].label}: ${r.by ?? 'staff'}, ${new Date(r.at).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}${r.note ? ` — ${r.note}` : ''}`;
             }).join(' · ')}
           </p>
         )}

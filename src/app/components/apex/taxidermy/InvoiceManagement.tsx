@@ -173,7 +173,7 @@ export function InvoiceManagement() {
           <p className="text-slate-600 dark:text-slate-400">Create and manage client invoices</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="ghost" size="icon" onClick={refresh} disabled={loading}>
+          <Button variant="ghost" size="icon" onClick={refresh} disabled={loading} title="Refresh" aria-label="Refresh">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
           <Button onClick={() => setCreateOpen(true)}>
@@ -278,8 +278,8 @@ export function InvoiceManagement() {
                   <p className="font-medium">{selected.clients?.full_name ?? '—'}</p>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><p className="text-slate-500">Issued</p><p>{new Date(selected.issue_date).toLocaleDateString()}</p></div>
-                  {selected.due_date && <div><p className="text-slate-500">Due</p><p className={new Date(selected.due_date) < new Date() && selected.status !== 'paid' ? 'text-red-600 font-medium' : ''}>{new Date(selected.due_date).toLocaleDateString()}</p></div>}
+                  <div><p className="text-slate-500">Issued</p><p>{new Date(selected.issue_date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}</p></div>
+                  {selected.due_date && <div><p className="text-slate-500">Due</p><p className={new Date(selected.due_date) < new Date() && selected.status !== 'paid' ? 'text-red-600 font-medium' : ''}>{new Date(selected.due_date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}</p></div>}
                 </div>
 
                 {/* Line items */}
@@ -403,7 +403,7 @@ export function InvoiceManagement() {
                       <p className="mt-1 py-2 text-sm font-medium">R {lineTotal(li).toLocaleString()}</p>
                     </div>
                     {lineItems.length > 1 && (
-                      <Button size="icon" variant="ghost" className="mb-0.5" onClick={() => removeLine(i)}>
+                      <Button size="icon" variant="ghost" title="Remove this line" aria-label="Remove this line" className="mb-0.5" onClick={() => removeLine(i)}>
                         <Trash2 className="w-4 h-4 text-red-400" />
                       </Button>
                     )}

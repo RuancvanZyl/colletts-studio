@@ -342,7 +342,7 @@ export function DeptJobList({
             </span>
           )}
           <Badge variant="secondary">{greenJobs.length} on track</Badge>
-          <Button variant="ghost" size="icon" onClick={onRefresh} disabled={loading}>
+          <Button variant="ghost" size="icon" onClick={onRefresh} disabled={loading} title="Refresh" aria-label="Refresh">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
         </div>

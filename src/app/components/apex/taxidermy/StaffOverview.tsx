@@ -145,7 +145,7 @@ export function StaffOverview() {
           <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Staff Overview</h2>
           <p className="text-sm text-slate-500">Workload and task assignments across the workshop</p>
         </div>
-        <Button variant="ghost" size="icon" onClick={load}>
+        <Button variant="ghost" size="icon" onClick={load} title="Refresh" aria-label="Refresh">
           <RefreshCw className="w-4 h-4" />
         </Button>
       </div>

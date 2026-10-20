@@ -169,7 +169,7 @@ export function PackingList({ huntId, clientName, clientNumber, onClose }: Packi
               {saving ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Save className="w-4 h-4 mr-1" />}
               Save
             </Button>
-            <Button variant="ghost" size="icon" onClick={onClose}><X className="w-4 h-4" /></Button>
+            <Button variant="ghost" size="icon" onClick={onClose} title="Close" aria-label="Close"><X className="w-4 h-4" /></Button>
           </div>
         </div>
 
@@ -346,7 +346,7 @@ export function PackingList({ huntId, clientName, clientNumber, onClose }: Packi
 
           {existingId && (
             <p className="text-xs text-slate-400 text-center print:hidden">
-              Packing list saved · last updated {new Date().toLocaleDateString()}
+              Packing list saved · last updated {new Date().toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}
             </p>
           )}
         </div>

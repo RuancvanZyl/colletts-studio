@@ -151,7 +151,7 @@ export function AlertDashboard({ onNavigate }: { onNavigate?: (view: string) => 
             {myDepts.map(d => DEPT_LABELS[d] ?? d).join(', ')}
           </p>
         </div>
-        <Button variant="ghost" size="icon" onClick={load} disabled={loading}>
+        <Button variant="ghost" size="icon" onClick={load} disabled={loading} title="Refresh" aria-label="Refresh">
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
         </Button>
       </div>

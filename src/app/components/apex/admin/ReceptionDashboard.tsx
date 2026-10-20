@@ -109,7 +109,7 @@ export function ReceptionDashboard({ onNewIntake }: ReceptionDashboardProps) {
                       <StatusBadge status={trophy.currentStage} />
                     </td>
                     <td className="p-4 text-stone-600 dark:text-stone-400">
-                      {new Date(trophy.lastUpdated).toLocaleDateString()}
+                      {new Date(trophy.lastUpdated).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}
                     </td>
                     <td className="p-4">
                       <Badge variant="outline">{lastEvent.zone}</Badge>

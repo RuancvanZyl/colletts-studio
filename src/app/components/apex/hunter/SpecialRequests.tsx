@@ -205,7 +205,7 @@ export function SpecialRequests() {
             <div key={s.id} className="bg-white/70 dark:bg-slate-800/50 rounded-xl p-3">
               <div className="flex items-start justify-between gap-2">
                 <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{s.type}</p>
-                <p className="text-[10px] text-slate-400 shrink-0">{new Date(s.createdAt).toLocaleDateString()}</p>
+                <p className="text-[10px] text-slate-400 shrink-0">{new Date(s.createdAt).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
               </div>
               {s.species.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1.5">

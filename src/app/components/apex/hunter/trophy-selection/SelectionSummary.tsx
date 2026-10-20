@@ -57,7 +57,7 @@ export function SelectionSummary({
             size="icon"
             onClick={onBack}
             className="rounded-full"
-          >
+           title="Back" aria-label="Back">
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <h2 className="text-slate-900 dark:text-slate-100">Review Your Trophy Selections</h2>

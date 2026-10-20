@@ -200,7 +200,7 @@ export function TrophyMessages() {
                 )}
                 <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{m.body}</p>
                 <div className="flex items-center justify-between mt-2">
-                  <p className="text-[10px] text-slate-400">{new Date(m.sentAt).toLocaleDateString()}</p>
+                  <p className="text-[10px] text-slate-400">{new Date(m.sentAt).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                   <Button
                     size="sm"
                     variant="outline"

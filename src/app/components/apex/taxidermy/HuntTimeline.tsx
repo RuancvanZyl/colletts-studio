@@ -295,7 +295,7 @@ function StaffDocDialog({ hunt, docType, onSaved, onClose }: {
           </tr>
         `).join('')}
       </table>
-      <footer>Generated ${new Date().toLocaleDateString()} — Apex Trophy Solutions</footer>
+      <footer>Generated ${new Date().toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })} — Apex Trophy Solutions</footer>
       </body></html>
     `);
     win.document.close();
@@ -429,10 +429,10 @@ function HuntCard({ hunt, onRefresh }: { hunt: ClientHunt; onRefresh: () => void
               <div className="rounded-lg border border-red-300 bg-red-50 dark:bg-red-950/30 px-3 py-2 text-xs text-red-700 dark:text-red-300">
                 <p className="font-bold">This order is overdue</p>
                 {daysLate > 0 && hunt.deadline_current && (
-                  <p>Final deadline was {new Date(hunt.deadline_current).toLocaleDateString()} — {daysLate} day{daysLate !== 1 ? 's' : ''} ago.</p>
+                  <p>Final deadline was {new Date(hunt.deadline_current).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })} — {daysLate} day{daysLate !== 1 ? 's' : ''} ago.</p>
                 )}
                 {lateMilestones.map(m => (
-                  <p key={m.key}>{m.label} — due {new Date(m.due_date).toLocaleDateString()}</p>
+                  <p key={m.key}>{m.label} — due {new Date(m.due_date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                 ))}
               </div>
             )}
@@ -485,13 +485,18 @@ function HuntCard({ hunt, onRefresh }: { hunt: ClientHunt; onRefresh: () => void
                         <span className="text-xs text-slate-700 dark:text-slate-300 flex-1 truncate">{doc.title}</span>
                         {STATUS_ICON[doc.status]}
                         {(doc.dropbox_path || doc.storage_path) && (
-                          <button onClick={() => openDoc(doc)} className="opacity-0 group-hover:opacity-100 text-[#0073ea]">
+                          <button onClick={() => openDoc(doc)} title="Open this document" aria-label="Open this document" className="opacity-100 [@media(hover:hover)]:opacity-0 group-hover:opacity-100 text-[#0073ea]">
                             <ExternalLink className="w-3 h-3" />
                           </button>
                         )}
                         <button
-                          onClick={async () => { await deleteDocument(doc.id); onRefresh(); }}
-                          className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600"
+                          onClick={async () => {
+                            const what = doc.doc_type === 'job_card' ? 'this JOB CARD' : 'this document';
+                            if (!window.confirm(`Remove ${what} ("${doc.title}") from the hunt?\n\nThe file in Dropbox is not touched, but the record here will be gone.`)) return;
+                            await deleteDocument(doc.id); onRefresh();
+                          }}
+                          title="Remove from this hunt" aria-label="Remove from this hunt"
+                          className="opacity-100 [@media(hover:hover)]:opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600"
                         >
                           <Trash2 className="w-3 h-3" />
                         </button>

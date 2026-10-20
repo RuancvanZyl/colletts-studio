@@ -105,6 +105,7 @@ function PhotoSection({ clientId, photoType, label, photos, onUploaded, onDelete
   }
 
   async function handleDelete(photo: ClientPhoto) {
+    if (!window.confirm('Delete this photo? This cannot be undone.')) return;
     await (supabase as any).storage.from('client-photos').remove([photo.storage_path]);
     await (supabase as any).from('client_photos').delete().eq('id', photo.id);
     onDeleted();
@@ -141,11 +142,11 @@ function PhotoSection({ clientId, photoType, label, photos, onUploaded, onDelete
                 ? <img src={p.url} alt="" className="w-full h-full object-cover" />
                 : <div className="w-full h-full flex items-center justify-center"><Loader2 className="w-4 h-4 animate-spin text-slate-400" /></div>
               }
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-1.5 opacity-0 group-hover:opacity-100">
-                <button onClick={() => setLightbox(p.url ?? null)} className="w-7 h-7 bg-white/90 rounded-full flex items-center justify-center">
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-end justify-end p-1 gap-1.5 opacity-100 [@media(hover:hover)]:opacity-0 group-hover:opacity-100">
+                <button onClick={() => setLightbox(p.url ?? null)} title="View larger" aria-label="View larger" className="w-7 h-7 bg-white/90 rounded-full flex items-center justify-center">
                   <ZoomIn className="w-3.5 h-3.5 text-slate-700" />
                 </button>
-                <button onClick={() => handleDelete(p)} className="w-7 h-7 bg-white/90 rounded-full flex items-center justify-center">
+                <button onClick={() => handleDelete(p)} title="Delete photo" aria-label="Delete photo" className="w-7 h-7 bg-white/90 rounded-full flex items-center justify-center">
                   <Trash2 className="w-3.5 h-3.5 text-red-500" />
                 </button>
               </div>
@@ -374,7 +375,7 @@ function ClientDetailPanel({ client, onEdit, onBack }: { client: Client; onEdit:
                 <p className="text-xs text-amber-700 dark:text-amber-300">{client.notes}</p>
               </div>
             )}
-            <p className="text-xs text-slate-400">Added {new Date(client.created_at).toLocaleDateString()}</p>
+            <p className="text-xs text-slate-400">Added {new Date(client.created_at).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
 
             {/* Hunter Portal access */}
             <div className={`flex items-center justify-between p-3 rounded-lg border ${
@@ -566,7 +567,7 @@ export function ClientManagement({ initialClientId }: { initialClientId?: string
           <p className="text-slate-500 text-sm">{clients.length} clients · {localCount} local · {exportCount} export</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="ghost" size="icon" onClick={refresh} disabled={loading}>
+          <Button variant="ghost" size="icon" onClick={refresh} disabled={loading} title="Refresh" aria-label="Refresh">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
           <Button onClick={() => setRegOpen(true)} className="bg-[#0073ea] hover:bg-[#0060c7] text-white">

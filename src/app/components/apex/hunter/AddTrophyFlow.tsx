@@ -122,7 +122,7 @@ export function AddTrophyFlow({ huntId, onComplete, onCancel }: AddTrophyFlowPro
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-slate-900 dark:text-white">Add Trophy</h1>
-            <Button variant="ghost" size="icon" onClick={onCancel}>
+            <Button variant="ghost" size="icon" onClick={onCancel} title="Close" aria-label="Close">
               <X className="w-5 h-5" />
             </Button>
           </div>

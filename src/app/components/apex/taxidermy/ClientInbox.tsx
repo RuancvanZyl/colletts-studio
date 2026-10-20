@@ -239,7 +239,7 @@ export function ClientInbox() {
               <Badge className="bg-red-500 text-white text-xs px-1.5 py-0">{totalUnread}</Badge>
             )}
           </div>
-          <Button variant="ghost" size="icon" className="w-7 h-7" onClick={load} disabled={loading}>
+          <Button variant="ghost" size="icon" className="w-7 h-7" onClick={load} disabled={loading} title="Refresh" aria-label="Refresh">
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
@@ -270,7 +270,7 @@ export function ClientInbox() {
                   )}
                 </div>
                 <p className="text-xs text-slate-500 truncate">{t.lastMessage}</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">{new Date(t.lastAt).toLocaleDateString()}</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">{new Date(t.lastAt).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
               </button>
             ))
           )}
@@ -418,8 +418,9 @@ export function ClientInbox() {
                         </button>
                         {isOwner && (
                           <button
-                            onClick={() => deleteTemplate(t.id)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-slate-400 hover:text-red-500"
+                            onClick={() => { if (window.confirm('Delete this message template?')) deleteTemplate(t.id); }}
+                            title="Delete template" aria-label="Delete template"
+                            className="opacity-100 [@media(hover:hover)]:opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-slate-400 hover:text-red-500"
                           >
                             <Trash2 className="w-3 h-3" />
                           </button>

@@ -82,7 +82,7 @@ export function CreateHunt({ hunt, onSave, onCancel }: CreateHuntProps) {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={onCancel} className="rounded-full">
+        <Button variant="ghost" size="icon" onClick={onCancel} className="rounded-full" title="Close" aria-label="Close">
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <div>

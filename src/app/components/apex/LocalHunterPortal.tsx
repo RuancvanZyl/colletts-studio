@@ -50,10 +50,10 @@ export function LocalHunterPortal({ onLogout }: LocalHunterPortalProps) {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={toggleTheme} className="rounded-full">
+            <Button variant="ghost" size="icon" onClick={toggleTheme} className="rounded-full" title="Switch light or dark mode" aria-label="Switch light or dark mode">
               {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => setCurrentView('profile')} className="rounded-full">
+            <Button variant="ghost" size="icon" title="My profile" aria-label="My profile" onClick={() => setCurrentView('profile')} className="rounded-full">
               <User className="w-5 h-5" />
             </Button>
           </div>

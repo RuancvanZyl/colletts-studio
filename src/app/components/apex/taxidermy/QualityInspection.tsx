@@ -68,7 +68,7 @@ export function QualityInspection() {
           <h1 className="text-slate-900 dark:text-slate-100">Quality Inspection</h1>
           <p className="text-slate-600 dark:text-slate-400">Final quality check before photos</p>
         </div>
-        <Button variant="ghost" size="icon" onClick={load} disabled={loading}>
+        <Button variant="ghost" size="icon" onClick={load} disabled={loading} title="Refresh" aria-label="Refresh">
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
         </Button>
       </div>
