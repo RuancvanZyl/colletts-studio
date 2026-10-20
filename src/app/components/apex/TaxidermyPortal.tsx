@@ -37,6 +37,7 @@ import { ClientCare } from './taxidermy/ClientCare';
 import { DeadlineWatch } from './taxidermy/DeadlineWatch';
 import { AwaitingInstruction } from './taxidermy/AwaitingInstruction';
 import { StaffOverview } from './taxidermy/StaffOverview';
+import { DispatchBoard } from './taxidermy/DispatchBoard';
 import { NoticeBoard } from './shared/NoticeBoard';
 import { GlobalSearch } from './shared/GlobalSearch';
 import { useAuth } from '../../../lib/auth';
@@ -81,6 +82,7 @@ type TaxidermyView =
   | 'admin'
   | 'staff-management'
   | 'staff-overview'
+  | 'dispatch'
   | 'hunt-archive'
   | 'client-care'
   | 'deadline-watch'
@@ -351,6 +353,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     ...(isAdmin ? [{
       heading: 'Staff',
       items: [
+        { view: 'dispatch' as TaxidermyView,           icon: ListTodo, label: 'Dispatch Board' },
         { view: 'staff-overview' as TaxidermyView,    icon: Users,    label: 'Staff Overview' },
         { view: 'staff-management' as TaxidermyView,  icon: Settings, label: 'Manage Staff' },
       ],
@@ -396,6 +399,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'invoices':        return <InvoiceManagement />;
       case 'admin':             return <AdminConfiguration />;
       case 'staff-overview':    return <StaffOverview />;
+      case 'dispatch':          return <DispatchBoard />;
       case 'hunt-archive':      return <HuntArchive />;
       case 'client-care':       return <ClientCare />;
       case 'deadline-watch':    return <DeadlineWatch onOpenHunt={(clientId) => navigate('clients', clientId)} />;

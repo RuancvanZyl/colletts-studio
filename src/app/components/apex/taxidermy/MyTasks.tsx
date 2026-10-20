@@ -3,10 +3,11 @@ import { supabase } from '../../../../lib/supabase';
 import { useAuth } from '../../../../lib/auth';
 import { getStaffDepartments, getNextDepartment, getPipeline, DEPT_LABELS, DEPT_COLORS } from '../../../../lib/pipeline';
 import { toast } from 'sonner';
-import { CheckCircle2, Clock, ChevronRight, ListTodo, AlertTriangle, RefreshCw, Info, Camera, Upload, X, Bell } from 'lucide-react';
+import { CheckCircle2, Clock, ChevronRight, ListTodo, AlertTriangle, RefreshCw, Info, Camera, Upload, X, Bell, Play, Square, CheckSquare } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Textarea } from '../../ui/textarea';
 import { AlertDashboard } from './AlertDashboard';
+import { PRIORITY_META, dueState, taskStatus, useChecklists, markJobOpened, markJobStarted } from '../../../../lib/hooks/useTaskFlow';
 
 // What each department needs to do with a trophy
 const DEPT_INSTRUCTIONS: Record<string, { action: string; steps: string[] }> = {
@@ -157,6 +158,13 @@ interface Task {
   currentDept: string;
   receivedAt: string;
   adminNotes: string;
+  priority: number;
+  dueDate: string | null;
+  priorityNote: string;
+  assignedTo: string | null;
+  assignedAt: string | null;
+  openedAt: string | null;
+  startedAt: string | null;
   stageHistory: { dept: string; completedBy: string; completedAt: string; photoPaths?: string[] }[];
 }
 
@@ -188,7 +196,7 @@ export function MyTasks() {
       const userId = profile?.id ?? (await (supabase as any).auth.getUser()).data?.user?.id;
       let query = (supabase as any)
         .from('hunt_documents')
-        .select('id, hunt_id, current_department, status, form_data, assigned_to, admin_notes')
+        .select('id, hunt_id, current_department, status, form_data, assigned_to, admin_notes, priority, due_date, priority_note, assigned_at, opened_at, started_at, client_hunts(clients(full_name, client_number))')
         .eq('doc_type', 'job_card')
         .neq('status', 'complete');
 
@@ -211,11 +219,7 @@ export function MyTasks() {
 
       const result: Task[] = [];
       for (const doc of docs ?? []) {
-        const { data: hunt } = await (supabase as any)
-          .from('client_hunts').select('client_id').eq('id', doc.hunt_id).single();
-        const { data: client } = hunt
-          ? await (supabase as any).from('clients').select('full_name, client_number').eq('id', hunt.client_id).single()
-          : { data: null };
+        const client = (doc as any).client_hunts?.clients ?? null;
 
         const fd = doc.form_data ?? {};
         result.push({
@@ -231,9 +235,21 @@ export function MyTasks() {
           currentDept:    doc.current_department,
           receivedAt:     fd.received_at ?? '',
           adminNotes:     doc.admin_notes ?? '',
+          priority:       doc.priority ?? 3,
+          dueDate:        doc.due_date ?? null,
+          priorityNote:   doc.priority_note ?? '',
+          assignedTo:     doc.assigned_to ?? null,
+          assignedAt:     doc.assigned_at ?? null,
+          openedAt:       doc.opened_at ?? null,
+          startedAt:      doc.started_at ?? null,
           stageHistory:   fd.stage_history ?? [],
         });
       }
+      // Priority list: urgent first, then earliest due date, then oldest
+      result.sort((a, b) =>
+        a.priority - b.priority ||
+        (a.dueDate ?? '9999-12-31').localeCompare(b.dueDate ?? '9999-12-31') ||
+        (a.receivedAt || '').localeCompare(b.receivedAt || ''));
       setTasks(result);
     } catch (err: any) {
       toast.error('Failed to load tasks: ' + err.message);
@@ -243,6 +259,40 @@ export function MyTasks() {
   }, [myDepts.join(',')]);
 
   useEffect(() => { load(); }, [load]);
+
+  // ── Task flow: checklists, opened / started tracking ──────────────────────────
+  const checklist = useChecklists(tasks.map(t => t.currentDept), tasks.map(t => t.docId));
+  const openedRef = useRef<Set<string>>(new Set());
+
+  // Read receipt: opening your own client's cards marks them as opened
+  useEffect(() => {
+    if (!selectedClient || !profile?.id) return;
+    const fresh = tasks.filter(t =>
+      (t.clientNumber || t.clientName) === selectedClient &&
+      t.assignedTo === profile.id && !t.openedAt && !openedRef.current.has(t.docId));
+    if (fresh.length === 0) return;
+    fresh.forEach(t => { openedRef.current.add(t.docId); markJobOpened(t.docId); });
+    const now = new Date().toISOString();
+    setTasks(prev => prev.map(t => fresh.some(f => f.docId === t.docId) ? { ...t, openedAt: now } : t));
+  }, [selectedClient, tasks.length, profile?.id]);
+
+  async function startTask(task: Task) {
+    const { error } = await markJobStarted(task.docId);
+    if (error) { toast.error(error.message); return; }
+    const now = new Date().toISOString();
+    setTasks(prev => prev.map(t => t.docId === task.docId
+      ? { ...t, startedAt: t.startedAt ?? now, openedAt: t.openedAt ?? now, assignedTo: t.assignedTo ?? profile?.id ?? null } : t));
+    toast.success('Task started — the time has been recorded');
+  }
+
+  async function toggleItem(task: Task, itemId: string, done: boolean) {
+    const { error } = await checklist.setDone(task.docId, itemId, done);
+    if (error) { toast.error(error); return; }
+    if (done && !task.startedAt) {
+      const now = new Date().toISOString();
+      setTasks(prev => prev.map(t => t.docId === task.docId ? { ...t, startedAt: now, openedAt: t.openedAt ?? now } : t));
+    }
+  }
 
   function getCS(docId: string): CompleteState {
     return completeState[docId] ?? { photos: [], previews: [], notes: '', uploading: false };
@@ -411,13 +461,19 @@ export function MyTasks() {
 
       {/* Client picker — grouped so one big order doesn't bury everyone else */}
       {!loading && tasks.length > 0 && !selectedClient && (() => {
-        const byClient: Record<string, { name: string; number: string; count: number }> = {};
+        const byClient: Record<string, { name: string; number: string; count: number; best: number; due: string | null; unopened: number }> = {};
         for (const t of tasks) {
           const key = t.clientNumber || t.clientName;
-          if (!byClient[key]) byClient[key] = { name: t.clientName, number: t.clientNumber, count: 0 };
-          byClient[key].count++;
+          if (!byClient[key]) byClient[key] = { name: t.clientName, number: t.clientNumber, count: 0, best: 9, due: null, unopened: 0 };
+          const c = byClient[key];
+          c.count++;
+          c.best = Math.min(c.best, t.priority);
+          if (t.dueDate && (!c.due || t.dueDate < c.due)) c.due = t.dueDate;
+          if (!t.openedAt && t.assignedTo) c.unopened++;
         }
-        const clients = Object.entries(byClient).sort((a, b) => b[1].count - a[1].count);
+        // Priority list: most urgent / earliest due first
+        const clients = Object.entries(byClient).sort((a, b) =>
+          a[1].best - b[1].best || (a[1].due ?? '9999').localeCompare(b[1].due ?? '9999') || b[1].count - a[1].count);
         return (
           <div className="space-y-2">
             {clients.map(([key, c]) => (
@@ -431,6 +487,11 @@ export function MyTasks() {
                   <span className="text-[#EDF6F9] font-semibold">{c.name}</span>
                 </div>
                 <div className="flex items-center gap-2">
+                  {c.best <= 2 && (
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${PRIORITY_META[c.best].chip}`}>{PRIORITY_META[c.best].label}</span>
+                  )}
+                  {c.due && (() => { const d = dueState(c.due); return d ? <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${d.className}`}>{d.label}</span> : null; })()}
+                  {c.unopened > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-600 text-white">{c.unopened} new</span>}
                   <span className="text-xs font-bold bg-[rgba(58,174,204,0.15)] text-[#3AAECC] px-2.5 py-1 rounded-full">
                     {c.count} trophy{c.count !== 1 ? 'ies' : ''}
                   </span>
@@ -500,6 +561,32 @@ export function MyTasks() {
                 )}
               </div>
 
+              {/* Priority · due date · status */}
+              {(() => {
+                const due = dueState(task.dueDate);
+                const st = taskStatus(task);
+                return (
+                  <div className="space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${PRIORITY_META[task.priority]?.chip}`}>
+                        {PRIORITY_META[task.priority]?.label ?? 'Normal'} priority
+                      </span>
+                      {due && <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${due.className}`}>{due.label}</span>}
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${st.className}`}>{st.label}</span>
+                      {task.startedAt && (
+                        <span className="text-[11px] text-[#7AADB8]">started {new Date(task.startedAt).toLocaleString('en-ZA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                      )}
+                    </div>
+                    {task.priorityNote && (
+                      <div className="bg-red-950/40 border border-red-500/40 rounded-lg px-3 py-2">
+                        <p className="text-xs font-semibold text-red-400 mb-0.5">⚡ Priority note</p>
+                        <p className="text-sm text-red-200">{task.priorityNote}</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* What to do banner */}
               {deptInfo && (
                 <div className="bg-[rgba(58,174,204,0.08)] border border-[rgba(58,174,204,0.2)] rounded-lg px-3 py-2.5">
@@ -515,7 +602,7 @@ export function MyTasks() {
                       >
                         {isExpanded ? '▲ Hide steps' : '▼ Show step-by-step'}
                       </button>
-                      {isExpanded && (
+                      {isExpanded && checklist.forDept(task.currentDept).length === 0 && (
                         <ol className="mt-2 space-y-1">
                           {deptInfo.steps.map((step, i) => (
                             <li key={i} className="flex items-start gap-2 text-xs text-[#7AADB8]">
@@ -529,6 +616,52 @@ export function MyTasks() {
                   </div>
                 </div>
               )}
+
+              {/* Department checklist — must be complete before the job can move on */}
+              {(() => {
+                const items = checklist.forDept(task.currentDept);
+                if (items.length === 0) return null;
+                const left = checklist.remaining(task.docId, task.currentDept);
+                return (
+                  <div className="border border-[rgba(58,174,204,0.25)] rounded-lg overflow-hidden">
+                    <div className="flex items-center justify-between px-3 py-2 bg-[rgba(58,174,204,0.08)]">
+                      <p className="text-xs font-bold text-[#3AAECC] uppercase tracking-wide">
+                        {DEPT_LABELS[task.currentDept] ?? task.currentDept} checklist
+                      </p>
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${left === 0 ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-black'}`}>
+                        {left === 0 ? 'Complete' : `Not complete · ${items.length - left}/${items.length}`}
+                      </span>
+                    </div>
+                    <ul className="divide-y divide-[rgba(58,174,204,0.1)]">
+                      {items.map(it => {
+                        const pr = checklist.progress[`${task.docId}:${it.id}`];
+                        const done = !!pr?.done;
+                        return (
+                          <li key={it.id}>
+                            <button
+                              onClick={() => toggleItem(task, it.id, !done)}
+                              className="w-full flex items-start gap-2.5 px-3 py-2 text-left hover:bg-[rgba(58,174,204,0.05)]"
+                            >
+                              {done
+                                ? <CheckSquare className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                                : <Square className="w-4 h-4 text-[#7AADB8] shrink-0 mt-0.5" />}
+                              <span className="flex-1 min-w-0">
+                                <span className={`text-sm ${done ? 'text-[#7AADB8] line-through' : 'text-[#EDF6F9]'}`}>{it.label}</span>
+                                {it.requires_photo && !done && <Camera className="inline w-3 h-3 ml-1.5 text-[#7AADB8]" />}
+                                {done && pr && (
+                                  <span className="block text-[10px] text-[#7AADB8]/70">
+                                    {pr.done_by_name ?? 'Staff'} · {new Date(pr.done_at).toLocaleString('en-ZA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                )}
+                              </span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                );
+              })()}
 
               {/* Admin notes — shown prominently above client instructions */}
               {task.adminNotes && (
@@ -601,9 +734,20 @@ export function MyTasks() {
                   <p className="text-xs text-[#7AADB8]">
                     {next ? <>Next: <span className="text-[#3AAECC] font-medium">{DEPT_LABELS[next] ?? next}</span></> : <span className="text-green-400">Final stage</span>}
                   </p>
-                  {completeOpen !== task.docId ? (
+                  {!task.startedAt ? (
                     <button
-                      onClick={() => setCompleteOpen(task.docId)}
+                      onClick={() => startTask(task)}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold transition-all"
+                    >
+                      <Play className="w-4 h-4" /> Start task
+                    </button>
+                  ) : completeOpen !== task.docId ? (
+                    <button
+                      onClick={() => {
+                        const left = checklist.remaining(task.docId, task.currentDept);
+                        if (left > 0) { toast.error(`Checklist not complete — ${left} step${left !== 1 ? 's' : ''} still to tick.`); return; }
+                        setCompleteOpen(task.docId);
+                      }}
                       className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#3AAECC] hover:bg-[#2E9EB8] text-[#080C0C] text-sm font-bold transition-all shadow-[0_0_12px_rgba(58,174,204,0.25)]"
                     >
                       Mark Complete <ChevronRight className="w-4 h-4" />

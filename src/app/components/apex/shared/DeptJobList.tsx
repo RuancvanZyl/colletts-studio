@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent } from '../../ui/card';
 import { Button } from '../../ui/button';
 import { Textarea } from '../../ui/textarea';
@@ -6,13 +6,14 @@ import { Badge } from '../../ui/badge';
 import {
   RefreshCw, Loader2, AlertTriangle, ChevronRight, Clock,
   CheckCircle2, Droplet, Skull, Warehouse, Scissors, Paintbrush,
-  Camera, X, Upload, AlertCircle,
+  Camera, X, Upload, AlertCircle, Play, Square, CheckSquare,
 } from 'lucide-react';
 import { DEPT_LABELS, DEPT_COLORS, getPipeline, STALL_HOURS } from '../../../../lib/pipeline';
 import { supabase } from '../../../../lib/supabase';
 import { useAuth } from '../../../../lib/auth';
 import { toast } from 'sonner';
 import type { DeptJob } from '../../../../lib/hooks/useDeptJobs';
+import { PRIORITY_META, dueState, taskStatus, useChecklists, markJobOpened, markJobStarted } from '../../../../lib/hooks/useTaskFlow';
 
 type StepColor = 'blue' | 'amber' | 'slate' | 'green' | 'orange' | 'rose' | 'pink' | 'purple' | 'teal';
 type EmptyIcon = 'droplet' | 'skull' | 'warehouse' | 'scissors' | 'paintbrush';
@@ -189,6 +190,34 @@ export function DeptJobList({
   const deptLabel  = DEPT_LABELS[dept] ?? dept;
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const { profile } = useAuth();
+  const checklist = useChecklists([dept], jobs.map(j => j.docId));
+  const [flow, setFlow] = useState<Record<string, { openedAt?: string; startedAt?: string }>>({});
+  const openedRef = useRef<Set<string>>(new Set());
+
+  // Read receipt: cards assigned to me are marked as opened when they appear on my screen
+  useEffect(() => {
+    if (!profile?.id) return;
+    const fresh = jobs.filter(j => j.assignedTo === profile.id && !j.openedAt && !openedRef.current.has(j.docId));
+    if (fresh.length === 0) return;
+    const now = new Date().toISOString();
+    fresh.forEach(j => { openedRef.current.add(j.docId); markJobOpened(j.docId); });
+    setFlow(prev => { const n = { ...prev }; fresh.forEach(j => { n[j.docId] = { ...n[j.docId], openedAt: now }; }); return n; });
+  }, [jobs, profile?.id]);
+
+  async function startJob(job: DeptJob) {
+    const { error } = await markJobStarted(job.docId);
+    if (error) { toast.error(error.message); return; }
+    const now = new Date().toISOString();
+    setFlow(prev => ({ ...prev, [job.docId]: { openedAt: now, startedAt: now } }));
+    toast.success('Task started — the time has been recorded');
+  }
+
+  async function toggleStep(job: DeptJob, itemId: string, done: boolean) {
+    const { error } = await checklist.setDone(job.docId, itemId, done);
+    if (error) { toast.error(error); return; }
+    if (done) setFlow(prev => ({ ...prev, [job.docId]: { ...prev[job.docId], startedAt: prev[job.docId]?.startedAt ?? new Date().toISOString() } }));
+  }
 
   const redJobs    = jobs.filter(j => hoursAgo(j.receivedAt) >= (STALL_HOURS[dept] ?? 48) * 2);
   const yellowJobs = jobs.filter(j => {
@@ -244,6 +273,65 @@ export function DeptJobList({
               </p>
             </div>
           </div>
+
+          {/* Priority · due · status */}
+          {(() => {
+            const startedAt = flow[job.docId]?.startedAt ?? job.startedAt;
+            const openedAt  = flow[job.docId]?.openedAt  ?? job.openedAt;
+            const due = dueState(job.dueDate);
+            const st = taskStatus({ assignedTo: job.assignedTo, openedAt, startedAt });
+            return (
+              <div className="space-y-1.5">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${PRIORITY_META[job.priority]?.chip}`}>{PRIORITY_META[job.priority]?.label ?? 'Normal'} priority</span>
+                  {due && <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${due.className}`}>{due.label}</span>}
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${st.className}`}>{st.label}</span>
+                  {startedAt && <span className="text-[11px] text-slate-400">started {new Date(startedAt).toLocaleString('en-ZA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>}
+                </div>
+                {job.priorityNote && (
+                  <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
+                    <p className="text-xs font-semibold text-red-700 dark:text-red-400 mb-0.5">⚡ Priority note</p>
+                    <p className="text-sm text-red-800 dark:text-red-300">{job.priorityNote}</p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Department checklist */}
+          {(() => {
+            const items = checklist.forDept(dept);
+            if (items.length === 0) return null;
+            const left = checklist.remaining(job.docId, dept);
+            return (
+              <div className="border rounded-lg overflow-hidden">
+                <div className="flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-slate-800/60">
+                  <p className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide">{deptLabel} checklist</p>
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${left === 0 ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-black'}`}>
+                    {left === 0 ? 'Complete' : `Not complete · ${items.length - left}/${items.length}`}
+                  </span>
+                </div>
+                <ul className="divide-y">
+                  {items.map(it => {
+                    const pr = checklist.progress[`${job.docId}:${it.id}`];
+                    const done = !!pr?.done;
+                    return (
+                      <li key={it.id}>
+                        <button onClick={() => toggleStep(job, it.id, !done)} className="w-full flex items-start gap-2.5 px-3 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                          {done ? <CheckSquare className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" /> : <Square className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />}
+                          <span className="flex-1 min-w-0">
+                            <span className={`text-sm ${done ? 'text-slate-400 line-through' : 'text-slate-800 dark:text-slate-200'}`}>{it.label}</span>
+                            {it.requires_photo && !done && <Camera className="inline w-3 h-3 ml-1.5 text-slate-400" />}
+                            {done && pr && <span className="block text-[10px] text-slate-400">{pr.done_by_name ?? 'Staff'} · {new Date(pr.done_at).toLocaleString('en-ZA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            );
+          })()}
 
           {/* Instructions */}
           {job.instructions && (
@@ -310,11 +398,22 @@ export function DeptJobList({
             />
           ) : (
             <div className="flex justify-end pt-1">
-              <Button onClick={() => setExpandedId(job.docId)}
-                disabled={completing === job.docId}
-                className="bg-green-600 hover:bg-green-700 text-white gap-2">
-                {completing === job.docId ? 'Completing…' : <>Mark Complete <ChevronRight className="w-4 h-4" /></>}
-              </Button>
+              {!(flow[job.docId]?.startedAt ?? job.startedAt) ? (
+                <Button onClick={() => startJob(job)} className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2">
+                  <Play className="w-4 h-4" /> Start task
+                </Button>
+              ) : (
+                <Button
+                  onClick={() => {
+                    const left = checklist.remaining(job.docId, dept);
+                    if (left > 0) { toast.error(`Checklist not complete — ${left} step${left !== 1 ? 's' : ''} still to tick.`); return; }
+                    setExpandedId(job.docId);
+                  }}
+                  disabled={completing === job.docId}
+                  className="bg-green-600 hover:bg-green-700 text-white gap-2">
+                  {completing === job.docId ? 'Completing…' : <>Mark Complete <ChevronRight className="w-4 h-4" /></>}
+                </Button>
+              )}
             </div>
           )}
         </CardContent>

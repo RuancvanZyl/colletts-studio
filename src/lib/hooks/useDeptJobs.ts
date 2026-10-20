@@ -20,6 +20,12 @@ export interface DeptJob {
   receivedAt: string;
   lastMovedAt: string | null;
   stageHistory: { dept: string; completedBy: string; completedAt: string; photoPaths?: string[]; notes?: string }[];
+  priority: number;
+  dueDate: string | null;
+  priorityNote: string;
+  assignedTo: string | null;
+  openedAt: string | null;
+  startedAt: string | null;
 }
 
 export function useDeptJobs(dept: string | string[]) {
@@ -35,11 +41,11 @@ export function useDeptJobs(dept: string | string[]) {
     try {
       const { data: docs, error } = await (supabase as any)
         .from('hunt_documents')
-        .select('id, hunt_id, current_department, status, form_data, last_moved_at, client_hunts(clients(full_name, client_number))')
+        .select('id, hunt_id, current_department, status, form_data, last_moved_at, assigned_to, priority, due_date, priority_note, opened_at, started_at, client_hunts(clients(full_name, client_number))')
         .eq('doc_type', 'job_card')
         .in('current_department', depts)
         .eq('status', 'in_progress')
-        .order('last_moved_at', { ascending: true }); // oldest first = most urgent first
+        .order('last_moved_at', { ascending: true });
 
       if (error) throw error;
 
@@ -64,8 +70,19 @@ export function useDeptJobs(dept: string | string[]) {
           receivedAt:     fd.received_at ?? doc.last_moved_at ?? '',
           lastMovedAt:    doc.last_moved_at ?? null,
           stageHistory:   fd.stage_history ?? [],
+          priority:       doc.priority ?? 3,
+          dueDate:        doc.due_date ?? null,
+          priorityNote:   doc.priority_note ?? '',
+          assignedTo:     doc.assigned_to ?? null,
+          openedAt:       doc.opened_at ?? null,
+          startedAt:      doc.started_at ?? null,
         });
       }
+      // Priority list: urgent first, then earliest due date, then oldest
+      result.sort((a, b) =>
+        a.priority - b.priority ||
+        (a.dueDate ?? '9999-12-31').localeCompare(b.dueDate ?? '9999-12-31') ||
+        (a.lastMovedAt ?? '').localeCompare(b.lastMovedAt ?? ''));
       setJobs(result);
     } catch (err: any) {
       toast.error('Failed to load: ' + err.message);
