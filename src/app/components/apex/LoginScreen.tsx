@@ -261,12 +261,23 @@ export function LoginScreen({
                 <button
                   type="button"
                   onClick={async () => {
-                    if (!email) { toast.error('Enter your email first'); return; }
-                    await supabase.auth.resetPasswordForEmail(email, {
+                    const addr = email.trim();
+                    if (!addr) { toast.error('Enter your email first'); return; }
+                    const { error } = await supabase.auth.resetPasswordForEmail(addr, {
                       redirectTo: window.location.origin,
                     });
+                    if (error) {
+                      // Do not claim success when the email was not sent
+                      toast.error(
+                        /rate|limit|seconds/i.test(error.message)
+                          ? 'Too many reset emails were sent recently. Wait about an hour, or ask the admin to reset your password.'
+                          : `Could not send the reset email: ${error.message}`,
+                        { duration: 12000 }
+                      );
+                      return;
+                    }
                     setForgotSent(true);
-                    toast.success('Password reset email sent!');
+                    toast.success('If that email has an account, a reset link is on its way. Open the newest email straight away.');
                   }}
                   className="text-[#3AAECC] hover:underline"
                 >

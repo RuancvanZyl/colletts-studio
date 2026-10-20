@@ -12,8 +12,9 @@ import { ErrorBoundary } from './components/apex/ErrorBoundary';
 import { ThemeProvider } from './components/apex/ThemeProvider';
 import { PortalThemeProvider, PortalType } from './components/apex/PortalThemeProvider';
 import { Toaster } from './components/ui/sonner';
+import { toast } from 'sonner';
 import { AuthProvider, useAuth } from '../lib/auth';
-import { supabase } from '../lib/supabase';
+import { supabase, AUTH_LINK } from '../lib/supabase';
 
 export type UserRole = 'hunter' | 'local-hunter' | 'admin' | 'outfitter' | 'taxidermy' | 'unified' | null;
 
@@ -23,7 +24,7 @@ function AppInner() {
   const { user, profile, profileResolved, loading, signOut } = useAuth();
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   void profile; // used in useEffect below
-  const [currentView, setCurrentView] = useState<AppView>('landing');
+  const [currentView, setCurrentView] = useState<AppView>(AUTH_LINK.recovery ? 'reset-password' : 'landing');
   const [selectedPortal, setSelectedPortal] = useState<PortalType | null>(
     () => (localStorage.getItem('apex_portal') as PortalType | null)
   );
@@ -33,6 +34,18 @@ function AppInner() {
     if (portal) localStorage.setItem('apex_portal', portal);
     else localStorage.removeItem('apex_portal');
     setSelectedPortal(portal);
+  }, []);
+
+  // An expired / already-used email link used to fail silently — tell the person what happened
+  useEffect(() => {
+    if (AUTH_LINK.error) {
+      toast.error(
+        /expired|invalid/i.test(AUTH_LINK.error)
+          ? 'That email link has expired or was already used. Request a new password reset and open the newest email straight away.'
+          : AUTH_LINK.error,
+        { duration: 15000 }
+      );
+    }
   }, []);
 
   // Detect PASSWORD_RECOVERY event (user clicked reset link in email)
