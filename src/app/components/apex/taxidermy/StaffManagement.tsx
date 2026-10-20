@@ -78,13 +78,14 @@ export function StaffManagement() {
 
   async function load() {
     setLoading(true);
-    const [{ data: staffRows }, { data: deptRows }] = await Promise.all([
+    const [{ data: staffRows, error: staffErr }, { data: deptRows }] = await Promise.all([
       (supabase as any).from('staff_profiles').select(`
         id, full_name, email, role, department_id, is_active, avatar_color, created_at, works_in, manages_departments,
         departments(name)
       `).order('full_name'),
       (supabase as any).from('departments').select('id, name').order('sort_order'),
     ]);
+    if (staffErr) toast.error('Could not load staff: ' + staffErr.message);
     setStaff((staffRows ?? []).map((s: any) => ({
       ...s,
       department_name: s.departments?.name ?? null,

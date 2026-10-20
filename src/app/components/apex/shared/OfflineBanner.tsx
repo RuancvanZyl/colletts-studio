@@ -4,7 +4,7 @@
  *  - "N actions waiting to send" / "All synced"
  *  - a list of anything the server refused (so a manager can look at it)
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { WifiOff, RefreshCw, CheckCircle2, AlertTriangle, X } from 'lucide-react';
 import { outbox, startOutboxSync } from '../../../../lib/offline/outbox';
 import '../../../../lib/offline/completeStage';   // registers the stage-completion replayer
@@ -29,11 +29,13 @@ export function OfflineBanner() {
 
   useEffect(() => { if (showIssues) outbox.listConflicts().then(setIssues); }, [showIssues, state.conflicts]);
 
-  // brief "all synced" confirmation after the queue empties
+  // brief "all sent" confirmation — only when something that was waiting has just gone through
+  const prevPending = useRef(0);
   useEffect(() => {
-    if (online && state.pending === 0 && state.lastSyncAt) { setJustSynced(true); const t = setTimeout(() => setJustSynced(false), 4000); return () => clearTimeout(t); }
-    setJustSynced(false);
-  }, [state.pending, state.lastSyncAt, online]);
+    const was = prevPending.current;
+    prevPending.current = state.pending;
+    if (online && was > 0 && state.pending === 0) { setJustSynced(true); const t = setTimeout(() => setJustSynced(false), 4000); return () => clearTimeout(t); }
+  }, [state.pending, online]);
 
   if (online && state.pending === 0 && state.conflicts === 0 && !justSynced) return null;
 
