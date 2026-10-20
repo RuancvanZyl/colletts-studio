@@ -1,3 +1,30 @@
+# Session Handoff — Apex Trophy Solutions
+
+## STATE AS OF 2026-10-20 (read this first)
+
+**Live on `main`** (deployed): Client Status Board with resolvable flags (migration 040 run), Deadline Watch with documents, speed fixes
+(Daily Tasks, Receiving, Job Cards, Ready to Ship — joined/paged queries, `src/lib/supabaseHelpers.ts`), Add Staff fix, password-reset fixes,
+UX audit fixes, 302 imported hunts + job-card batches 1–4 (job cards are inserted by the user pasting SQL; files live in `~/Downloads/apex-jobcards/`).
+
+**Built, tested, NOT merged** — three stacked branches, ready to ship together (`docs/RELEASE_STEPS.md`):
+`feature/task-flow` (migration 041: priority, due dates, opened/started tracking, department checklists enforced by a DB trigger, Dispatch Board)
+→ `feature/offline` (042: PWA app shell, device outbox with real timestamps, saved copy of lists, offline stage completion with photos, banner)
+→ `feature/communications` (043: staff messages with read receipts, managers-only sending, append-only client messages, admin log, Manage Staff
+works-in / manages, Workshop Setup checklist editor). `pnpm test` (outbox) and `pnpm test:db` (41 checks of migrations 041–043 in PGlite) pass.
+
+**Open decisions / waiting on the owner**: Supabase Site URL + Redirect URLs (still `localhost:3000`), custom SMTP (2 emails/hour cap), Resend verified domain,
+scramble the 7 placeholder staff passwords (`Apex2026!`), delete ~248 pre-2024 clients (preview script was written, deletion not approved),
+test records (`ruancvanzyl`, Test Andy), duplicate clients to merge, ~100 active hunts still without job cards.
+
+**Docs**: `docs/AUDIT_2026-10-20.md`, `docs/LAUNCH_PLAN.md`, `docs/OFFLINE_PLAN.md`, `docs/RELEASE_STEPS.md`, `supabase/launch/launch_cleanup.sql`.
+
+**Gotchas learned**: Tailwind v4 `hover:` only fires on hover-capable devices (touch screens never see hover-only buttons); the Supabase SQL editor
+mis-parses the words "into" / "to crate" inside string literals (split with `'||'`); `.catch()` does not exist on a Supabase query builder;
+Supabase returns max 1000 rows and long `.in()` lists break the URL; the in-app browser cannot register service workers (verify the PWA in real Chrome);
+`import.meta.env` / `never` type errors in `tsc` are pre-existing (stale `database.types.ts`).
+
+---
+
 # Session Handoff — Apex Trophy Solutions data backfill
 
 Read this file first in the new session instead of replaying old context.
