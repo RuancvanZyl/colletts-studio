@@ -4,8 +4,23 @@
     {
       "name": "apex",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["dev", "--port", "3002"],
+      "runtimeArgs": [
+        "dev",
+        "--port",
+        "3002"
+      ],
       "port": 3002
+    },
+    {
+      "name": "apex-preview",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "preview",
+        "--port",
+        "4173",
+        "--strictPort"
+      ],
+      "port": 4173
     }
   ]
 }

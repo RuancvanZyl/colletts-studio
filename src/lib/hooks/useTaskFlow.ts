@@ -5,6 +5,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabase';
+import { performAction, pendingActions, cachedFetch } from '../offline/outbox';
 
 export const PRIORITY_META: Record<number, { label: string; chip: string; rank: number }> = {
   1: { label: 'Urgent', chip: 'bg-red-600 text-white',    rank: 1 },
@@ -44,32 +45,47 @@ export function useChecklists(depts: string[], docIds: string[]) {
 
   const load = useCallback(async () => {
     if (!deptKey) { setItems([]); return; }
-    const { data } = await (supabase as any).from('department_checklist_items')
-      .select('id, dept_key, label, requires_photo, sort_order')
-      .in('dept_key', deptKey.split(',')).eq('is_active', true).order('sort_order');
-    setItems(data ?? []);
+    const itemsRes = await cachedFetch<ChecklistItem[]>(`checklist-items:${deptKey}`, async () => {
+      const { data, error } = await (supabase as any).from('department_checklist_items')
+        .select('id, dept_key, label, requires_photo, sort_order')
+        .in('dept_key', deptKey.split(',')).eq('is_active', true).order('sort_order');
+      if (error) throw error;
+      return data ?? [];
+    }).catch(() => ({ data: [] as ChecklistItem[] }));
+    setItems(itemsRes.data);
+
+    const map: Record<string, ChecklistProgress> = {};
     if (docKey) {
-      const rows: ChecklistProgress[] = [];
       const ids = docKey.split(',');
-      for (let i = 0; i < ids.length; i += 150) {
-        const { data: p } = await (supabase as any).from('job_checklist_progress')
-          .select('item_id, job_doc_id, done, done_by_name, done_at').in('job_doc_id', ids.slice(i, i + 150));
-        rows.push(...(p ?? []));
-      }
-      const map: Record<string, ChecklistProgress> = {};
+      const rows = (await cachedFetch<ChecklistProgress[]>(`checklist-progress:${docKey.length}:${ids.slice(0, 3).join('')}`, async () => {
+        const out: ChecklistProgress[] = [];
+        for (let i = 0; i < ids.length; i += 150) {
+          const { data: p, error } = await (supabase as any).from('job_checklist_progress')
+            .select('item_id, job_doc_id, done, done_by_name, done_at').in('job_doc_id', ids.slice(i, i + 150));
+          if (error) throw error;
+          out.push(...(p ?? []));
+        }
+        return out;
+      }).catch(() => ({ data: [] as ChecklistProgress[] }))).data;
       rows.forEach(r => { map[`${r.job_doc_id}:${r.item_id}`] = r; });
-      setProgress(map);
-    } else setProgress({});
+    }
+    // ticks made offline that have not reached the server yet still show as ticked
+    for (const a of await pendingActions('job_check')) {
+      map[`${a.args.doc}:${a.args.item}`] = {
+        item_id: String(a.args.item), job_doc_id: String(a.args.doc), done: !!a.args.done, done_by_name: 'You (waiting to sync)', done_at: a.doneAt,
+      };
+    }
+    setProgress(map);
   }, [deptKey, docKey]);
 
   useEffect(() => { load(); }, [load]);
 
   async function setDone(docId: string, itemId: string, done: boolean) {
-    const { error } = await (supabase as any).rpc('job_check_item', { p_doc: docId, p_item: itemId, p_done: done, p_note: null });
-    if (error) return { error: error.message as string };
+    const r = await performAction('job_check', { doc: docId, item: itemId, done }, await currentUserId());
+    if (r.error) return { error: r.error };
     setProgress(prev => ({
       ...prev,
-      [`${docId}:${itemId}`]: { item_id: itemId, job_doc_id: docId, done, done_by_name: 'You', done_at: new Date().toISOString() },
+      [`${docId}:${itemId}`]: { item_id: itemId, job_doc_id: docId, done, done_by_name: r.queued ? 'You (waiting to sync)' : 'You', done_at: new Date().toISOString() },
     }));
     return { error: null };
   }
@@ -81,9 +97,13 @@ export function useChecklists(depts: string[], docIds: string[]) {
   return { items, progress, forDept, remaining, setDone, reload: load };
 }
 
-export async function markJobOpened(docId: string) {
-  await (supabase as any).rpc('job_mark_opened', { p_doc: docId });
+export async function currentUserId(): Promise<string | null> {
+  try { return (await supabase.auth.getSession()).data.session?.user?.id ?? null; } catch { return null; }
 }
-export async function markJobStarted(docId: string) {
-  return (supabase as any).rpc('job_mark_started', { p_doc: docId });
+export async function markJobOpened(docId: string) {
+  await performAction('job_open', { doc: docId }, await currentUserId());
+}
+export async function markJobStarted(docId: string): Promise<{ error: { message: string } | null }> {
+  const r = await performAction('job_start', { doc: docId }, await currentUserId());
+  return { error: r.error ? { message: r.error } : null };
 }

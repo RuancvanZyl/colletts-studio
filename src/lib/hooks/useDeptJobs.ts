@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabase';
 import { getNextDepartment } from '../pipeline';
 import { useAuth } from '../auth';
+import { cachedFetch, pendingActions } from '../offline/outbox';
 import { toast } from 'sonner';
 
 export interface DeptJob {
@@ -39,15 +40,24 @@ export function useDeptJobs(dept: string | string[]) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: docs, error } = await (supabase as any)
+      const fetched = await cachedFetch<any[]>(`deptjobs:${depts.join(',')}`, async () => {
+      const { data, error } = await (supabase as any)
         .from('hunt_documents')
         .select('id, hunt_id, current_department, status, form_data, last_moved_at, assigned_to, priority, due_date, priority_note, opened_at, started_at, client_hunts(clients(full_name, client_number))')
         .eq('doc_type', 'job_card')
         .in('current_department', depts)
         .eq('status', 'in_progress')
         .order('last_moved_at', { ascending: true });
-
       if (error) throw error;
+      return data ?? [];
+      });
+      let docs = fetched.data;
+      for (const a of await pendingActions()) {
+        if (a.type !== 'job_start' && a.type !== 'job_open') continue;
+        docs = docs.map(d => d.id !== a.args.doc ? d : {
+          ...d, opened_at: d.opened_at ?? a.doneAt, ...(a.type === 'job_start' ? { started_at: d.started_at ?? a.doneAt } : {}),
+        });
+      }
 
       const result: DeptJob[] = [];
       for (const doc of docs ?? []) {

@@ -38,6 +38,7 @@ import { DeadlineWatch } from './taxidermy/DeadlineWatch';
 import { AwaitingInstruction } from './taxidermy/AwaitingInstruction';
 import { StaffOverview } from './taxidermy/StaffOverview';
 import { DispatchBoard } from './taxidermy/DispatchBoard';
+import { OfflineBanner } from './shared/OfflineBanner';
 import { NoticeBoard } from './shared/NoticeBoard';
 import { GlobalSearch } from './shared/GlobalSearch';
 import { useAuth } from '../../../lib/auth';
@@ -549,6 +550,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
 
         {/* Page content */}
         <main className="flex-1 p-4 md:p-6 overflow-auto bg-[#080C0C]">
+          <OfflineBanner />
           {renderView()}
         </main>
       </div>

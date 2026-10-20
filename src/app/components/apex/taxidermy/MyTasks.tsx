@@ -7,6 +7,7 @@ import { CheckCircle2, Clock, ChevronRight, ListTodo, AlertTriangle, RefreshCw, 
 import { Button } from '../../ui/button';
 import { Textarea } from '../../ui/textarea';
 import { AlertDashboard } from './AlertDashboard';
+import { cachedFetch, pendingActions } from '../../../../lib/offline/outbox';
 import { PRIORITY_META, dueState, taskStatus, useChecklists, markJobOpened, markJobStarted } from '../../../../lib/hooks/useTaskFlow';
 
 // What each department needs to do with a trophy
@@ -181,6 +182,7 @@ export function MyTasks() {
   const [loading, setLoading]     = useState(true);
   const [completing, setCompleting] = useState<string | null>(null);
   const [expanded, setExpanded]   = useState<string | null>(null);
+  const [offline, setOffline]     = useState(false);
   const [completeOpen, setCompleteOpen] = useState<string | null>(null);
   const [completeState, setCompleteState] = useState<Record<string, CompleteState>>({});
   const [showAlerts, setShowAlerts] = useState(true);
@@ -213,9 +215,20 @@ export function MyTasks() {
         return;
       }
 
-      const { data: docs, error } = await query;
-
-      if (error) throw error;
+      const fetched = await cachedFetch<any[]>(`mytasks:${userId ?? 'dept'}:${myDepts.join(',')}`, async () => {
+        const { data, error } = await query;
+        if (error) throw error;
+        return data ?? [];
+      });
+      let docs = fetched.data;
+      setOffline(fetched.stale);
+      // starts / opens made offline that have not reached the server yet
+      for (const a of await pendingActions()) {
+        if (a.type !== 'job_start' && a.type !== 'job_open') continue;
+        docs = docs.map(d => d.id !== a.args.doc ? d : {
+          ...d, opened_at: d.opened_at ?? a.doneAt, ...(a.type === 'job_start' ? { started_at: d.started_at ?? a.doneAt, assigned_to: d.assigned_to ?? userId } : {}),
+        });
+      }
 
       const result: Task[] = [];
       for (const doc of docs ?? []) {
@@ -406,6 +419,7 @@ export function MyTasks() {
           <p className="text-[#7AADB8] text-sm mt-0.5">
             Your queue · {myDepts.map(d => DEPT_LABELS[d] ?? d).join(' · ')}
           </p>
+          {offline && <p className="text-amber-400 text-xs mt-1">Offline — showing the list as last loaded on this device.</p>}
         </div>
         <button
           onClick={load}
