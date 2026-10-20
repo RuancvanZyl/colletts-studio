@@ -13,6 +13,7 @@ import { supabase } from '../../../../lib/supabase';
 import { useAuth } from '../../../../lib/auth';
 import { toast } from 'sonner';
 import type { DeptJob } from '../../../../lib/hooks/useDeptJobs';
+import { completeStage as completeStageAction } from '../../../../lib/offline/completeStage';
 import { PRIORITY_META, dueState, taskStatus, useChecklists, markJobOpened, markJobStarted } from '../../../../lib/hooks/useTaskFlow';
 
 type StepColor = 'blue' | 'amber' | 'slate' | 'green' | 'orange' | 'rose' | 'pink' | 'purple' | 'teal';
@@ -79,7 +80,7 @@ function CompletePanel({
   job: DeptJob;
   dept: string;
   requirePhoto: boolean;
-  onDone: (photos: string[], notes: string) => Promise<void>;
+  onDone: (photos: File[], notes: string) => Promise<void>;
   onCancel: () => void;
 }) {
   const { profile } = useAuth();
@@ -108,17 +109,7 @@ function CompletePanel({
     }
     setSaving(true);
     try {
-      const uploadedPaths: string[] = [];
-      for (const file of files) {
-        const ext  = file.name.split('.').pop();
-        const path = `job-completions/${job.docId}/${dept}/${Date.now()}.${ext}`;
-        const { error } = await (supabase as any).storage
-          .from('client-photos')
-          .upload(path, file, { upsert: true });
-        if (error) throw new Error(error.message);
-        uploadedPaths.push(path);
-      }
-      await onDone(uploadedPaths, notes);
+      await onDone(files, notes);
     } catch (err: any) {
       toast.error('Upload failed: ' + err.message);
     } finally {
@@ -190,6 +181,7 @@ export function DeptJobList({
   const deptLabel  = DEPT_LABELS[dept] ?? dept;
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
   const { profile } = useAuth();
   const checklist = useChecklists([dept], jobs.map(j => j.docId));
   const [flow, setFlow] = useState<Record<string, { openedAt?: string; startedAt?: string }>>({});
@@ -219,18 +211,25 @@ export function DeptJobList({
     if (done) setFlow(prev => ({ ...prev, [job.docId]: { ...prev[job.docId], startedAt: prev[job.docId]?.startedAt ?? new Date().toISOString() } }));
   }
 
-  const redJobs    = jobs.filter(j => hoursAgo(j.receivedAt) >= (STALL_HOURS[dept] ?? 48) * 2);
-  const yellowJobs = jobs.filter(j => {
+  const liveJobs   = jobs.filter(j => !hidden.has(j.docId));
+  const redJobs    = liveJobs.filter(j => hoursAgo(j.receivedAt) >= (STALL_HOURS[dept] ?? 48) * 2);
+  const yellowJobs = liveJobs.filter(j => {
     const h = hoursAgo(j.receivedAt);
     const t = STALL_HOURS[dept] ?? 48;
     return h >= t && h < t * 2;
   });
-  const greenJobs  = jobs.filter(j => hoursAgo(j.receivedAt) < (STALL_HOURS[dept] ?? 48));
+  const greenJobs  = liveJobs.filter(j => hoursAgo(j.receivedAt) < (STALL_HOURS[dept] ?? 48));
 
-  async function handleAdvance(job: DeptJob, photos: string[], notes: string) {
-    const result = await onAdvance(job, photos, notes);
-    if (result.error) toast.error('Failed: ' + result.error);
-    else { toast.success('Stage complete — moved to next department'); setExpandedId(null); }
+  async function handleAdvance(job: DeptJob, files: File[], notes: string) {
+    const r = await completeStageAction({
+      doc: job.docId, dept: job.currentDept, mountType: job.mountType, notes,
+      files, staffId: profile?.id ?? null, staffName: profile?.full_name ?? null,
+    });
+    if (r.error) { toast.error(r.error); return; }
+    toast.success(r.queued ? 'Saved on this device — it will be sent when the connection returns' : 'Stage complete — moved to next department');
+    setExpandedId(null);
+    setHidden(prev => new Set(prev).add(job.docId));
+    if (!r.queued) onRefresh();
   }
 
   function renderJob(job: DeptJob) {
@@ -469,7 +468,7 @@ export function DeptJobList({
 
       {loading ? (
         <Card><CardContent className="py-12 text-center"><Loader2 className="w-8 h-8 animate-spin text-slate-400 mx-auto" /></CardContent></Card>
-      ) : jobs.length === 0 ? (
+      ) : liveJobs.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="py-12 text-center">
             <EmptyIcon className="w-12 h-12 text-slate-300 mx-auto mb-3" />

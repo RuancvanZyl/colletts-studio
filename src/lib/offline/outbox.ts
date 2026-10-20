@@ -32,12 +32,17 @@ const executors: Record<string, Executor> = {
 
 export const outbox = new Outbox(idbOutboxStore, executors);
 
+// Registered lazily so this file does not import completeStage (which imports this file)
+export function registerExecutor(type: string, fn: Executor) { executors[type] = fn; }
+
 /**
  * Save the action, try to send it now.
  *  - sent            → { error: null, queued: false }
  *  - no connection   → { error: null, queued: true }   (it will go later; the screen shows it as done)
  *  - server said no  → { error: 'why', queued: false } (shown to the worker now)
  */
+export async function performActionWith(type: string, args: Record<string, unknown>, userId: string | null) { return performAction(type, args, userId); }
+
 export async function performAction(type: string, args: Record<string, unknown>, userId: string | null): Promise<{ error: string | null; queued: boolean }> {
   const action = await outbox.enqueue(type, args, userId);
   const r = await outbox.flush();

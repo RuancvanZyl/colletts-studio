@@ -8,6 +8,7 @@ import { Button } from '../../ui/button';
 import { Textarea } from '../../ui/textarea';
 import { AlertDashboard } from './AlertDashboard';
 import { cachedFetch, pendingActions } from '../../../../lib/offline/outbox';
+import { completeStage as completeStageAction } from '../../../../lib/offline/completeStage';
 import { PRIORITY_META, dueState, taskStatus, useChecklists, markJobOpened, markJobStarted } from '../../../../lib/hooks/useTaskFlow';
 
 // What each department needs to do with a trophy
@@ -223,6 +224,8 @@ export function MyTasks() {
       let docs = fetched.data;
       setOffline(fetched.stale);
       // starts / opens made offline that have not reached the server yet
+      const completedOffline = new Set((await pendingActions('job_complete')).map(a => String(a.args.doc)));
+      docs = docs.filter(d => !completedOffline.has(d.id));
       for (const a of await pendingActions()) {
         if (a.type !== 'job_start' && a.type !== 'job_open') continue;
         docs = docs.map(d => d.id !== a.args.doc ? d : {
@@ -341,49 +344,16 @@ export function MyTasks() {
     setCompleting(task.docId);
     setCS(task.docId, { uploading: true });
     try {
-      // Upload photos
-      const photoPaths: string[] = [];
-      for (const file of cs.photos) {
-        const ext  = file.name.split('.').pop();
-        const path = `job-completions/${task.docId}/${task.currentDept}/${Date.now()}.${ext}`;
-        const { error } = await (supabase as any).storage.from('client-photos').upload(path, file, { upsert: true });
-        if (!error) photoPaths.push(path);
-      }
-
       const next = getNextDepartment(task.mountType, task.currentDept);
-      const newHistory = [
-        ...task.stageHistory,
-        { dept: task.currentDept, completedBy: profile?.full_name ?? '', completedAt: new Date().toISOString(), photoPaths },
-      ];
-
-      const { data: doc } = await (supabase as any)
-        .from('hunt_documents').select('form_data').eq('id', task.docId).single();
-
-      const { error } = await (supabase as any).from('hunt_documents').update({
-        current_department:     next ?? 'done',
-        status:                 next ? 'in_progress' : 'completed',
-        completion_photo_paths: photoPaths,
-        completion_notes:       cs.notes || null,
-        completed_by_name:      profile?.full_name ?? null,
-        form_data: { ...(doc?.form_data ?? {}), stage_history: newHistory },
-      }).eq('id', task.docId);
-
-      if (error) throw error;
-
-      // Write stage history record
-      await (supabase as any).from('trophy_stage_history').insert({
-        hunt_doc_id:       task.docId,
-        department:        task.currentDept,
-        completed_by:      profile?.id ?? null,
-        completed_by_name: profile?.full_name ?? null,
-        photo_paths:       photoPaths,
-        notes:             cs.notes || null,
+      const r = await completeStageAction({
+        doc: task.docId, dept: task.currentDept, mountType: task.mountType, notes: cs.notes,
+        files: cs.photos, staffId: profile?.id ?? null, staffName: profile?.full_name ?? null,
       });
+      if (r.error) { toast.error(r.error); return; }
 
-      toast.success(next
-        ? `✓ Handed off to ${DEPT_LABELS[next] ?? next}`
-        : `✓ ${task.species} fully complete!`
-      );
+      toast.success(r.queued
+        ? 'Saved on this device — it will be sent when the connection returns'
+        : next ? `✓ Handed off to ${DEPT_LABELS[next] ?? next}` : `✓ ${task.species} fully complete!`);
       setTasks(prev => prev.filter(t => t.docId !== task.docId));
       setCompleteOpen(null);
     } catch (err: any) {

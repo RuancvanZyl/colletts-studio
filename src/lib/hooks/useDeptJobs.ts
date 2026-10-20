@@ -52,6 +52,8 @@ export function useDeptJobs(dept: string | string[]) {
       return data ?? [];
       });
       let docs = fetched.data;
+      const completedOffline = new Set((await pendingActions('job_complete')).map(a => String(a.args.doc)));
+      docs = docs.filter(d => !completedOffline.has(d.id));
       for (const a of await pendingActions()) {
         if (a.type !== 'job_start' && a.type !== 'job_open') continue;
         docs = docs.map(d => d.id !== a.args.doc ? d : {
