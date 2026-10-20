@@ -15,6 +15,8 @@ interface StaffProfile {
   department_id: string | null;
   department_name?: string | null;
   is_active: boolean;
+  works_in?: string[];
+  manages_departments?: string[];
 }
 
 interface AuthContextValue {

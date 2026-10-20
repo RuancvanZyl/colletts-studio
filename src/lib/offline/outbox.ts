@@ -27,6 +27,11 @@ const rpc = (fn: string, args: Record<string, unknown>) =>
 const executors: Record<string, Executor> = {
   job_open:  a => rpc('job_mark_opened',  { p_doc: a.args.doc, p_at: a.doneAt, p_request_id: a.id }),
   job_start: a => rpc('job_mark_started', { p_doc: a.args.doc, p_at: a.doneAt, p_request_id: a.id }),
+  staff_message: a => rpc('send_staff_message', {
+    p_kind: a.args.kind, p_user: a.args.user ?? null, p_dept: a.args.dept ?? null, p_subject: a.args.subject ?? null, p_body: a.args.body,
+    p_priority: a.args.priority ?? 3, p_doc: a.args.doc ?? null, p_hunt: a.args.hunt ?? null, p_ack: a.args.ack ?? false,
+    p_at: a.doneAt, p_request_id: a.id,
+  }),
   job_check: a => rpc('job_check_item',   { p_doc: a.args.doc, p_item: a.args.item, p_done: a.args.done, p_note: a.args.note ?? null, p_at: a.doneAt, p_request_id: a.id }),
 };
 

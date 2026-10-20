@@ -85,7 +85,9 @@ const DB_DEPT_TO_STAGES: Record<string, string[]> = {
   'Packing & Shipping': ['packing', 'administration'],
 };
 
-export function getStaffDepartments(fullName: string, departmentName?: string | null): string[] {
+export function getStaffDepartments(fullName: string, departmentName?: string | null, worksIn?: string[] | null): string[] {
+  // 0. Stations chosen for this person in Manage Staff always win
+  if (worksIn && worksIn.length > 0) return worksIn;
   // 1. Hardcoded map by name (legacy staff)
   const firstName = fullName.split(' ')[0];
   const fromName = STAFF_DEPARTMENTS[fullName] ?? STAFF_DEPARTMENTS[firstName];

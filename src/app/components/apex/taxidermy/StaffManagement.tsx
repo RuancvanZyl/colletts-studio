@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { ALL_DEPARTMENTS, DEPT_LABELS } from '../../../../lib/pipeline';
 import { supabase } from '../../../../lib/supabase';
 import { toast } from 'sonner';
 import { Plus, RefreshCw, User, Shield, Pencil, Power, Loader2, X, Check } from 'lucide-react';
@@ -22,6 +23,8 @@ interface StaffMember {
   is_active: boolean;
   avatar_color: string;
   created_at: string;
+  works_in: string[];
+  manages_departments: string[];
 }
 
 const ROLES = [
@@ -67,6 +70,8 @@ export function StaffManagement() {
     role: 'department_staff',
     department_id: '',
     avatar_color: AVATAR_COLORS[0],
+    works_in: [] as string[],
+    manages: [] as string[],
   });
 
   useEffect(() => { load(); }, []);
@@ -75,7 +80,7 @@ export function StaffManagement() {
     setLoading(true);
     const [{ data: staffRows }, { data: deptRows }] = await Promise.all([
       (supabase as any).from('staff_profiles').select(`
-        id, full_name, email, role, department_id, is_active, avatar_color, created_at,
+        id, full_name, email, role, department_id, is_active, avatar_color, created_at, works_in, manages_departments,
         departments(name)
       `).order('full_name'),
       (supabase as any).from('departments').select('id, name').order('sort_order'),
@@ -90,13 +95,13 @@ export function StaffManagement() {
 
   function openNew() {
     setEditId(null);
-    setForm({ full_name: '', email: '', password: '', role: 'department_staff', department_id: '', avatar_color: AVATAR_COLORS[0] });
+    setForm({ full_name: '', email: '', password: '', role: 'department_staff', department_id: '', avatar_color: AVATAR_COLORS[0], works_in: [], manages: [] });
     setShowForm(true);
   }
 
   function openEdit(s: StaffMember) {
     setEditId(s.id);
-    setForm({ full_name: s.full_name, email: s.email ?? '', password: '', role: s.role, department_id: s.department_id ?? '', avatar_color: s.avatar_color ?? AVATAR_COLORS[0] });
+    setForm({ full_name: s.full_name, email: s.email ?? '', password: '', role: s.role, department_id: s.department_id ?? '', avatar_color: s.avatar_color ?? AVATAR_COLORS[0], works_in: s.works_in ?? [], manages: s.manages_departments ?? [] });
     setShowForm(true);
   }
 
@@ -112,6 +117,8 @@ export function StaffManagement() {
         role:          form.role,
         department_id: form.department_id || null,
         avatar_color:  form.avatar_color,
+        works_in:      form.works_in,
+        manages_departments: form.manages,
       }).eq('id', editId);
       if (error) { toast.error(error.message); } else { toast.success('Staff member updated'); setShowForm(false); load(); }
     } else {
@@ -144,7 +151,12 @@ export function StaffManagement() {
         return;
       }
       const result = await res.json().catch(() => ({} as any));
-      if (!res.ok) { toast.error(result.error ?? `Failed to create staff account (${res.status})`); } else { toast.success(`${form.full_name} added — they can now log in`); setShowForm(false); load(); }
+      if (!res.ok) { toast.error(result.error ?? `Failed to create staff account (${res.status})`); } else { toast.success(`${form.full_name} added — they can now log in`);
+        // station + manager settings go on the new profile
+        if (form.works_in.length || form.manages.length) {
+          await (supabase as any).from('staff_profiles').update({ works_in: form.works_in, manages_departments: form.manages }).eq('email', form.email.trim());
+        }
+        setShowForm(false); load(); }
     }
     setSaving(false);
   }
@@ -273,6 +285,33 @@ export function StaffManagement() {
                   <option value="">No specific department</option>
                   {depts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
+              </div>
+
+              <div>
+                <Label className="text-xs text-slate-500 uppercase tracking-wider">Works in (stations they see in My Tasks)</Label>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1 mt-2">
+                  {ALL_DEPARTMENTS.map(d => (
+                    <label key={d} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
+                      <input type="checkbox" checked={form.works_in.includes(d)}
+                        onChange={e => setForm(f => ({ ...f, works_in: e.target.checked ? [...f.works_in, d] : f.works_in.filter(x => x !== d) }))} />
+                      {DEPT_LABELS[d] ?? d}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-xs text-slate-500 uppercase tracking-wider">Manages (can send messages to these departments)</Label>
+                <p className="text-xs text-slate-400 mt-0.5">Leave empty for ordinary workers — they can read messages but not send them. Admins can always send.</p>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1 mt-2">
+                  {ALL_DEPARTMENTS.map(d => (
+                    <label key={d} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
+                      <input type="checkbox" checked={form.manages.includes(d)}
+                        onChange={e => setForm(f => ({ ...f, manages: e.target.checked ? [...f.manages, d] : f.manages.filter(x => x !== d) }))} />
+                      {DEPT_LABELS[d] ?? d}
+                    </label>
+                  ))}
+                </div>
               </div>
 
               <div>

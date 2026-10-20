@@ -52,7 +52,7 @@ export function WorkshopInstructions() {
   const seeAll  = isAdmin || isBoss;
 
   // Departments this staff member works in
-  const myDepts = profile?.full_name ? getStaffDepartments(profile.full_name, profile.department_name) : [];
+  const myDepts = profile?.full_name ? getStaffDepartments(profile.full_name, profile.department_name, profile.works_in) : [];
 
   async function load() {
     setLoading(true);

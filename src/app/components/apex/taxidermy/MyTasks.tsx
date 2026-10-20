@@ -190,7 +190,7 @@ export function MyTasks() {
   const [selectedClient, setSelectedClient] = useState<string | null>(null);
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
-  const myDepts = getStaffDepartments(profile?.full_name ?? '', profile?.department_name);
+  const myDepts = getStaffDepartments(profile?.full_name ?? '', profile?.department_name, profile?.works_in);
 
   const load = useCallback(async () => {
     setLoading(true);

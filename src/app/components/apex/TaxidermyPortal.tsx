@@ -39,6 +39,8 @@ import { AwaitingInstruction } from './taxidermy/AwaitingInstruction';
 import { StaffOverview } from './taxidermy/StaffOverview';
 import { DispatchBoard } from './taxidermy/DispatchBoard';
 import { OfflineBanner } from './shared/OfflineBanner';
+import { Messages } from './taxidermy/Messages';
+import { useUnreadMessages, canCommunicate } from '../../../lib/hooks/useMessages';
 import { NoticeBoard } from './shared/NoticeBoard';
 import { GlobalSearch } from './shared/GlobalSearch';
 import { useAuth } from '../../../lib/auth';
@@ -84,6 +86,7 @@ type TaxidermyView =
   | 'staff-management'
   | 'staff-overview'
   | 'dispatch'
+  | 'messages'
   | 'hunt-archive'
   | 'client-care'
   | 'deadline-watch'
@@ -126,7 +129,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
   // Live task count badge for the sidebar
   useEffect(() => {
     if (!profile?.full_name) return;
-    const depts = getStaffDepartments(profile.full_name, profile.department_name);
+    const depts = getStaffDepartments(profile.full_name, profile.department_name, profile.works_in);
     if (!depts.length) return;
     (supabase as any)
       .from('hunt_documents')
@@ -162,7 +165,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     sessionStorage.setItem(alertKey, '1');
 
     (async () => {
-      const depts = getStaffDepartments(profile.full_name ?? '', profile.department_name);
+      const depts = getStaffDepartments(profile.full_name ?? '', profile.department_name, profile.works_in);
       const isAdminRole = ['admin', 'studio_manager'].includes(profile.role ?? '');
 
       // Tasks assigned directly to this staff member or unassigned in their departments
@@ -244,6 +247,8 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
   const role = profile?.role;
   const isAdmin      = role === 'admin' || role === 'studio_manager';
   const isBookkeeper = role === 'bookkeeper';
+  const isManager    = canCommunicate(profile);
+  const unreadMessages = useUnreadMessages();
   const canSeeBusiness = isAdmin || isBookkeeper;
 
   // ── Role tiers ────────────────────────────────────────────────────────────
@@ -251,7 +256,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
   // bookkeeper             : overview + business (no processing stations)
   // ground_staff           : intake + their departments
   // department_staff       : only their own department stations + tasks
-  const myDepts = getStaffDepartments(profile?.full_name ?? '', profile?.department_name);
+  const myDepts = getStaffDepartments(profile?.full_name ?? '', profile?.department_name, profile?.works_in);
 
   // Which departments unlock which station views
   const VIEW_DEPT: Record<string, string[]> = {
@@ -278,7 +283,9 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
   const canSeeView = (view: TaxidermyView): boolean => {
     if (isAdmin) return true;
     // Everyone gets their tasks + daily list + workshop instructions
-    if (['daily-todo', 'tasks', 'workshop-brief'].includes(view)) return true;
+    if (['daily-todo', 'tasks', 'workshop-brief', 'messages'].includes(view)) return true;
+    // department managers also handle client conversations
+    if (isManager && view === 'client-inbox') return true;
     if (isBookkeeper) {
       return ['summary', 'dashboard', 'client-inbox', 'payment-confirmation', 'invoices', 'inventory', 'clients', 'hunt-archive', 'client-care', 'deadline-watch', 'awaiting-instruction'].includes(view);
     }
@@ -295,6 +302,8 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
         { view: 'summary',   icon: BarChart3,       label: 'Workshop Whiteboard' },
         { view: 'daily-todo', icon: Calendar,        label: 'Daily Tasks' },
         { view: 'tasks',     icon: ListTodo,        label: 'My Tasks', badge: myTaskCount },
+        { view: 'messages' as TaxidermyView, icon: MessageCircle, label: 'Messages', badge: unreadMessages },
+        ...(isManager && !canSeeBusiness ? [{ view: 'client-inbox' as TaxidermyView, icon: MessageCircle, label: 'Client Messages' }] : []),
       ],
     },
     {
@@ -401,6 +410,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'admin':             return <AdminConfiguration />;
       case 'staff-overview':    return <StaffOverview />;
       case 'dispatch':          return <DispatchBoard />;
+      case 'messages':          return <Messages />;
       case 'hunt-archive':      return <HuntArchive />;
       case 'client-care':       return <ClientCare />;
       case 'deadline-watch':    return <DeadlineWatch onOpenHunt={(clientId) => navigate('clients', clientId)} />;
