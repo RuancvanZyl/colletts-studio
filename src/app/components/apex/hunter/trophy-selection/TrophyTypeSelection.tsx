@@ -107,7 +107,7 @@ export function TrophyTypeSelection({
       {/* Header */}
       <div>
         <div className="flex items-center gap-2 mb-2">
-          <Button variant="ghost" size="icon" onClick={onBack} className="rounded-full">
+          <Button variant="ghost" size="icon" onClick={onBack} className="rounded-full" title="Back" aria-label="Back">
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <h2 className="text-slate-900 dark:text-slate-100">

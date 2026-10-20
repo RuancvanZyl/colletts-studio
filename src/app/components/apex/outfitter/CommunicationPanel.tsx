@@ -169,7 +169,7 @@ export function CommunicationPanel() {
 
               {/* Message Input */}
               <div className="flex gap-2">
-                <Button variant="outline" size="icon">
+                <Button variant="outline" size="icon" title="Attach a file" aria-label="Attach a file">
                   <Paperclip className="w-4 h-4" />
                 </Button>
                 <Input

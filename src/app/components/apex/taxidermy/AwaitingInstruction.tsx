@@ -100,7 +100,7 @@ export function AwaitingInstruction() {
           <p className="text-sm text-slate-500">Trophies are in — waiting on the client to say how to mount them</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="ghost" size="icon" onClick={refresh} disabled={loading}>
+          <Button variant="ghost" size="icon" onClick={refresh} disabled={loading} title="Refresh" aria-label="Refresh">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
           {due.length > 0 && (

@@ -166,7 +166,7 @@ export function LinkedHunters() {
                     {hunter.totalTrophies}
                   </TableCell>
                   <TableCell className="text-slate-700 dark:text-slate-300">
-                    {new Date(hunter.lastActive).toLocaleDateString()}
+                    {new Date(hunter.lastActive).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </TableCell>
                 </TableRow>
               ))}
@@ -204,7 +204,7 @@ export function LinkedHunters() {
                   readOnly
                   className="bg-stone-50 dark:bg-stone-800"
                 />
-                <Button variant="outline" size="icon" onClick={handleCopyInviteLink}>
+                <Button variant="outline" size="icon" onClick={handleCopyInviteLink} title="Copy invite link" aria-label="Copy invite link">
                   <Copy className="w-4 h-4" />
                 </Button>
               </div>

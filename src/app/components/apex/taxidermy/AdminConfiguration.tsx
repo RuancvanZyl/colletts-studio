@@ -160,7 +160,7 @@ export function AdminConfiguration() {
         {/* STAFF */}
         <TabsContent value="staff" className="mt-4 space-y-4">
           <div className="flex justify-between items-center">
-            <Button variant="ghost" size="icon" onClick={load} disabled={loading}><RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /></Button>
+            <Button variant="ghost" size="icon" onClick={load} disabled={loading} title="Refresh" aria-label="Refresh"><RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /></Button>
             <Button onClick={openNewStaff}><Plus className="w-4 h-4 mr-2" />Add Staff</Button>
           </div>
 

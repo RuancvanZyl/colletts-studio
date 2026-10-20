@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../../../lib/supabase';
+import { selectIn } from '../../../../lib/supabaseHelpers';
 import { useAuth } from '../../../../lib/auth';
 import { Button } from '../../ui/button';
 import { Badge } from '../../ui/badge';
@@ -119,10 +120,7 @@ export function ClientInbox() {
 
     // Pull client info
     const clientIds = [...new Set(msgs.map((m: any) => m.client_id))];
-    const { data: clients } = await (supabase as any)
-      .from('clients')
-      .select('id, full_name, client_number')
-      .in('id', clientIds);
+    const clients = await selectIn('clients', 'id, full_name, client_number', 'id', clientIds as string[]);
 
     const clientMap: Record<string, { full_name: string; client_number: string }> = {};
     for (const c of clients ?? []) clientMap[c.id] = c;
@@ -185,10 +183,12 @@ export function ClientInbox() {
       .filter(m => m.direction === 'inbound' && !m.readAt)
       .map(m => m.id);
     if (unreadIds.length === 0) return;
-    await (supabase as any)
-      .from('client_messages')
-      .update({ read_at: new Date().toISOString() })
-      .in('id', unreadIds);
+    for (let i = 0; i < unreadIds.length; i += 100) {
+      await (supabase as any)
+        .from('client_messages')
+        .update({ read_at: new Date().toISOString() })
+        .in('id', unreadIds.slice(i, i + 100));
+    }
   }
 
   async function openThread(thread: Thread) {
@@ -239,7 +239,7 @@ export function ClientInbox() {
               <Badge className="bg-red-500 text-white text-xs px-1.5 py-0">{totalUnread}</Badge>
             )}
           </div>
-          <Button variant="ghost" size="icon" className="w-7 h-7" onClick={load} disabled={loading}>
+          <Button variant="ghost" size="icon" className="w-7 h-7" onClick={load} disabled={loading} title="Refresh" aria-label="Refresh">
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
@@ -270,7 +270,7 @@ export function ClientInbox() {
                   )}
                 </div>
                 <p className="text-xs text-slate-500 truncate">{t.lastMessage}</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">{new Date(t.lastAt).toLocaleDateString()}</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">{new Date(t.lastAt).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
               </button>
             ))
           )}
@@ -410,7 +410,7 @@ export function ClientInbox() {
                     {customTemplates.map(t => (
                       <div key={t.id} className="flex items-center gap-1.5 group">
                         <button
-                          onClick={() => insertUpsell({ label: t.name, body: t.body })}
+                          onClick={() => insertUpsell({ category: 'Custom', label: t.name, body: t.body })}
                           className="flex-1 text-left text-xs px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-green-400 hover:bg-green-50 dark:hover:bg-green-950/30 transition-colors flex items-center gap-1.5"
                         >
                           <ChevronRight className="w-3 h-3 text-green-500 flex-shrink-0" />
@@ -418,8 +418,9 @@ export function ClientInbox() {
                         </button>
                         {isOwner && (
                           <button
-                            onClick={() => deleteTemplate(t.id)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-slate-400 hover:text-red-500"
+                            onClick={() => { if (window.confirm('Delete this message template?')) deleteTemplate(t.id); }}
+                            title="Delete template" aria-label="Delete template"
+                            className="opacity-100 [@media(hover:hover)]:opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-slate-400 hover:text-red-500"
                           >
                             <Trash2 className="w-3 h-3" />
                           </button>

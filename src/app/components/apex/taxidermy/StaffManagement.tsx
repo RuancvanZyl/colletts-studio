@@ -165,7 +165,7 @@ export function StaffManagement() {
           <p className="text-sm text-slate-500">Create and manage workshop staff accounts</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="ghost" size="icon" onClick={load} disabled={loading}>
+          <Button variant="ghost" size="icon" onClick={load} disabled={loading} title="Refresh" aria-label="Refresh">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
           <Button onClick={openNew} size="sm" className="gap-2">

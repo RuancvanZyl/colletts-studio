@@ -268,13 +268,13 @@ export function OutfitterProfile({ onLogout }: OutfitterProfileProps) {
           <div className="flex justify-between">
             <span className="text-slate-600 dark:text-slate-400">Registered:</span>
             <span className="text-slate-900 dark:text-slate-100">
-              {new Date(mockOutfitter.registeredDate).toLocaleDateString()}
+              {new Date(mockOutfitter.registeredDate).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}
             </span>
           </div>
           <div className="flex justify-between">
             <span className="text-slate-600 dark:text-slate-400">Last Active:</span>
             <span className="text-slate-900 dark:text-slate-100">
-              {new Date(mockOutfitter.lastActive).toLocaleDateString()}
+              {new Date(mockOutfitter.lastActive).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}
             </span>
           </div>
         </div>

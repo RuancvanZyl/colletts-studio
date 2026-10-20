@@ -108,7 +108,7 @@ export function NoticeBoard({ onNavigate }: NoticeBoardProps) {
       notices.push({
         id, type: 'critical', category: 'alert',
         title: `${a.client_name} — ${a.species_name ?? 'Trophy'} overdue`,
-        detail: a.due_date ? `Due ${new Date(a.due_date).toLocaleDateString()}` : 'No due date',
+        detail: a.due_date ? `Due ${new Date(a.due_date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'No due date',
         navigateTo: 'inventory',
       });
     } else if (a.is_stalled) {

@@ -121,7 +121,7 @@ export function HunterHome({ trophies, onViewTrophy, onAddTrophy, hunterName }: 
                 </div>
                 <p className="text-slate-600 mb-2">ID: {trophy.id}</p>
                 <p className="text-slate-600">
-                  Delivered {new Date(trophy.lastUpdated).toLocaleDateString()}
+                  Delivered {new Date(trophy.lastUpdated).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}
                 </p>
               </Card>
             ))}

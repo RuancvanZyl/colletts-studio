@@ -130,7 +130,7 @@ export function TrophySelection({ onBack, onComplete }: TrophySelectionProps) {
           size="icon"
           onClick={onBack}
           className="rounded-full"
-        >
+         title="Back" aria-label="Back">
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <div>

@@ -71,7 +71,7 @@ export function StaffOverview() {
       (supabase as any).from('hunt_documents').select(`
         id, title, status, current_department, assigned_to, admin_notes,
         client_hunts!inner(year, clients!inner(full_name))
-      `).eq('doc_type', 'job_card').neq('status', 'completed').order('created_at', { ascending: false }),
+      `).eq('doc_type', 'job_card').eq('status', 'in_progress').order('created_at', { ascending: false }),
     ]);
 
     const allDocs: any[] = docs ?? [];
@@ -145,7 +145,7 @@ export function StaffOverview() {
           <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Staff Overview</h2>
           <p className="text-sm text-slate-500">Workload and task assignments across the workshop</p>
         </div>
-        <Button variant="ghost" size="icon" onClick={load}>
+        <Button variant="ghost" size="icon" onClick={load} title="Refresh" aria-label="Refresh">
           <RefreshCw className="w-4 h-4" />
         </Button>
       </div>

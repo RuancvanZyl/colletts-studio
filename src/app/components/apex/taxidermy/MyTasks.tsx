@@ -198,7 +198,7 @@ export function MyTasks() {
         .from('hunt_documents')
         .select('id, hunt_id, current_department, status, form_data, assigned_to, admin_notes, priority, due_date, priority_note, assigned_at, opened_at, started_at, client_hunts(clients(full_name, client_number))')
         .eq('doc_type', 'job_card')
-        .neq('status', 'complete');
+        .eq('status', 'in_progress');
 
       if (userId) {
         // Show tasks assigned directly to this staff member OR (unassigned tasks in their department)
@@ -348,7 +348,7 @@ export function MyTasks() {
 
       const { error } = await (supabase as any).from('hunt_documents').update({
         current_department:     next ?? 'done',
-        status:                 next ? 'in_progress' : 'complete',
+        status:                 next ? 'in_progress' : 'completed',
         completion_photo_paths: photoPaths,
         completion_notes:       cs.notes || null,
         completed_by_name:      profile?.full_name ?? null,

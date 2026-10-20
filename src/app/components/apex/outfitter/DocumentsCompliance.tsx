@@ -117,7 +117,7 @@ export function DocumentsCompliance() {
                 <div className="flex justify-between">
                   <span className="text-slate-600 dark:text-slate-400">Upload Date:</span>
                   <span className="text-slate-900 dark:text-slate-100">
-                    {new Date(doc.uploadDate).toLocaleDateString()}
+                    {new Date(doc.uploadDate).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </span>
                 </div>
                 {doc.expiryDate && (
@@ -125,7 +125,7 @@ export function DocumentsCompliance() {
                     <div className="flex justify-between">
                       <span className="text-slate-600 dark:text-slate-400">Expiry Date:</span>
                       <span className="text-slate-900 dark:text-slate-100">
-                        {new Date(doc.expiryDate).toLocaleDateString()}
+                        {new Date(doc.expiryDate).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}
                       </span>
                     </div>
                     {daysUntilExpiry !== null && (

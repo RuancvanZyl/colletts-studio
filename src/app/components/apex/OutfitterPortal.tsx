@@ -170,7 +170,7 @@ export function OutfitterPortal({ onLogout }: OutfitterPortalProps) {
                 size="icon"
                 onClick={toggleTheme}
                 className="rounded-full"
-              >
+               title="Switch light or dark mode" aria-label="Switch light or dark mode">
                 {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
               </Button>
               <Button

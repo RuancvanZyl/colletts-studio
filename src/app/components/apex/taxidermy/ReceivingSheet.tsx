@@ -119,7 +119,7 @@ export function ReceivingSheet({ onNavigate }: { onNavigate: (v: string) => void
           </h1>
           <p className="text-slate-500 text-sm mt-0.5">Select a hunt to check in trophies</p>
         </div>
-        <Button variant="ghost" size="icon" onClick={loadHunts}><RefreshCw className="w-4 h-4" /></Button>
+        <Button variant="ghost" size="icon" onClick={loadHunts} title="Refresh" aria-label="Refresh"><RefreshCw className="w-4 h-4" /></Button>
       </div>
 
       {/* Tabs */}

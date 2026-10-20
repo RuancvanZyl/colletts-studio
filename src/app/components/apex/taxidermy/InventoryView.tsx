@@ -129,7 +129,7 @@ export function InventoryView() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search tag, client, species..." className="pl-10" />
             </div>
-            <Button variant="ghost" size="icon" onClick={refreshJobs} disabled={jobsLoading}>
+            <Button variant="ghost" size="icon" onClick={refreshJobs} disabled={jobsLoading} title="Refresh" aria-label="Refresh">
               <RefreshCw className={`w-4 h-4 ${jobsLoading ? 'animate-spin' : ''}`} />
             </Button>
           </div>
@@ -176,7 +176,7 @@ export function InventoryView() {
                               {job.due_date ? (
                                 <span className={`text-sm ${overdue ? 'text-red-600 font-medium' : ''}`}>
                                   {overdue && <AlertTriangle className="w-3 h-3 inline mr-1" />}
-                                  {new Date(job.due_date).toLocaleDateString()}
+                                  {new Date(job.due_date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}
                                 </span>
                               ) : <span className="text-slate-400 text-sm">—</span>}
                             </TableCell>

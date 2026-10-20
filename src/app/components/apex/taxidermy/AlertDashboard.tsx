@@ -72,15 +72,14 @@ export function AlertDashboard({ onNavigate }: { onNavigate?: (view: string) => 
       // My active jobs (in my departments)
       const { data: docs } = await (supabase as any)
         .from('hunt_documents')
-        .select('id, hunt_id, title, current_department, status, form_data, last_moved_at')
+        .select('id, hunt_id, title, current_department, status, form_data, last_moved_at, client_hunts(clients(full_name, client_number))')
         .eq('doc_type', 'job_card')
         .in('current_department', myDepts)
         .not('status', 'in', '("complete","cancelled")');
 
       const jobs: AlertJob[] = [];
       for (const doc of docs ?? []) {
-        const { data: hunt } = await (supabase as any)
-          .from('client_hunts').select('clients!inner(full_name,client_number)').eq('id', doc.hunt_id).single();
+        const hunt = { clients: (doc as any).client_hunts?.clients ?? null };
         const fd = doc.form_data ?? {};
         const movedAt   = doc.last_moved_at ?? fd.received_at ?? null;
         const hoursAgo  = movedAt ? (Date.now() - new Date(movedAt).getTime()) / 3_600_000 : 0;
@@ -151,7 +150,7 @@ export function AlertDashboard({ onNavigate }: { onNavigate?: (view: string) => 
             {myDepts.map(d => DEPT_LABELS[d] ?? d).join(', ')}
           </p>
         </div>
-        <Button variant="ghost" size="icon" onClick={load} disabled={loading}>
+        <Button variant="ghost" size="icon" onClick={load} disabled={loading} title="Refresh" aria-label="Refresh">
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
         </Button>
       </div>

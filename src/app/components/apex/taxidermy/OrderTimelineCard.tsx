@@ -118,7 +118,7 @@ export function OrderTimelineCard({ hunt, onRefresh }: { hunt: HuntTimelineField
             {hunt.order_size ? ORDER_SIZE_LABELS[hunt.order_size] : 'Unclassified'}
           </span>
           <span className="text-[10px] text-slate-400">
-            started {new Date(hunt.timeline_started_at).toLocaleDateString()} via {hunt.timeline_started_via === 'xero' ? 'Xero payment' : 'cash (manual)'}
+            started {new Date(hunt.timeline_started_at).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })} via {hunt.timeline_started_via === 'xero' ? 'Xero payment' : 'cash (manual)'}
           </span>
           {amendments.length > 0 && (
             <span className="text-[10px] text-amber-600 dark:text-amber-400">· amended {amendments.length}×</span>
@@ -141,7 +141,7 @@ export function OrderTimelineCard({ hunt, onRefresh }: { hunt: HuntTimelineField
               <Icon className={`w-3.5 h-3.5 shrink-0 ${s.color}`} />
               <span className="text-xs text-slate-700 dark:text-slate-300 flex-1 min-w-0 truncate">{m.label}</span>
               <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${s.chip}`}>
-                {new Date(m.due_date).toLocaleDateString()}
+                {new Date(m.due_date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}
               </span>
             </div>
           );
@@ -150,7 +150,7 @@ export function OrderTimelineCard({ hunt, onRefresh }: { hunt: HuntTimelineField
 
       {hunt.deadline_current && (
         <p className="text-[11px] text-slate-500 pt-1 border-t border-slate-100 dark:border-slate-800">
-          Overall deadline: <span className="font-semibold text-slate-700 dark:text-slate-300">{new Date(hunt.deadline_current).toLocaleDateString()}</span>
+          Overall deadline: <span className="font-semibold text-slate-700 dark:text-slate-300">{new Date(hunt.deadline_current).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
         </p>
       )}
 
@@ -158,7 +158,7 @@ export function OrderTimelineCard({ hunt, onRefresh }: { hunt: HuntTimelineField
         <div className="pt-1 space-y-1">
           {amendments.slice(-3).reverse().map((a, i) => (
             <p key={i} className="text-[10px] text-slate-400 italic">
-              {new Date(a.amended_at).toLocaleDateString()}: moved to {new Date(a.new_deadline).toLocaleDateString()} — "{a.reason}"
+              {new Date(a.amended_at).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}: moved to {new Date(a.new_deadline).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })} — "{a.reason}"
             </p>
           ))}
         </div>
