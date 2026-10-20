@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 
+export type FlagKey = 'noJobCard' | 'instruction' | 'deposit' | 'waiting' | 'profile';
+export type FlagResolution = { at: string; by: string | null; note: string | null };
+
 export type ClientBoardEntry = {
   clientId: string;
   fullName: string;
@@ -19,6 +22,7 @@ export type ClientBoardEntry = {
   waitingDays: number | null;     // days since the last pro-forma / dated note, when awaiting deposit or instruction
   waitingTooLong: boolean;        // awaiting for longer than it should
   profileProblems: string[];      // e.g. "No contact details", "Duplicate profile"
+  resolutions: Partial<Record<FlagKey, FlagResolution>>;   // flags staff have marked resolved
 };
 
 const MONTHS: Record<string, number> = {
@@ -72,7 +76,7 @@ export function useClientBoard() {
   async function load() {
     setLoading(true);
     try {
-      const [clients, hunts, jobCards, invoices] = await Promise.all([
+      const [clients, hunts, jobCards, invoices, resolutionRows] = await Promise.all([
         fetchAll(() => (supabase as any).from('clients')
           .select('id, full_name, client_number, client_type, email, phone').order('id')),
         fetchAll(() => (supabase as any).from('client_hunts')
@@ -82,6 +86,8 @@ export function useClientBoard() {
           .eq('doc_type', 'job_card').order('id')),
         fetchAll(() => (supabase as any).from('hunt_documents')
           .select('id, hunt_id, title').eq('doc_type', 'invoice').ilike('title', '%dated%').order('id')),
+        fetchAll(() => (supabase as any).from('client_flag_resolutions')
+          .select('id, client_id, flag_key, note, resolved_by_name, resolved_at').order('id')).catch(() => [] as any[]),
       ]);
 
       const huntToClient: Record<string, string> = {};
@@ -136,7 +142,13 @@ export function useClientBoard() {
           waitingDays: null,
           waitingTooLong: false,
           profileProblems: problems,
+          resolutions: {},
         };
+      }
+
+      for (const r of resolutionRows) {
+        const entry = byClient[r.client_id];
+        if (entry) entry.resolutions[r.flag_key as FlagKey] = { at: r.resolved_at, by: r.resolved_by_name ?? null, note: r.note ?? null };
       }
 
       for (const h of hunts) {
@@ -194,5 +206,25 @@ export function useClientBoard() {
     return () => subscription.unsubscribe();
   }, []);
 
-  return { entries, loading, refresh: load };
+  async function resolveFlag(clientId: string, flag: FlagKey, note: string, staff: { id?: string; name?: string | null }) {
+    const row = { client_id: clientId, flag_key: flag, note: note.trim() || null, resolved_by: staff.id ?? null, resolved_by_name: staff.name ?? null, resolved_at: new Date().toISOString() };
+    const { error } = await (supabase as any).from('client_flag_resolutions').upsert(row, { onConflict: 'client_id,flag_key' });
+    if (error) return { error: error.message as string };
+    setEntries(prev => prev.map(e => e.clientId === clientId
+      ? { ...e, resolutions: { ...e.resolutions, [flag]: { at: row.resolved_at, by: row.resolved_by_name, note: row.note } } } : e));
+    return { error: null };
+  }
+
+  async function reopenFlag(clientId: string, flag: FlagKey) {
+    const { error } = await (supabase as any).from('client_flag_resolutions').delete().eq('client_id', clientId).eq('flag_key', flag);
+    if (error) return { error: error.message as string };
+    setEntries(prev => prev.map(e => {
+      if (e.clientId !== clientId) return e;
+      const next = { ...e.resolutions }; delete next[flag];
+      return { ...e, resolutions: next };
+    }));
+    return { error: null };
+  }
+
+  return { entries, loading, refresh: load, resolveFlag, reopenFlag };
 }
