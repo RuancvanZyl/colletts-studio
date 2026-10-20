@@ -71,7 +71,7 @@ export function StaffOverview() {
       (supabase as any).from('hunt_documents').select(`
         id, title, status, current_department, assigned_to, admin_notes,
         client_hunts!inner(year, clients!inner(full_name))
-      `).eq('doc_type', 'job_card').neq('status', 'completed').order('created_at', { ascending: false }),
+      `).eq('doc_type', 'job_card').eq('status', 'in_progress').order('created_at', { ascending: false }),
     ]);
 
     const allDocs: any[] = docs ?? [];

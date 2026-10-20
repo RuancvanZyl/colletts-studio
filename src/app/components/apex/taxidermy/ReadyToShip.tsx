@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../../../lib/supabase';
+import { fetchAllRows, selectIn } from '../../../../lib/supabaseHelpers';
 import { PackingList } from './PackingList';
 import { Button } from '../../ui/button';
 import { Badge } from '../../ui/badge';
@@ -33,22 +34,24 @@ export function ReadyToShip() {
     setLoading(true);
 
     // Load all job cards that are in_progress or completed
-    const { data: docs } = await (supabase as any)
+    const docs = await fetchAllRows(() => (supabase as any)
       .from('hunt_documents')
-      .select('hunt_id, status, form_data')
+      .select('id, hunt_id, status, form_data')
       .eq('doc_type', 'job_card')
-      .neq('status', 'pending_payment');
+      .neq('status', 'pending_payment')
+      .order('id'));
 
-    const { data: packingLists } = await (supabase as any)
+    const packingLists = await fetchAllRows(() => (supabase as any)
       .from('hunt_documents')
-      .select('hunt_id')
-      .eq('doc_type', 'packing_list');
+      .select('id, hunt_id')
+      .eq('doc_type', 'packing_list')
+      .order('id'));
 
-    const plHuntIds = new Set((packingLists ?? []).map((p: any) => p.hunt_id));
+    const plHuntIds = new Set(packingLists.map((p: any) => p.hunt_id));
 
     // Group by hunt
     const huntMap: Record<string, { total: number; completed: number; species: Set<string> }> = {};
-    for (const doc of docs ?? []) {
+    for (const doc of docs) {
       if (!huntMap[doc.hunt_id]) huntMap[doc.hunt_id] = { total: 0, completed: 0, species: new Set() };
       huntMap[doc.hunt_id].total++;
       if (doc.status === 'completed') huntMap[doc.hunt_id].completed++;
@@ -64,16 +67,10 @@ export function ReadyToShip() {
     if (completedHuntIds.length === 0) { setHunts([]); setLoading(false); return; }
 
     // Load hunt + client info
-    const { data: huntRows } = await (supabase as any)
-      .from('client_hunts')
-      .select('id, year, operator, client_id')
-      .in('id', completedHuntIds);
+    const huntRows = await selectIn('client_hunts', 'id, year, operator, client_id', 'id', completedHuntIds);
 
-    const clientIds = [...new Set((huntRows ?? []).map((h: any) => h.client_id))];
-    const { data: clientRows } = await (supabase as any)
-      .from('clients')
-      .select('id, full_name, client_number')
-      .in('id', clientIds);
+    const clientIds = [...new Set(huntRows.map((h: any) => h.client_id))] as string[];
+    const clientRows = await selectIn('clients', 'id, full_name, client_number', 'id', clientIds);
 
     const clientMap: Record<string, { full_name: string; client_number: string }> = {};
     for (const c of clientRows ?? []) clientMap[c.id] = c;

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
+import { fetchAllRows, selectIn } from '../supabaseHelpers';
 import { DEPT_LABELS } from '../pipeline';
 
 interface DeptStat {
@@ -55,22 +56,21 @@ export function useFloorTime() {
       .order('created_at', { ascending: true });
 
     // ── 2. Active (in_progress) job cards to find slowest ──
-    const { data: activeDocs } = await (supabase as any)
+    const activeDocs = await fetchAllRows(() => (supabase as any)
       .from('hunt_documents')
       .select('id, hunt_id, form_data, current_department, updated_at')
       .eq('doc_type', 'job_card')
-      .eq('status', 'in_progress');
+      .eq('status', 'in_progress')
+      .order('id'));
 
     // ── 3. Client numbers for slowest ──
     const huntIds = [...new Set((activeDocs ?? []).map((d: any) => d.hunt_id))];
     let clientNumberMap: Record<string, string> = {};
     if (huntIds.length > 0) {
-      const { data: hunts } = await (supabase as any)
-        .from('client_hunts').select('id, client_id').in('id', huntIds);
-      const clientIds = [...new Set((hunts ?? []).map((h: any) => h.client_id))];
+      const hunts = await selectIn('client_hunts', 'id, client_id', 'id', huntIds as string[]);
+      const clientIds = [...new Set(hunts.map((h: any) => h.client_id))] as string[];
       if (clientIds.length > 0) {
-        const { data: clients } = await (supabase as any)
-          .from('clients').select('id, client_number').in('id', clientIds);
+        const clients = await selectIn('clients', 'id, client_number', 'id', clientIds);
         const huntToClient: Record<string, string> = {};
         for (const h of hunts ?? []) huntToClient[h.id] = h.client_id;
         const cMap: Record<string, string> = {};

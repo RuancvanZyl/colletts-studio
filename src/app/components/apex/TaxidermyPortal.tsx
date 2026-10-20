@@ -130,7 +130,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       .select('id', { count: 'exact', head: true })
       .eq('doc_type', 'job_card')
       .in('current_department', depts)
-      .neq('status', 'complete')
+      .eq('status', 'in_progress')
       .then(({ count }: { count: number | null }) => setMyTaskCount(count ?? 0));
   }, [profile?.full_name]);
 

@@ -188,9 +188,9 @@ export function MyTasks() {
       const userId = profile?.id ?? (await (supabase as any).auth.getUser()).data?.user?.id;
       let query = (supabase as any)
         .from('hunt_documents')
-        .select('id, hunt_id, current_department, status, form_data, assigned_to, admin_notes')
+        .select('id, hunt_id, current_department, status, form_data, assigned_to, admin_notes, client_hunts(clients(full_name, client_number))')
         .eq('doc_type', 'job_card')
-        .neq('status', 'complete');
+        .eq('status', 'in_progress');
 
       if (userId) {
         // Show tasks assigned directly to this staff member OR (unassigned tasks in their department)
@@ -211,11 +211,7 @@ export function MyTasks() {
 
       const result: Task[] = [];
       for (const doc of docs ?? []) {
-        const { data: hunt } = await (supabase as any)
-          .from('client_hunts').select('client_id').eq('id', doc.hunt_id).single();
-        const { data: client } = hunt
-          ? await (supabase as any).from('clients').select('full_name, client_number').eq('id', hunt.client_id).single()
-          : { data: null };
+        const client = (doc as any).client_hunts?.clients ?? null;
 
         const fd = doc.form_data ?? {};
         result.push({
@@ -298,7 +294,7 @@ export function MyTasks() {
 
       const { error } = await (supabase as any).from('hunt_documents').update({
         current_department:     next ?? 'done',
-        status:                 next ? 'in_progress' : 'complete',
+        status:                 next ? 'in_progress' : 'completed',
         completion_photo_paths: photoPaths,
         completion_notes:       cs.notes || null,
         completed_by_name:      profile?.full_name ?? null,

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../../../lib/supabase';
+import { selectIn } from '../../../../lib/supabaseHelpers';
 import { useAuth } from '../../../../lib/auth';
 import { Button } from '../../ui/button';
 import { Badge } from '../../ui/badge';
@@ -119,10 +120,7 @@ export function ClientInbox() {
 
     // Pull client info
     const clientIds = [...new Set(msgs.map((m: any) => m.client_id))];
-    const { data: clients } = await (supabase as any)
-      .from('clients')
-      .select('id, full_name, client_number')
-      .in('id', clientIds);
+    const clients = await selectIn('clients', 'id, full_name, client_number', 'id', clientIds as string[]);
 
     const clientMap: Record<string, { full_name: string; client_number: string }> = {};
     for (const c of clients ?? []) clientMap[c.id] = c;
@@ -185,10 +183,12 @@ export function ClientInbox() {
       .filter(m => m.direction === 'inbound' && !m.readAt)
       .map(m => m.id);
     if (unreadIds.length === 0) return;
-    await (supabase as any)
-      .from('client_messages')
-      .update({ read_at: new Date().toISOString() })
-      .in('id', unreadIds);
+    for (let i = 0; i < unreadIds.length; i += 100) {
+      await (supabase as any)
+        .from('client_messages')
+        .update({ read_at: new Date().toISOString() })
+        .in('id', unreadIds.slice(i, i + 100));
+    }
   }
 
   async function openThread(thread: Thread) {
@@ -410,7 +410,7 @@ export function ClientInbox() {
                     {customTemplates.map(t => (
                       <div key={t.id} className="flex items-center gap-1.5 group">
                         <button
-                          onClick={() => insertUpsell({ label: t.name, body: t.body })}
+                          onClick={() => insertUpsell({ category: 'Custom', label: t.name, body: t.body })}
                           className="flex-1 text-left text-xs px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-green-400 hover:bg-green-50 dark:hover:bg-green-950/30 transition-colors flex items-center gap-1.5"
                         >
                           <ChevronRight className="w-3 h-3 text-green-500 flex-shrink-0" />
