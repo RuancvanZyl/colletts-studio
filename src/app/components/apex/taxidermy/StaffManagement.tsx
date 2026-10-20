@@ -117,11 +117,17 @@ export function StaffManagement() {
     } else {
       // Create new staff via Edge Function
       if (!form.email.trim() || !form.password.trim()) { toast.error('Email and password are required for new staff'); setSaving(false); return; }
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-staff-account`, {
+      // The function checks WHO is asking, so it needs the logged-in admin's token — not the public anon key
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) { toast.error('Your session has expired — please log in again'); setSaving(false); return; }
+      let res: Response;
+      try {
+        res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-staff-account`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           email:         form.email.trim(),
@@ -132,8 +138,13 @@ export function StaffManagement() {
           avatar_color:  form.avatar_color,
         }),
       });
-      const result = await res.json();
-      if (!res.ok) { toast.error(result.error ?? 'Failed to create staff account'); } else { toast.success(`${form.full_name} added — they can now log in`); setShowForm(false); load(); }
+      } catch {
+        toast.error('Could not reach the staff service. The "create-staff-account" function may not be deployed in Supabase yet.');
+        setSaving(false);
+        return;
+      }
+      const result = await res.json().catch(() => ({} as any));
+      if (!res.ok) { toast.error(result.error ?? `Failed to create staff account (${res.status})`); } else { toast.success(`${form.full_name} added — they can now log in`); setShowForm(false); load(); }
     }
     setSaving(false);
   }
