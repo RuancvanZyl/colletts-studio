@@ -35,7 +35,7 @@ function draftUpdate(c: CareClient, workshop = 'Apex Trophy Solutions') {
   return `Hi ${first},\n\nA quick update on ${count} with us.${stage}\n\nEverything is progressing well and we'll be in touch again as soon as the next stage is complete. If you have any questions in the meantime, just reply to this message.\n\nKind regards,\n${workshop}`;
 }
 
-export function ClientCare() {
+export function ClientCare({ onOpenClient }: { onOpenClient?: (clientId: string) => void } = {}) {
   const { clients, loading, overdue, due, refresh } = useClientCare();
   const { profile } = useAuth();
   const [filter, setFilter]   = useState<'all' | 'overdue' | 'due'>('all');
@@ -160,7 +160,7 @@ export function ClientCare() {
                 key={c.clientId}
                 className="flex items-center gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1c2b3a]"
               >
-                <div className="relative shrink-0">
+                <div className={`relative shrink-0 ${onOpenClient ? 'cursor-pointer' : ''}`} onClick={() => onOpenClient?.(c.clientId)}>
                   <div className="w-10 h-10 rounded-full bg-[#0073ea]/15 text-[#0073ea] flex items-center justify-center text-sm font-bold">
                     {initials(c.name)}
                   </div>
@@ -169,11 +169,13 @@ export function ClientCare() {
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-slate-900 dark:text-slate-100">{c.name}</span>
+                    {onOpenClient
+                      ? <button onClick={() => onOpenClient(c.clientId)} title="Open this client's profile" className="font-semibold text-slate-900 dark:text-slate-100 text-left hover:underline hover:text-[#0073ea] cursor-pointer">{c.name}</button>
+                      : <span className="font-semibold text-slate-900 dark:text-slate-100">{c.name}</span>}
                     {c.clientNumber && <span className="text-xs font-mono text-slate-400">{c.clientNumber}</span>}
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${style.chip}`}>{style.label}</span>
                   </div>
-                  <p className="text-sm text-slate-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                  <p className={`text-sm text-slate-500 mt-0.5 flex items-center gap-1.5 flex-wrap ${onOpenClient ? 'cursor-pointer hover:text-slate-700' : ''}`} onClick={() => onOpenClient?.(c.clientId)}>
                     {c.unansweredInbound > 0 && <MessageCircle className="w-3.5 h-3.5 text-red-500" />}
                     {c.reason}
                     <span className="text-slate-300 dark:text-slate-600">·</span>

@@ -32,7 +32,7 @@ Apex Trophy Solutions`,
   };
 }
 
-export function AwaitingInstruction() {
+export function AwaitingInstruction({ onOpenClient }: { onOpenClient?: (clientId: string) => void } = {}) {
   const { hunts, loading, due, refresh } = useAwaitingInstruction();
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [sendingAll, setSendingAll] = useState(false);
@@ -147,7 +147,9 @@ export function AwaitingInstruction() {
                 : <Clock className="w-5 h-5 text-slate-400 shrink-0" />}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-semibold text-slate-900 dark:text-slate-100">{h.clientName}</span>
+                  {onOpenClient
+                    ? <button onClick={() => onOpenClient(h.clientId)} title="Open this client's profile" className="font-semibold text-slate-900 dark:text-slate-100 text-left hover:underline hover:text-[#0073ea] cursor-pointer">{h.clientName}</button>
+                    : <span className="font-semibold text-slate-900 dark:text-slate-100">{h.clientName}</span>}
                   <span className="text-xs font-mono text-slate-400">{h.refNumber}</span>
                   {h.reminderCount > 0 && (
                     <span className="text-xs text-slate-400">· reminded {h.reminderCount}×</span>

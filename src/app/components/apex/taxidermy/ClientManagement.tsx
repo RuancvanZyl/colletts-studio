@@ -18,6 +18,7 @@ import { useAuth } from '../../../../lib/auth';
 import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
 import { HuntTimeline } from './HuntTimeline';
+import { ClientAttention } from './ClientAttention';
 import { CommunicationPanel } from './CommunicationPanel';
 import { ClientRegistrationForm } from '../shared/ClientRegistrationForm';
 import type { Database } from '../../../../lib/database.types';
@@ -328,6 +329,9 @@ function ClientDetailPanel({ client, onEdit, onBack }: { client: Client; onEdit:
           <Edit2 className="w-3 h-3 mr-1" /> Edit
         </Button>
       </div>
+
+      {/* What is wrong with this client — first thing you see */}
+      <ClientAttention client={client as any} onGoTo={setTab} />
 
       {/* Tabs */}
       <div className="flex border-b border-slate-200 dark:border-slate-700 mb-4 -mx-0.5">

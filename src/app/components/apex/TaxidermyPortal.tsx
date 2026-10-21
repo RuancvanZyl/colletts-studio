@@ -404,7 +404,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'workshop-brief':         return <WorkshopInstructions />;
       case 'packing':                return <PackingStation />;
       case 'photos-admin':           return <PackingShipping />;
-      case 'ready-to-ship':          return <ReadyToShip />;
+      case 'ready-to-ship':          return <ReadyToShip onOpenClient={(id) => navigate('clients', id)} />;
       case 'client-inbox':           return <ClientInbox />;
       case 'payment-confirmation':   return <PaymentConfirmation />;
       case 'inventory':              return <JobTracker />;
@@ -416,9 +416,9 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'messages':          return <Messages />;
       case 'workshop-setup':    return <WorkshopSetup />;
       case 'hunt-archive':      return <HuntArchive />;
-      case 'client-care':       return <ClientCare />;
+      case 'client-care':       return <ClientCare onOpenClient={(id) => navigate('clients', id)} />;
       case 'deadline-watch':    return <DeadlineWatch onOpenHunt={(clientId) => navigate('clients', clientId)} />;
-      case 'awaiting-instruction': return <AwaitingInstruction />;
+      case 'awaiting-instruction': return <AwaitingInstruction onOpenClient={(id) => navigate('clients', id)} />;
       case 'staff-management':  return <StaffManagement />;
       default:                  return <SummarySheet onNavigate={navigate} />;
     }

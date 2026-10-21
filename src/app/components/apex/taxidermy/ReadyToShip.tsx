@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 
 interface ShipHunt {
   huntId: string;
+  clientId: string;
   clientName: string;
   clientNumber: string;
   huntYear: number;
@@ -25,7 +26,7 @@ interface PackingTarget {
   clientNumber: string;
 }
 
-export function ReadyToShip() {
+export function ReadyToShip({ onOpenClient }: { onOpenClient?: (clientId: string) => void } = {}) {
   const [hunts, setHunts]           = useState<ShipHunt[]>([]);
   const [loading, setLoading]       = useState(true);
   const [packingTarget, setPackingTarget] = useState<PackingTarget | null>(null);
@@ -80,6 +81,7 @@ export function ReadyToShip() {
       const client = clientMap[h.client_id] ?? {};
       return {
         huntId:           h.id,
+        clientId:         h.client_id,
         clientName:       client.full_name   ?? '—',
         clientNumber:     client.client_number ?? '',
         huntYear:         h.year,
@@ -129,7 +131,9 @@ export function ReadyToShip() {
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="font-bold text-slate-900 dark:text-slate-100">{hunt.clientName}</h3>
+                    {onOpenClient
+                      ? <h3 className="font-bold text-slate-900 dark:text-slate-100"><button onClick={() => onOpenClient(hunt.clientId)} title="Open this client's profile" className="text-left hover:underline hover:text-[#0073ea] cursor-pointer">{hunt.clientName}</button></h3>
+                      : <h3 className="font-bold text-slate-900 dark:text-slate-100">{hunt.clientName}</h3>}
                     {hunt.clientNumber && (
                       <span className="text-xs text-slate-500 font-mono">{hunt.clientNumber}</span>
                     )}
