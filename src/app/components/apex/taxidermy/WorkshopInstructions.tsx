@@ -4,6 +4,8 @@ import { supabase } from '../../../../lib/supabase';
 import { useAuth } from '../../../../lib/auth';
 import { getNextDepartment, getStaffDepartments, DEPT_LABELS } from '../../../../lib/pipeline';
 import { Button } from '../../ui/button';
+import { PrintButton } from '../shared/PrintButton';
+import { printJobCards } from '../../../../lib/print';
 import { toast } from 'sonner';
 import {
   RefreshCw, Loader2, Sparkles, ChevronDown, ChevronUp,
@@ -247,9 +249,12 @@ export function WorkshopInstructions() {
             }
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={load} disabled={loading}>
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-        </Button>
+        <div className="flex items-center gap-2">
+          {cards.length > 0 && <PrintButton label={`Print all (${cards.length})`} onPrint={() => printJobCards({ docIds: cards.map(c => c.docId) })} />}
+          <Button variant="outline" size="sm" onClick={load} disabled={loading} title="Refresh" aria-label="Refresh">
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
       </div>
 
       {/* Pending hunter submissions — admin only */}
@@ -302,6 +307,7 @@ export function WorkshopInstructions() {
               <span className="text-xs bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded-full">
                 {grouped[dept].length}
               </span>
+              <PrintButton compact label="Print" className="ml-auto" onPrint={() => printJobCards({ docIds: grouped[dept].map(c => c.docId) })} />
             </div>
             <ClientGroupedCardList
               cards={grouped[dept]}
@@ -369,9 +375,10 @@ function ClientGroupedCardList({ cards, expandedClient, setExpandedClient, ...re
         const withInstructions = clientCards.filter(c => c.instructions || c.specialRequests.length > 0).length;
         return (
           <div key={key} className="bg-white dark:bg-[#1c2b3a] rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+            <div className="flex items-center">
             <button
               onClick={() => setExpandedClient(isOpen ? null : key)}
-              className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40"
+              className="flex-1 min-w-0 flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40"
             >
               <span className="font-mono text-xs font-bold text-white bg-slate-700 dark:bg-slate-600 px-2 py-0.5 rounded flex-shrink-0">
                 {clientCards[0].clientNumber}
@@ -385,6 +392,8 @@ function ClientGroupedCardList({ cards, expandedClient, setExpandedClient, ...re
               )}
               {isOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
             </button>
+            <PrintButton compact label="Print" className="mr-3 shrink-0" onPrint={() => printJobCards({ docIds: clientCards.map(c => c.docId) })} />
+            </div>
             {isOpen && (
               <div className="border-t border-slate-100 dark:border-slate-800">
                 <CardList cards={clientCards} {...rest} />
@@ -448,7 +457,10 @@ function CardList({ cards, expanded, toggle, completing, markDone, photos, addPh
             {/* Expanded */}
             {isOpen && (
               <div className="px-4 pb-5 pt-2 bg-slate-50 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800 space-y-3">
-                <p className="text-xs text-slate-400 pt-1">{card.clientName} · {card.mountType}</p>
+                <div className="flex items-center justify-between gap-2 pt-1">
+                  <p className="text-xs text-slate-400">{card.clientName} · {card.mountType}</p>
+                  <PrintButton compact label="Print job card" onPrint={() => printJobCards({ docIds: [card.docId] })} />
+                </div>
 
                 {card.instructions ? (
                   <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-xl px-4 py-3">

@@ -6,6 +6,7 @@ import { Label } from '../../ui/label';
 import { Badge } from '../../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 import { toast } from 'sonner';
+import { printPackingList } from '../../../../lib/print';
 import {
   Package, Printer, Save, X, Plus, Trash2, Loader2, CheckCircle2,
 } from 'lucide-react';
@@ -133,7 +134,10 @@ export function PackingList({ huntId, clientName, clientNumber, onClose }: Packi
   }
 
   function print() {
-    window.print();
+    printPackingList({
+      clientName, clientNumber, courier, tracking, notes,
+      trophies, crates: crates.map(c => ({ number: c.number, length: c.length, width: c.width, height: c.height, weight: c.weight, trophies: c.trophies })),
+    });
   }
 
   const unassigned = trophies.filter(t => !crates.some(c => c.trophies.includes(t.docId)));

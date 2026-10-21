@@ -6,6 +6,8 @@ import { toast } from 'sonner';
 import { supabase } from '../../../../lib/supabase';
 import { useAuth } from '../../../../lib/auth';
 import { getPipeline, DEPT_LABELS } from '../../../../lib/pipeline';
+import { PrintButton } from '../shared/PrintButton';
+import { printReceivingSheet } from '../../../../lib/print';
 import {
   ClipboardList, CheckCircle2, Camera, User, AlertTriangle,
   Package, Clock, ChevronRight, XCircle, Loader2, RefreshCw,
@@ -181,7 +183,7 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
   const [lines, setLines]       = useState<TrophyLine[]>([]);
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
-  const [huntInfo, setHuntInfo] = useState<{ client_name: string; client_number: string } | null>(null);
+  const [huntInfo, setHuntInfo] = useState<{ client_name: string; client_number: string; ref: string; year: number | null; operator: string | null } | null>(null);
   const [huntPhotos, setHuntPhotos] = useState<File[]>([]);
   const [huntPhotoPreviews, setHuntPhotoPreviews] = useState<string[]>([]);
   const huntPhotoRef = useRef<HTMLInputElement>(null);
@@ -193,10 +195,10 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
     // Hunt + client info
     const { data: hunt } = await (supabase as any)
       .from('client_hunts')
-      .select('clients!inner(full_name, client_number)')
+      .select('ref_number, year, operator, clients!inner(full_name, client_number)')
       .eq('id', huntId)
       .single();
-    if (hunt) setHuntInfo({ client_name: hunt.clients?.full_name, client_number: hunt.clients?.client_number });
+    if (hunt) setHuntInfo({ client_name: hunt.clients?.full_name, client_number: hunt.clients?.client_number, ref: hunt.ref_number ?? '', year: hunt.year ?? null, operator: hunt.operator ?? null });
 
     // Job cards: awaiting_arrival (pre-registered export) + in_progress at receiving
     const { data: docs } = await (supabase as any)
@@ -361,6 +363,14 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
           {okCount > 0      && <Badge className="bg-green-100 text-green-700">{okCount} OK</Badge>}
           {issueCount > 0   && <Badge className="bg-red-100 text-red-700">{issueCount} issues</Badge>}
         </div>
+        <PrintButton compact label="Print sheet" onPrint={() => {
+          printReceivingSheet({
+            clientName: huntInfo?.client_name ?? '', clientNumber: huntInfo?.client_number, huntRef: huntInfo?.ref,
+            year: huntInfo?.year, operator: huntInfo?.operator, receivedBy: profile?.full_name ?? '',
+            lines: lines.map(l => ({ species: l.species, mountType: l.mountType, quantity: l.quantity, tagNumber: l.tagNumber,
+              instructions: l.instructions, status: l.status, conditionNotes: l.conditionNotes })),
+          });
+        }} />
       </div>
 
       {/* Hunt-level arrival photos */}

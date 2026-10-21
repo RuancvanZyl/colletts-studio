@@ -9,6 +9,8 @@ import { supabase } from '../../../../lib/supabase';
 import { useClientHunts } from '../../../../lib/hooks/useClientHunts';
 import { PRIORITY_META, dueState, useChecklists } from '../../../../lib/hooks/useTaskFlow';
 import { DEPT_LABELS, getPipeline, getNextDepartment } from '../../../../lib/pipeline';
+import { PrintButton } from '../shared/PrintButton';
+import { printJobCards } from '../../../../lib/print';
 
 interface Row {
   id: string; huntRef: string; huntYear: string; title: string; species: string; mount: string; instructions: string;
@@ -82,9 +84,12 @@ export function ClientJobCards({ clientId }: { clientId: string }) {
         <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800">{counts.notStarted} not started</span>
         <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800">{counts.unassigned} not assigned</span>
         {counts.overdue > 0 && <span className="px-2.5 py-1 rounded-full bg-red-600 text-white font-semibold">{counts.overdue} overdue</span>}
-        {rows.length > live.length && (
-          <button onClick={() => setShowDone(v => !v)} className="ml-auto text-[#0073ea] hover:underline">{showDone ? 'Hide finished' : `Show finished (${rows.length - live.length})`}</button>
-        )}
+        <span className="ml-auto flex items-center gap-3">
+          {rows.length > live.length && (
+            <button onClick={() => setShowDone(v => !v)} className="text-[#0073ea] hover:underline">{showDone ? 'Hide finished' : `Show finished (${rows.length - live.length})`}</button>
+          )}
+          {live.length > 0 && <PrintButton compact label="Print job cards" onPrint={() => printJobCards({ docIds: live.map(r => r.id) })} />}
+        </span>
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
