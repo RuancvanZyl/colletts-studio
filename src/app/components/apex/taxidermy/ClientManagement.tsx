@@ -19,6 +19,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
 import { HuntTimeline } from './HuntTimeline';
 import { ClientAttention } from './ClientAttention';
+import { ClientJobCards } from './ClientJobCards';
 import { CommunicationPanel } from './CommunicationPanel';
 import { ClientRegistrationForm } from '../shared/ClientRegistrationForm';
 import type { Database } from '../../../../lib/database.types';
@@ -277,10 +278,10 @@ function PassportUploadSection({ clientId }: { clientId: string | null }) {
 }
 
 // ── Detail tabs ───────────────────────────────────────────────────────────────
-type DetailTab = 'info' | 'hunts' | 'photos' | 'messages';
+type DetailTab = 'info' | 'hunts' | 'photos' | 'messages' | 'jobcards';
 
 function ClientDetailPanel({ client, onEdit, onBack }: { client: Client; onEdit: () => void; onBack: () => void }) {
-  const [tab, setTab] = useState<DetailTab>('hunts');
+  const [tab, setTab] = useState<DetailTab>('jobcards');
   const { photos, loading: photosLoading, refresh: refreshPhotos } = useClientPhotos(client.id);
   const [inviting, setInviting] = useState(false);
   const hasPortalAccess = !!(client as any).auth_user_id;
@@ -300,6 +301,7 @@ function ClientDetailPanel({ client, onEdit, onBack }: { client: Client; onEdit:
   const clientType = (client as any).client_type as 'local' | 'export' | undefined;
 
   const TABS: { key: DetailTab; label: string }[] = [
+    { key: 'jobcards', label: 'Job Cards' },
     { key: 'hunts',    label: 'Hunts & Docs' },
     { key: 'messages', label: 'Messages' },
     { key: 'info',     label: 'Client Info' },
@@ -411,6 +413,7 @@ function ClientDetailPanel({ client, onEdit, onBack }: { client: Client; onEdit:
           </>
         )}
 
+        {tab === 'jobcards' && <ClientJobCards clientId={client.id} />}
         {tab === 'hunts' && <HuntTimeline clientId={client.id} />}
 
         {tab === 'messages' && (
