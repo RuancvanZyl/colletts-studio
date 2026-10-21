@@ -15,3 +15,6 @@ CREATE TABLE public.client_messages (
   from_email text, status text DEFAULT 'sent', read_at timestamptz, sent_at timestamptz DEFAULT now(), created_at timestamptz DEFAULT now());
 ALTER TABLE public.client_messages ENABLE ROW LEVEL SECURITY;
 CREATE POLICY staff_all_messages ON public.client_messages FOR ALL USING (EXISTS (SELECT 1 FROM public.staff_profiles WHERE id = auth.uid() AND is_active));
+CREATE SCHEMA IF NOT EXISTS storage;
+CREATE TABLE IF NOT EXISTS storage.objects (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), bucket_id text, name text);
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;

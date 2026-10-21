@@ -7,6 +7,7 @@ import { supabase } from '../../../../lib/supabase';
 import { useAuth } from '../../../../lib/auth';
 import { getPipeline, DEPT_LABELS } from '../../../../lib/pipeline';
 import { PrintButton } from '../shared/PrintButton';
+import { savePhotos, shrinkPhoto } from '../../../../lib/offline/photos';
 import { printReceivingSheet } from '../../../../lib/print';
 import {
   ClipboardList, CheckCircle2, Camera, User, AlertTriangle,
@@ -183,7 +184,7 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
   const [lines, setLines]       = useState<TrophyLine[]>([]);
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
-  const [huntInfo, setHuntInfo] = useState<{ client_name: string; client_number: string; ref: string; year: number | null; operator: string | null } | null>(null);
+  const [huntInfo, setHuntInfo] = useState<{ client_id: string; client_name: string; client_number: string; ref: string; year: number | null; operator: string | null } | null>(null);
   const [huntPhotos, setHuntPhotos] = useState<File[]>([]);
   const [huntPhotoPreviews, setHuntPhotoPreviews] = useState<string[]>([]);
   const huntPhotoRef = useRef<HTMLInputElement>(null);
@@ -195,10 +196,10 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
     // Hunt + client info
     const { data: hunt } = await (supabase as any)
       .from('client_hunts')
-      .select('ref_number, year, operator, clients!inner(full_name, client_number)')
+      .select('client_id, ref_number, year, operator, clients!inner(full_name, client_number)')
       .eq('id', huntId)
       .single();
-    if (hunt) setHuntInfo({ client_name: hunt.clients?.full_name, client_number: hunt.clients?.client_number, ref: hunt.ref_number ?? '', year: hunt.year ?? null, operator: hunt.operator ?? null });
+    if (hunt) setHuntInfo({ client_id: hunt.client_id, client_name: hunt.clients?.full_name, client_number: hunt.clients?.client_number, ref: hunt.ref_number ?? '', year: hunt.year ?? null, operator: hunt.operator ?? null });
 
     // Job cards: awaiting_arrival (pre-registered export) + in_progress at receiving
     const { data: docs } = await (supabase as any)
@@ -269,24 +270,23 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
 
     setSaving(true);
     try {
-      // Upload hunt-level arrival photos
+      // Arrival photos of the delivery — saved on the device first, uploaded when there is a connection
       const huntPhotoPaths: string[] = [];
-      for (const file of huntPhotos) {
-        const ext  = file.name.split('.').pop();
-        const path = `hunt-arrivals/${huntId}/${Date.now()}.${ext}`;
-        const { error } = await (supabase as any).storage.from('client-photos').upload(path, file, { upsert: true });
-        if (!error) huntPhotoPaths.push(path);
+      if (huntPhotos.length && huntInfo?.client_id) {
+        const r = await savePhotos({ clientId: huntInfo.client_id, huntId, kind: 'arrival', shared: true, staffId: profile?.id ?? null, staffName: profile?.full_name ?? null,
+          files: await Promise.all(huntPhotos.map(f => shrinkPhoto(f))) });
+        if (r.error) throw new Error(r.error);
       }
 
       // Process each line
       for (const line of lines) {
-        // Upload per-trophy photos
+        // Per-trophy arrival photos — shown to the client in their tracking view
         const photoPaths: string[] = [];
-        for (const file of line.intakePhotos) {
-          const ext  = file.name.split('.').pop();
-          const path = `trophy-intake/${huntId}/${line.docId}/${Date.now()}.${ext}`;
-          const { error } = await (supabase as any).storage.from('client-photos').upload(path, file, { upsert: true });
-          if (!error) photoPaths.push(path);
+        if (line.intakePhotos.length && huntInfo?.client_id) {
+          const r = await savePhotos({ clientId: huntInfo.client_id, huntId, docId: line.docId, kind: 'arrival', shared: true,
+            staffId: profile?.id ?? null, staffName: profile?.full_name ?? null,
+            files: await Promise.all(line.intakePhotos.map(f => shrinkPhoto(f))) });
+          if (r.error) throw new Error(r.error);
         }
 
         // Determine next department from pipeline

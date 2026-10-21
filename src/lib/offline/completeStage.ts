@@ -26,7 +26,7 @@ export const completeStageExecutor: Executor = async a => {
   const x = a.args as unknown as CompleteArgs;
   try {
     const { data: doc, error: readErr } = await (supabase as any)
-      .from('hunt_documents').select('form_data, current_department, status').eq('id', x.doc).maybeSingle();
+      .from('hunt_documents').select('form_data, current_department, status, hunt_id, client_hunts(client_id)').eq('id', x.doc).maybeSingle();
     if (readErr) return classify(readErr);
     if (!doc) return { ok: false, retry: false, error: 'This job card no longer exists' };
     if (doc.current_department !== x.dept) {
@@ -49,6 +49,18 @@ export const completeStageExecutor: Executor = async a => {
         const p = `job-completions/${x.doc}/${x.dept}/${a.id}-${i}.jpg`;
         if (!photoPaths.some(q => q.startsWith(`job-completions/${x.doc}/${x.dept}/${a.id}-${i}.`))) photoPaths.push(p);
       }
+    }
+
+    // 1b. keep the photos in the trophy's gallery — shown to the client once the trophy is finished
+    const clientId = doc.client_hunts?.client_id;
+    if (clientId && photoPaths.length) {
+      const finished = x.dept === 'photos' || x.dept === 'packing';
+      const { error: gErr } = await (supabase as any).from('trophy_photos').upsert(
+        photoPaths.map(path => ({
+          client_id: clientId, hunt_id: doc.hunt_id, hunt_doc_id: x.doc, kind: finished ? 'finished' : 'progress',
+          storage_path: path, shared_with_client: finished, taken_by: x.staffId, taken_by_name: x.staffName, taken_at: a.doneAt,
+        })), { onConflict: 'storage_path' });
+      if (gErr) return classify(gErr);
     }
 
     // 2. move the job on

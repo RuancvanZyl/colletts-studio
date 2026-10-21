@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { useHunterHunts, HunterTrophy, HunterHunt } from '../../../../lib/hooks/useHunterHunts';
 import { DEPT_LABELS, DEPT_COLORS } from '../../../../lib/pipeline';
 import { Badge } from '../../ui/badge';
+import { PhotoGallery } from '../shared/TrophyPhotos';
 import {
   Loader2, RefreshCw, ChevronDown, ChevronUp, CheckCircle2,
   Clock, Trophy, User, Package,
@@ -101,6 +102,10 @@ function TrophyCard({ trophy }: { trophy: HunterTrophy }) {
               <span className="font-medium">Your instructions:</span> {trophy.instructions}
             </div>
           )}
+          <div>
+            <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Photos of your trophy</p>
+            <PhotoGallery docId={trophy.docId} empty="We'll add photos here when your trophy arrives and again when it is finished." />
+          </div>
           <div className="space-y-1">
             {trophy.pipeline.map((stage, i) => {
               const done    = i < trophy.stagesDone;

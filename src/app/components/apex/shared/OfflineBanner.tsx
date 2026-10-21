@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import { WifiOff, RefreshCw, CheckCircle2, AlertTriangle, X } from 'lucide-react';
 import { outbox, startOutboxSync } from '../../../../lib/offline/outbox';
 import '../../../../lib/offline/completeStage';   // registers the stage-completion replayer
+import '../../../../lib/offline/photos';          // registers the photo-upload replayer
 import type { OutboxState, QueuedAction } from '../../../../lib/offline/outboxCore';
 
 const TITLES: Record<string, string> = { job_open: 'Opened a job card', job_start: 'Started a task', job_check: 'Ticked a checklist step', job_complete: 'Completed a stage' };

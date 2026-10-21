@@ -8,6 +8,7 @@ import { Button } from '../../ui/button';
 import { Textarea } from '../../ui/textarea';
 import { AlertDashboard } from './AlertDashboard';
 import { cachedFetch, pendingActions } from '../../../../lib/offline/outbox';
+import { JobPhotosButton } from '../shared/TrophyPhotos';
 import { completeStage as completeStageAction } from '../../../../lib/offline/completeStage';
 import { PRIORITY_META, dueState, taskStatus, useChecklists, markJobOpened, markJobStarted } from '../../../../lib/hooks/useTaskFlow';
 
@@ -536,6 +537,7 @@ export function MyTasks() {
                     {task.clientNumber && <span className="font-bold text-[#3AAECC] mr-1.5">{task.clientNumber}</span>}
                     {task.clientName}
                   </p>
+                  <JobPhotosButton dark className="mt-2" docId={task.docId} dept={task.currentDept} title={`${task.species || 'Trophy'} — ${task.clientName}`} />
                 </div>
                 {task.receivedAt && (
                   <div className="flex items-center gap-1 text-xs text-[#7AADB8]/60 shrink-0">

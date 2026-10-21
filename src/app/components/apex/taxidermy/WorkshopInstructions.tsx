@@ -5,6 +5,7 @@ import { useAuth } from '../../../../lib/auth';
 import { getNextDepartment, getStaffDepartments, DEPT_LABELS } from '../../../../lib/pipeline';
 import { Button } from '../../ui/button';
 import { PrintButton } from '../shared/PrintButton';
+import { JobPhotosButton } from '../shared/TrophyPhotos';
 import { printJobCards } from '../../../../lib/print';
 import { toast } from 'sonner';
 import {
@@ -459,7 +460,10 @@ function CardList({ cards, expanded, toggle, completing, markDone, photos, addPh
               <div className="px-4 pb-5 pt-2 bg-slate-50 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800 space-y-3">
                 <div className="flex items-center justify-between gap-2 pt-1">
                   <p className="text-xs text-slate-400">{card.clientName} · {card.mountType}</p>
-                  <PrintButton compact label="Print job card" onPrint={() => printJobCards({ docIds: [card.docId] })} />
+                  <div className="flex gap-2">
+                    <JobPhotosButton docId={card.docId} dept={card.department} huntId={card.huntId} title={`${card.species} — ${card.clientName}`} />
+                    <PrintButton compact label="Print job card" onPrint={() => printJobCards({ docIds: [card.docId] })} />
+                  </div>
                 </div>
 
                 {card.instructions ? (

@@ -11,11 +11,11 @@ const q = async (sql, params) => (await db.query(sql, params)).rows;
 const fails = async (sql, params) => { try { await db.query(sql, params); return null; } catch (e) { return String(e.message); } };
 
 await db.exec(fs.readFileSync(HERE + 'bootstrap.sql', 'utf8'));
-for (const f of ['041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql']) {
+for (const f of ['041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
-await db.exec(`GRANT USAGE ON SCHEMA public, auth TO authenticated; GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated; GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO authenticated;`);
+await db.exec(`GRANT USAGE ON SCHEMA public, auth, storage TO authenticated; GRANT SELECT ON storage.objects TO authenticated; GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated; GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO authenticated;`);
 
 // people
 const ids = { admin: 'a0000000-0000-0000-0000-000000000001', worker: 'a0000000-0000-0000-0000-000000000002', other: 'a0000000-0000-0000-0000-000000000003',
@@ -153,5 +153,40 @@ ok(log.filter(x => x.kind === 'staff').length === 3 && log.filter(x => x.kind ==
 await as(ids.worker);
 ok((await q('SELECT 1 FROM v_communication_log WHERE kind=\'client\'')).length === 0, 'a worker sees no client messages through the log');
 
+
+console.log('\nTrophy photos');
+const HUNTER = 'b0000000-0000-0000-0000-000000000001', OTHER_CLIENT = 'c0000000-0000-0000-0000-000000000002';
+await as(null);
+await db.exec(`
+ INSERT INTO auth.users (id, email) VALUES ('${HUNTER}','hunter@example.com') ON CONFLICT DO NOTHING;
+ UPDATE clients SET auth_user_id = '${HUNTER}' WHERE id = 'c0000000-0000-0000-0000-000000000001';
+ INSERT INTO clients (id, full_name) VALUES ('${OTHER_CLIENT}','Someone Else');
+ INSERT INTO storage.objects (bucket_id, name) VALUES ('client-photos','trophy-photos/mine-finished.jpg'),('client-photos','trophy-photos/mine-progress.jpg'),('client-photos','trophy-photos/theirs.jpg');
+`);
+await as(ids.worker);
+await db.query(`INSERT INTO trophy_photos (client_id, hunt_doc_id, kind, storage_path, shared_with_client) VALUES
+  ('c0000000-0000-0000-0000-000000000001', '${DOC}', 'finished', 'trophy-photos/mine-finished.jpg', true),
+  ('c0000000-0000-0000-0000-000000000001', '${DOC}', 'progress', 'trophy-photos/mine-progress.jpg', false),
+  ('${OTHER_CLIENT}', NULL, 'finished', 'trophy-photos/theirs.jpg', true)`);
+ok((await q('SELECT count(*)::int n FROM trophy_photos'))[0].n === 3, 'staff can add and see all photos');
+await db.query(`INSERT INTO trophy_photos (id, client_id, kind, storage_path) VALUES ('f0000000-0000-0000-0000-000000000001','c0000000-0000-0000-0000-000000000001','arrival','trophy-photos/x.jpg') ON CONFLICT (id) DO UPDATE SET caption = 'again'`);
+await db.query(`INSERT INTO trophy_photos (id, client_id, kind, storage_path) VALUES ('f0000000-0000-0000-0000-000000000001','c0000000-0000-0000-0000-000000000001','arrival','trophy-photos/x.jpg') ON CONFLICT (id) DO UPDATE SET caption = 'again'`);
+ok((await q(`SELECT count(*)::int n FROM trophy_photos WHERE storage_path='trophy-photos/x.jpg'`))[0].n === 1, 're-sending a photo after a dropped connection does not duplicate it');
+ok((await fails(`INSERT INTO trophy_photos (client_id, kind, storage_path) VALUES ('c0000000-0000-0000-0000-000000000001','nonsense','p')`)) !== null, 'only arrival / progress / finished are accepted');
+await db.query(`DELETE FROM trophy_photos WHERE id='f0000000-0000-0000-0000-000000000001'`);
+ok((await q(`SELECT count(*)::int n FROM trophy_photos WHERE id='f0000000-0000-0000-0000-000000000001'`))[0].n === 1, 'a worker cannot delete photos');
+await as(ids.admin);
+await db.query(`DELETE FROM trophy_photos WHERE id='f0000000-0000-0000-0000-000000000001'`);
+ok((await q(`SELECT count(*)::int n FROM trophy_photos WHERE id='f0000000-0000-0000-0000-000000000001'`))[0].n === 0, 'an admin can delete a photo');
+await as(HUNTER);
+let hp = await q('SELECT storage_path FROM trophy_photos ORDER BY storage_path');
+ok(hp.length === 1 && hp[0].storage_path === 'trophy-photos/mine-finished.jpg', 'a client sees only their own shared photos (not progress, not other clients)');
+let files = await q('SELECT name FROM storage.objects ORDER BY name');
+ok(files.length === 1 && files[0].name === 'trophy-photos/mine-finished.jpg', 'a client can only download the image files of photos shared with them');
+ok((await fails(`INSERT INTO trophy_photos (client_id, kind, storage_path) VALUES ('c0000000-0000-0000-0000-000000000001','finished','hacked')`)) !== null, 'a client cannot add photos');
+await as(ids.admin);
+await db.query(`UPDATE trophy_photos SET shared_with_client = true WHERE storage_path = 'trophy-photos/mine-progress.jpg'`);
+await as(HUNTER);
+ok((await q('SELECT count(*)::int n FROM trophy_photos'))[0].n === 2, 'sharing a photo makes it appear for the client');
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

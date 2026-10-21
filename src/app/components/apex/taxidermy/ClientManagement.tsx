@@ -1,3 +1,4 @@
+import { PhotoGallery } from '../shared/TrophyPhotos';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { Button } from '../../ui/button';
@@ -432,6 +433,10 @@ function ClientDetailPanel({ client, onEdit, onBack }: { client: Client; onEdit:
               </div>
             ) : (
               <>
+                <div>
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Trophy photos <span className="font-normal normal-case">— taken in the app; the eye shows what the client can see</span></p>
+                  <PhotoGallery clientId={client.id} canManage empty="No trophy photos yet — open the Job Cards tab and tap Photos on a trophy." />
+                </div>
                 <PhotoSection
                   clientId={client.id}
                   photoType="arrival"

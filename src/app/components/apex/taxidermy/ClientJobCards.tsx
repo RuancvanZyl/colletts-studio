@@ -4,16 +4,17 @@
  * and the very next thing to do.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, CheckCircle2, ArrowRight, Eye, EyeOff, Play } from 'lucide-react';
+import { Loader2, CheckCircle2, ArrowRight, Eye, EyeOff, Play, Camera } from 'lucide-react';
 import { supabase } from '../../../../lib/supabase';
 import { useClientHunts } from '../../../../lib/hooks/useClientHunts';
 import { PRIORITY_META, dueState, useChecklists } from '../../../../lib/hooks/useTaskFlow';
 import { DEPT_LABELS, getPipeline, getNextDepartment } from '../../../../lib/pipeline';
 import { PrintButton } from '../shared/PrintButton';
+import { JobPhotosDialog } from '../shared/TrophyPhotos';
 import { printJobCards } from '../../../../lib/print';
 
 interface Row {
-  id: string; huntRef: string; huntYear: string; title: string; species: string; mount: string; instructions: string;
+  id: string; huntId: string; huntRef: string; huntYear: string; title: string; species: string; mount: string; instructions: string;
   dept: string; status: string; assignedTo: string | null; priority: number; dueDate: string | null; priorityNote: string;
   openedAt: string | null; startedAt: string | null; huntStatus: string;
 }
@@ -28,6 +29,7 @@ export function ClientJobCards({ clientId }: { clientId: string }) {
   const { hunts, loading } = useClientHunts(clientId);
   const [staff, setStaff] = useState<Record<string, string>>({});
   const [showDone, setShowDone] = useState(false);
+  const [photoRow, setPhotoRow] = useState<Row | null>(null);
 
   useEffect(() => {
     (supabase as any).from('staff_profiles').select('id, full_name').then(({ data }: any) => {
@@ -39,7 +41,7 @@ export function ClientJobCards({ clientId }: { clientId: string }) {
 
   const rows: Row[] = useMemo(() => hunts.flatMap(h =>
     h.documents.filter(d => d.doc_type === 'job_card').map((d: any) => ({
-      id: d.id, huntRef: h.ref_number, huntYear: h.year, title: d.title ?? '',
+      id: d.id, huntId: h.id, huntRef: h.ref_number, huntYear: h.year, title: d.title ?? '',
       species: d.form_data?.species ?? '', mount: d.form_data?.mount_type ?? '', instructions: d.form_data?.instructions ?? '',
       dept: d.current_department ?? 'receiving', status: d.status ?? 'in_progress',
       assignedTo: d.assigned_to ?? null, priority: d.priority ?? 3, dueDate: d.due_date ?? null, priorityNote: d.priority_note ?? '',
@@ -119,6 +121,7 @@ export function ClientJobCards({ clientId }: { clientId: string }) {
                     <p className="font-semibold text-slate-900 dark:text-slate-100">{r.species || r.title}</p>
                     <p className="text-xs text-slate-500">{r.mount}</p>
                     <p className="text-[11px] font-mono text-slate-400">{r.huntRef} · {r.huntYear}</p>
+                    <button type="button" onClick={() => setPhotoRow(r)} className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-[#0073ea] hover:underline"><Camera className="w-3 h-3" />Photos</button>
                     {r.instructions && <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5 max-w-[220px] line-clamp-2" title={r.instructions}>{r.instructions}</p>}
                   </td>
                   <td className="px-3 py-2.5">
@@ -165,6 +168,11 @@ export function ClientJobCards({ clientId }: { clientId: string }) {
           </tbody>
         </table>
       </div>
+      {photoRow && (
+        <JobPhotosDialog open onClose={() => setPhotoRow(null)} docId={photoRow.id} huntId={photoRow.huntId} clientId={clientId}
+          title={`${photoRow.species || photoRow.title} (${photoRow.huntRef})`}
+          defaultKind={photoRow.dept === 'receiving' ? 'arrival' : (photoRow.dept === 'photos' || photoRow.dept === 'packing') ? 'finished' : 'progress'} />
+      )}
     </div>
   );
 }
