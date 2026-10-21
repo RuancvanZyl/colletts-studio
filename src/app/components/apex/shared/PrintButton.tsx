@@ -24,7 +24,7 @@ export function PrintButton({ label, onPrint, className = '', compact = false }:
   }
   return (
     <button type="button" onClick={run} disabled={busy} title={label} aria-label={label}
-      className={`inline-flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:border-[#0073ea] hover:text-[#0073ea] disabled:opacity-50 font-semibold ${compact ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-sm'} ${className}`}>
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:border-[#0073ea] hover:text-[#0073ea] disabled:opacity-50 font-semibold ${compact ? 'px-2.5 min-h-9 text-xs' : 'px-3 py-2 text-sm'} ${className}`}>
       {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
       {label}
     </button>

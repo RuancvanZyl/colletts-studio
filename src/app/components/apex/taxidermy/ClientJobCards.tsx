@@ -94,7 +94,7 @@ export function ClientJobCards({ clientId }: { clientId: string }) {
         </span>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+      <div className="hidden 2xl:block overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
         <table className="w-full text-sm min-w-[880px]">
           <thead className="bg-slate-50 dark:bg-slate-800/60 text-[11px] uppercase tracking-wide text-slate-500">
             <tr>
@@ -167,6 +167,62 @@ export function ClientJobCards({ clientId }: { clientId: string }) {
             })}
           </tbody>
         </table>
+      </div>
+
+      {/* Cards on phones and normal screens; the full table only where there is room for it (very wide screens) */}
+      <div className="2xl:hidden grid gap-2.5 lg:grid-cols-1 xl:grid-cols-2">
+        {shown.map(r => {
+          const done = finished(r);
+          const pipeline = getPipeline(r.mount);
+          const idx = pipeline.indexOf(r.dept);
+          const items = checklist.forDept(r.dept);
+          const ticked = items.filter(i => checklist.progress[`${r.id}:${i.id}`]?.done).length;
+          const due = dueState(r.dueDate);
+          const act = nextAction(r);
+          return (
+            <div key={r.id} className={`rounded-xl border p-3 space-y-2 ${done ? 'opacity-50' : ''} ${r.priority === 1 && !done ? 'border-red-400 bg-red-50/60 dark:bg-red-950/20' : 'border-slate-200 dark:border-slate-700'}`}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">{r.species || r.title}</p>
+                  <p className="text-xs text-slate-500">{r.mount} · <span className="font-mono">{r.huntRef}</span></p>
+                </div>
+                <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full bg-[#0073ea]/10 text-[#0073ea]">
+                  {done ? 'Done' : (DEPT_LABELS[r.dept] ?? r.dept)}{!done && idx >= 0 ? ` · ${idx + 1}/${pipeline.length}` : ''}
+                </span>
+              </div>
+              {!done && (
+                <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                  <span className={`font-bold px-2 py-0.5 rounded-full ${PRIORITY_META[r.priority]?.chip}`}>{PRIORITY_META[r.priority]?.label}</span>
+                  {due && <span className={`font-semibold px-2 py-0.5 rounded-full ${due.className}`}>{due.label}</span>}
+                  <span className="text-slate-600 dark:text-slate-300">{r.assignedTo ? (staff[r.assignedTo] ?? 'Staff member') : <span className="text-amber-600">Not assigned</span>}</span>
+                  {r.startedAt ? <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white font-semibold">Started {ago(r.startedAt)}</span>
+                    : r.openedAt ? <span className="px-2 py-0.5 rounded-full bg-amber-500 text-black font-semibold">Opened {ago(r.openedAt)}</span>
+                    : r.assignedTo ? <span className="px-2 py-0.5 rounded-full bg-slate-500 text-white font-semibold">Not opened</span> : null}
+                </div>
+              )}
+              {r.priorityNote && !done && <p className="text-[11px] text-red-600 dark:text-red-400">⚡ {r.priorityNote}</p>}
+              {r.instructions && <p className="text-[11px] text-amber-700 dark:text-amber-400">{r.instructions}</p>}
+              {!done && items.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between text-[11px] mb-1">
+                    <span className="font-semibold">Checklist {ticked}/{items.length}</span>
+                    <span className={ticked === items.length ? 'text-emerald-600 font-bold' : 'text-amber-600'}>{ticked === items.length ? 'Complete' : 'Not complete'}</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                    <div className={`h-full ${ticked === items.length ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{ width: `${(ticked / items.length) * 100}%` }} />
+                  </div>
+                </div>
+              )}
+              <div className="flex items-start justify-between gap-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+                <p className={`text-xs flex items-start gap-1.5 min-w-0 ${act.tone === 'ready' ? 'text-emerald-700 dark:text-emerald-400 font-semibold' : act.tone === 'wait' ? 'text-amber-700 dark:text-amber-400 font-semibold' : 'text-slate-800 dark:text-slate-200'}`}>
+                  {act.tone === 'ready' ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" /> : <ArrowRight className="w-3.5 h-3.5 shrink-0 mt-0.5" />}
+                  <span>{act.text}</span>
+                </p>
+                <button type="button" onClick={() => setPhotoRow(r)} className="shrink-0 inline-flex items-center gap-1 text-xs font-semibold text-[#0073ea] px-2 py-1.5 -my-1 rounded-lg border border-slate-200 dark:border-slate-700"><Camera className="w-3.5 h-3.5" />Photos</button>
+              </div>
+            </div>
+          );
+        })}
       </div>
       {photoRow && (
         <JobPhotosDialog open onClose={() => setPhotoRow(null)} docId={photoRow.id} huntId={photoRow.huntId} clientId={clientId}

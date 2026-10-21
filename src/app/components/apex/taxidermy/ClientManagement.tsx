@@ -337,12 +337,12 @@ function ClientDetailPanel({ client, onEdit, onBack }: { client: Client; onEdit:
       <ClientAttention client={client as any} onGoTo={setTab} />
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-200 dark:border-slate-700 mb-4 -mx-0.5">
+      <div className="flex overflow-x-auto border-b border-slate-200 dark:border-slate-700 mb-4 -mx-0.5 [scrollbar-width:none]">
         {TABS.map(t => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
+            className={`px-3 py-3 text-xs font-medium whitespace-nowrap shrink-0 border-b-2 transition-colors ${
               tab === t.key
                 ? 'border-[#0073ea] text-[#0073ea]'
                 : 'border-transparent text-slate-500 hover:text-slate-700'

@@ -247,7 +247,7 @@ export function JobPhotosButton({ docId, title, dept, huntId, clientId, classNam
   return (
     <>
       <button type="button" onClick={e => { e.stopPropagation(); setOpen(true); }}
-        className={`inline-flex items-center gap-1.5 rounded-lg border font-semibold px-2.5 py-1.5 text-xs ${dark
+        className={`inline-flex items-center gap-1.5 rounded-lg border font-semibold px-3 min-h-9 text-xs ${dark
           ? 'border-[rgba(58,174,204,0.4)] text-[#3AAECC] hover:bg-[rgba(58,174,204,0.12)]'
           : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:border-[#0073ea] hover:text-[#0073ea]'} ${className}`}>
         <Camera className="w-3.5 h-3.5" />Photos

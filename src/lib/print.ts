@@ -53,26 +53,57 @@ const CSS = `
   tr { page-break-inside: avoid; }
 `;
 
-/** Show the browser's print dialog for the given page markup. */
+/** Prefix every rule with the print root so nothing leaks into (or is overridden by) the app's own styles. */
+function scoped(css: string): string {
+  return css.replace(/([^{}@]+)\{([^{}]*)\}/g, (_m, sel: string, body: string) =>
+    sel.trim().split(',').map(x => {
+      const t = x.trim();
+      return t === 'body' ? '#apex-print-root' : `#apex-print-root ${t}`;
+    }).join(',') + `{${body}}`);
+}
+
+/**
+ * Show the print dialog for the given page markup.
+ * The pages are put into the app's own document and everything else is hidden while printing — this is
+ * the one approach that behaves the same on iPhone, Android and desktop (a hidden frame does not on iOS).
+ */
 export function printHtml(title: string, body: string): void {
-  const frame = document.createElement('iframe');
-  frame.setAttribute('aria-hidden', 'true');
-  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
-  document.body.appendChild(frame);
-  const doc = frame.contentDocument;
-  const win = frame.contentWindow;
-  if (!doc || !win) { frame.remove(); throw new Error('Printing is not available in this browser'); }
-  doc.open();
-  doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>${CSS}</style></head><body>${body}</body></html>`);
-  doc.close();
-  const go = () => {
-    win.focus();
-    win.print();
-    // keep the frame until the dialog has been dealt with
-    setTimeout(() => frame.remove(), 60_000);
+  document.getElementById('apex-print-root')?.remove();
+  document.getElementById('apex-print-style')?.remove();
+
+  const style = document.createElement('style');
+  style.id = 'apex-print-style';
+  style.textContent = `
+    ${CSS.match(/@page[^}]*}/)?.[0] ?? ''}
+    ${scoped(CSS.replace(/@page[^}]*}/, ''))}
+    #apex-print-root { color:#111; background:#fff; font-family: Arial, Helvetica, sans-serif; }
+    #apex-print-root h1, #apex-print-root h3 { font-weight: bold; }
+    #apex-print-root svg { display: inline-block; }
+    @media screen { #apex-print-root { display: none; } }
+    @media print {
+      body > *:not(#apex-print-root) { display: none !important; }
+      html, body { background: #fff !important; }
+      #apex-print-root { display: block; }
+    }`;
+  const root = document.createElement('div');
+  root.id = 'apex-print-root';
+  root.innerHTML = body;
+  document.head.appendChild(style);
+  document.body.appendChild(root);
+
+  const oldTitle = document.title;
+  document.title = title;                       // becomes the file name when saved as PDF
+  const cleanup = () => {
+    document.title = oldTitle;
+    root.remove(); style.remove();
+    window.removeEventListener('afterprint', cleanup);
   };
-  // let the QR codes / layout settle
-  setTimeout(go, 150);
+  window.addEventListener('afterprint', cleanup);
+  setTimeout(() => {
+    try { window.print(); } catch (e) { cleanup(); throw e; }
+    // some mobile browsers never fire afterprint
+    setTimeout(() => { if (document.getElementById('apex-print-root')) cleanup(); }, 120_000);
+  }, 200);
 }
 
 const stamp = () => `Printed ${new Date().toLocaleString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`;

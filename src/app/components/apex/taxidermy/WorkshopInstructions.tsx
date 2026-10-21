@@ -238,8 +238,8 @@ export function WorkshopInstructions() {
     <div className="space-y-4 max-w-2xl">
 
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
           <h1 className="text-slate-900 dark:text-slate-100 text-xl font-bold">Job Cards</h1>
           <p className="text-slate-500 text-sm">
             {seeAll
@@ -251,7 +251,7 @@ export function WorkshopInstructions() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {cards.length > 0 && <PrintButton label={`Print all (${cards.length})`} onPrint={() => printJobCards({ docIds: cards.map(c => c.docId) })} />}
+          {cards.length > 0 && <PrintButton label={`Print all`} onPrint={() => printJobCards({ docIds: cards.map(c => c.docId) })} />}
           <Button variant="outline" size="sm" onClick={load} disabled={loading} title="Refresh" aria-label="Refresh">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>

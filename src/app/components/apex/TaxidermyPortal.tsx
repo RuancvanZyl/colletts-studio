@@ -515,7 +515,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       )}
 
       {/* ── Main area ───────────────────────────────────── */}
-      <div className="flex-1 flex flex-col lg:ml-60 min-h-screen">
+      <div className="flex-1 min-w-0 flex flex-col lg:ml-60 min-h-screen">
 
         {/* Top bar */}
         <header className="h-14 bg-[#0F1A1C] border-b border-[rgba(58,174,204,0.12)] flex items-center px-4 gap-3 sticky top-0 z-30 flex-shrink-0">
@@ -563,7 +563,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-4 md:p-6 overflow-auto bg-[#080C0C]">
+        <main className="flex-1 min-w-0 p-4 md:p-6 overflow-x-auto bg-[#080C0C]">
           <OfflineBanner />
           {renderView()}
         </main>
