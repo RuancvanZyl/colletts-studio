@@ -1,897 +1,423 @@
-import { useState, useRef, useEffect } from 'react';
-import { getPartsForTrophy, makePartTag, type TrophyPart } from '../../../../lib/trophyParts';
-import { TrophyLabels } from './TrophyLabels';
-import { Button } from '../../ui/button';
-import { Input } from '../../ui/input';
-import { Label } from '../../ui/label';
-import { Textarea } from '../../ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../../ui/select';
-import { Badge } from '../../ui/badge';
+/**
+ * Arrival Check-In — trophies come through the door.
+ *   1. Who is the hunter?   (find their profile, or make one)
+ *   2. What did we receive?  (each animal, with the parts ticked off)
+ *   3. Save → receiving sheet to print, welcome message to send, QR labels.
+ * The hunter chooses the mounts afterwards, from their own profile.
+ */
+import { useEffect, useRef, useState } from 'react';
+import { Camera, CheckCircle2, ArrowLeft, ArrowRight, Copy as CopyIcon, Loader2, Plus, Printer, Search, Tag, Trash2, UserPlus, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { useAuth } from '../../../../lib/auth';
-import { useClients } from '../../../../lib/hooks/useClients';
 import { supabase } from '../../../../lib/supabase';
-import { Plus, Trash2, CheckCircle2, ArrowLeft, ArrowRight, Upload, X } from 'lucide-react';
+import { useAuth } from '../../../../lib/auth';
+import { SPECIES_LIST, speciesEmoji } from '../../../../lib/pricing';
+import { RECEIVED_PARTS, PART_PRESETS, CONDITIONS, partRecords, listParts } from '../../../../lib/received';
+import { WORKSHOP } from '../../../../lib/workshop';
+import { getInviteLink } from '../../../../lib/invite';
+import { printDropOffPapers, type DropOffPrint } from '../../../../lib/print';
+import { savePhotos, shrinkPhoto } from '../../../../lib/offline/photos';
+import { InvitePanel } from '../shared/InvitePanel';
+import { TrophyLabels } from './TrophyLabels';
+import type { TrophyPart } from '../../../../lib/trophyParts';
 
-interface ArrivalCheckInProps {
-  onComplete: () => void;
-}
+interface FoundClient { id: string; full_name: string; email: string | null; phone: string | null; client_number: string | null; client_type: string | null; auth_user_id: string | null }
+interface Animal { id: string; species: string; tag: string; condition: string; parts: string[]; other: string; notes: string; photos: File[]; previews: string[] }
+interface OpenHunt { id: string; ref_number: string | null; year: string; status: string | null }
 
-const SPECIES_LIST = [
-  'Baboon','Blesbok','Bontebok','Buffalo','Bushbuck','Bushpig','Caracal','Civet','Crocodile',
-  'Duiker','Eland','Elephant','Fallow Deer','Gemsbok','Genet Cat','Giraffe','Grysbok',
-  'Hartebeest','Hippo','Hyena','Impala','Jackal','Klipspringer','Kudu','Lechwe','Leopard',
-  'Lion','Nguni','Nyala','Oribi','Ostrich','Reedbuck (Common)','Reedbuck (Mountain)',
-  'Reedbuck (Vaal)','Sable','Serval','Springbok','Steenbok','Tsessebe','Warthog','Waterbuck',
-  'Wild Cat','Wildebeest (Black)','Wildebeest (Blue)','Vervet Monkey','Zebra','Other',
-];
+const emptyAnimal = (): Animal => ({ id: crypto.randomUUID(), species: '', tag: '', condition: 'fresh', parts: [], other: '', notes: '', photos: [], previews: [] });
 
-const MOUNT_TYPES = [
-  'Shoulder Mount','Offset Shoulder Mount','Pedestal Mount','Full Mount','Euro Skull',
-  'Bleach Only','Artistic Skull','Rug Mount on Felt','Tan Only','Dip & Pack','Half Mount','Life Cast',
-];
+const field = 'w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-3 min-h-11 text-base placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0073ea]';
+const label = 'block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1';
+const bigBtn = 'inline-flex items-center justify-center gap-2 rounded-xl font-bold min-h-12 px-5 text-base disabled:opacity-50';
 
-const CONDITIONS = ['salted','frozen','fresh','wet_salted','cape_only','other'];
+export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
+  const { profile } = useAuth();
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [saving, setSaving] = useState(false);
 
-// 2026 Export USD prices — from SA Price List 2026.xlsx (Export Prices folder)
-const EXPORT_PRICE_DATA: Record<string, Record<string, number>> = {
-  'Baboon':              { shoulder: 695,  offset_shoulder: 800,  pedestal: 830,  full_mount: 1500,  euro_skull: 210, bleach_only: 130 },
-  'Blesbok':             { shoulder: 755,  offset_shoulder: 870,  pedestal: 900,  full_mount: 2540,  euro_skull: 235, bleach_only: 130 },
-  'Buffalo':             { shoulder: 1390, offset_shoulder: 1595, pedestal: 1665, full_mount: 0,     euro_skull: 395, bleach_only: 230 },
-  'Bushbuck':            { shoulder: 695,  offset_shoulder: 800,  pedestal: 830,  full_mount: 1620,  euro_skull: 235, bleach_only: 130 },
-  'Bushpig':             { shoulder: 695,  offset_shoulder: 800,  pedestal: 725,  full_mount: 1620,  euro_skull: 315, bleach_only: 200 },
-  'Caracal':             { shoulder: 0,    offset_shoulder: 0,    pedestal: 0,    full_mount: 1130,  euro_skull: 175, bleach_only: 95  },
-  'Civet':               { shoulder: 0,    offset_shoulder: 0,    pedestal: 0,    full_mount: 925,   euro_skull: 175, bleach_only: 95  },
-  'Duiker':              { shoulder: 555,  offset_shoulder: 640,  pedestal: 585,  full_mount: 1130,  euro_skull: 175, bleach_only: 95  },
-  'Eland':               { shoulder: 1155, offset_shoulder: 1330, pedestal: 1390, full_mount: 13860, euro_skull: 355, bleach_only: 210 },
-  'Elephant':            { shoulder: 15750,offset_shoulder: 0,    pedestal: 0,    full_mount: 0,     euro_skull: 0,   bleach_only: 925 },
-  'Fallow Deer':         { shoulder: 695,  offset_shoulder: 800,  pedestal: 830,  full_mount: 2890,  euro_skull: 235, bleach_only: 130 },
-  'Gemsbok':             { shoulder: 1040, offset_shoulder: 1195, pedestal: 1250, full_mount: 3700,  euro_skull: 335, bleach_only: 210 },
-  'Genet Cat':           { shoulder: 0,    offset_shoulder: 0,    pedestal: 0,    full_mount: 870,   euro_skull: 160, bleach_only: 95  },
-  'Giraffe':             { shoulder: 4850, offset_shoulder: 5580, pedestal: 5820, full_mount: 0,     euro_skull: 415, bleach_only: 255 },
-  'Grysbok':             { shoulder: 440,  offset_shoulder: 505,  pedestal: 530,  full_mount: 750,   euro_skull: 160, bleach_only: 95  },
-  'Hartebeest':          { shoulder: 925,  offset_shoulder: 1060, pedestal: 1110, full_mount: 3696,  euro_skull: 310, bleach_only: 185 },
-  'Hippo':               { shoulder: 4465, offset_shoulder: 0,    pedestal: 0,    full_mount: 0,     euro_skull: 750, bleach_only: 390 },
-  'Hyena':               { shoulder: 695,  offset_shoulder: 800,  pedestal: 830,  full_mount: 2890,  euro_skull: 290, bleach_only: 185 },
-  'Impala':              { shoulder: 750,  offset_shoulder: 865,  pedestal: 900,  full_mount: 1620,  euro_skull: 235, bleach_only: 130 },
-  'Bontebok':            { shoulder: 750,  offset_shoulder: 865,  pedestal: 900,  full_mount: 1620,  euro_skull: 235, bleach_only: 130 },
-  'Jackal':              { shoulder: 555,  offset_shoulder: 640,  pedestal: 665,  full_mount: 1075,  euro_skull: 175, bleach_only: 95  },
-  'Klipspringer':        { shoulder: 555,  offset_shoulder: 640,  pedestal: 665,  full_mount: 1130,  euro_skull: 175, bleach_only: 95  },
-  'Kudu':                { shoulder: 1040, offset_shoulder: 1195, pedestal: 1250, full_mount: 5200,  euro_skull: 290, bleach_only: 185 },
-  'Leopard':             { shoulder: 1675, offset_shoulder: 0,    pedestal: 0,    full_mount: 4040,  euro_skull: 245, bleach_only: 140 },
-  'Lion':                { shoulder: 1675, offset_shoulder: 0,    pedestal: 2010, full_mount: 6355,  euro_skull: 315, bleach_only: 200 },
-  'Nyala':               { shoulder: 810,  offset_shoulder: 930,  pedestal: 970,  full_mount: 3465,  euro_skull: 245, bleach_only: 140 },
-  'Oribi':               { shoulder: 580,  offset_shoulder: 665,  pedestal: 695,  full_mount: 980,   euro_skull: 175, bleach_only: 95  },
-  'Reedbuck (Common)':   { shoulder: 695,  offset_shoulder: 800,  pedestal: 830,  full_mount: 2020,  euro_skull: 235, bleach_only: 130 },
-  'Reedbuck (Mountain)': { shoulder: 635,  offset_shoulder: 730,  pedestal: 765,  full_mount: 1100,  euro_skull: 175, bleach_only: 95  },
-  'Reedbuck (Vaal)':     { shoulder: 580,  offset_shoulder: 665,  pedestal: 695,  full_mount: 980,   euro_skull: 175, bleach_only: 95  },
-  'Sable':               { shoulder: 1040, offset_shoulder: 1195, pedestal: 1250, full_mount: 4390,  euro_skull: 310, bleach_only: 185 },
-  'Serval':              { shoulder: 0,    offset_shoulder: 0,    pedestal: 0,    full_mount: 1215,  euro_skull: 175, bleach_only: 95  },
-  'Springbok':           { shoulder: 695,  offset_shoulder: 800,  pedestal: 830,  full_mount: 2020,  euro_skull: 235, bleach_only: 130 },
-  'Steenbok':            { shoulder: 555,  offset_shoulder: 640,  pedestal: 585,  full_mount: 1130,  euro_skull: 175, bleach_only: 95  },
-  'Tsessebe':            { shoulder: 810,  offset_shoulder: 930,  pedestal: 970,  full_mount: 2080,  euro_skull: 290, bleach_only: 185 },
-  'Warthog':             { shoulder: 695,  offset_shoulder: 800,  pedestal: 830,  full_mount: 1620,  euro_skull: 315, bleach_only: 200 },
-  'Waterbuck':           { shoulder: 1040, offset_shoulder: 1195, pedestal: 1250, full_mount: 4045,  euro_skull: 290, bleach_only: 185 },
-  'Wild Cat':            { shoulder: 0,    offset_shoulder: 0,    pedestal: 0,    full_mount: 780,   euro_skull: 160, bleach_only: 95  },
-  'Wildebeest (Black)':  { shoulder: 810,  offset_shoulder: 930,  pedestal: 970,  full_mount: 3240,  euro_skull: 290, bleach_only: 185 },
-  'Wildebeest (Blue)':   { shoulder: 980,  offset_shoulder: 1130, pedestal: 1180, full_mount: 4045,  euro_skull: 310, bleach_only: 185 },
-  'Vervet Monkey':       { shoulder: 0,    offset_shoulder: 0,    pedestal: 0,    full_mount: 665,   euro_skull: 160, bleach_only: 95  },
-  'Zebra':               { shoulder: 1100, offset_shoulder: 1265, pedestal: 1315, full_mount: 4390,  euro_skull: 355, bleach_only: 210 },
-};
+  // 1 — hunter
+  const [mode, setMode] = useState<'find' | 'new'>('find');
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<FoundClient[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [client, setClient] = useState<FoundClient | null>(null);
+  const [fresh, setFresh] = useState({ full_name: '', phone: '', email: '', country: '', client_type: 'export' });
+  const [similar, setSimilar] = useState<FoundClient[]>([]);
+  const [openHunts, setOpenHunts] = useState<OpenHunt[]>([]);
+  const [newFile, setNewFile] = useState(false);
 
-// 2026 Local ZAR prices (VAT exclusive) — from Colletts_Local_Pricelists_2025-2029_FINAL2.xlsx
-const LOCAL_PRICE_DATA: Record<string, Record<string, number>> = {
-  'Baboon':              { shoulder: 4585,  pedestal: 5566,  full_mount: 11485, euro_skull: 1880, bleach_only: 1547 },
-  'Blesbok':             { shoulder: 6595,  pedestal: 8004,  full_mount: 19489, euro_skull: 1891, bleach_only: 1346 },
-  'Buffalo':             { shoulder: 14079, pedestal: 17075, full_mount: 104497,euro_skull: 4033, bleach_only: 3396 },
-  'Bushbuck':            { shoulder: 6595,  pedestal: 8004,  full_mount: 19871, euro_skull: 1681, bleach_only: 1346 },
-  'Bushpig':             { shoulder: 6295,  pedestal: 7647,  full_mount: 17810, euro_skull: 2389, bleach_only: 1577 },
-  'Caracal':             { shoulder: 0,     pedestal: 0,     full_mount: 12128, euro_skull: 1413, bleach_only: 1213 },
-  'Civet':               { shoulder: 0,     pedestal: 0,     full_mount: 11472, euro_skull: 1413, bleach_only: 1213 },
-  'Crocodile':           { shoulder: 0,     pedestal: 0,     full_mount: 1844,  euro_skull: 4627, bleach_only: 3924 },
-  'Duiker':              { shoulder: 4886,  pedestal: 6059,  full_mount: 11848, euro_skull: 1413, bleach_only: 1110 },
-  'Eland':               { shoulder: 11804, pedestal: 15748, full_mount: 104497,euro_skull: 3015, bleach_only: 2699 },
-  'Elephant':            { shoulder: 114484,pedestal: 138848,full_mount: 809832,euro_skull: 0,    bleach_only: 0    },
-  'Fallow Deer':         { shoulder: 6595,  pedestal: 8004,  full_mount: 19476, euro_skull: 1891, bleach_only: 1552 },
-  'Gemsbok':             { shoulder: 8547,  pedestal: 10369, full_mount: 41100, euro_skull: 2498, bleach_only: 2231 },
-  'Genet Cat':           { shoulder: 0,     pedestal: 0,     full_mount: 8538,  euro_skull: 1256, bleach_only: 1110 },
-  'Giraffe':             { shoulder: 25179, pedestal: 30537, full_mount: 130177,euro_skull: 4766, bleach_only: 4191 },
-  'Grysbok':             { shoulder: 4678,  pedestal: 5670,  full_mount: 10830, euro_skull: 1413, bleach_only: 1110 },
-  'Hartebeest':          { shoulder: 7866,  pedestal: 9539,  full_mount: 36177, euro_skull: 2498, bleach_only: 1547 },
-  'Hippo':               { shoulder: 33206, pedestal: 40276, full_mount: 185109,euro_skull: 8526, bleach_only: 5525 },
-  'Hyena':               { shoulder: 10314, pedestal: 12516, full_mount: 26561, euro_skull: 2881, bleach_only: 2244 },
-  'Impala':              { shoulder: 6595,  pedestal: 8004,  full_mount: 19489, euro_skull: 1891, bleach_only: 1552 },
-  'Bontebok':            { shoulder: 6595,  pedestal: 8004,  full_mount: 19489, euro_skull: 1891, bleach_only: 1552 },
-  'Jackal':              { shoulder: 4585,  pedestal: 5566,  full_mount: 12625, euro_skull: 1413, bleach_only: 1110 },
-  'Klipspringer':        { shoulder: 4886,  pedestal: 5937,  full_mount: 11837, euro_skull: 1413, bleach_only: 1110 },
-  'Kudu':                { shoulder: 10614, pedestal: 12874, full_mount: 48668, euro_skull: 2498, bleach_only: 2231 },
-  'Lechwe':              { shoulder: 8547,  pedestal: 10369, full_mount: 36177, euro_skull: 2498, bleach_only: 1547 },
-  'Leopard':             { shoulder: 12370, pedestal: 15009, full_mount: 40464, euro_skull: 3311, bleach_only: 2881 },
-  'Lion':                { shoulder: 17510, pedestal: 21235, full_mount: 58830, euro_skull: 4712, bleach_only: 4184 },
-  'Nyala':               { shoulder: 8547,  pedestal: 10369, full_mount: 35607, euro_skull: 2498, bleach_only: 1547 },
-  'Oribi':               { shoulder: 5486,  pedestal: 6658,  full_mount: 13098, euro_skull: 1413, bleach_only: 1110 },
-  'Ostrich':             { shoulder: 5532,  pedestal: 6713,  full_mount: 31617, euro_skull: 1413, bleach_only: 609  },
-  'Reedbuck (Common)':   { shoulder: 7473,  pedestal: 9071,  full_mount: 32763, euro_skull: 1891, bleach_only: 1547 },
-  'Reedbuck (Mountain)': { shoulder: 5486,  pedestal: 6658,  full_mount: 13098, euro_skull: 1565, bleach_only: 1346 },
-  'Reedbuck (Vaal)':     { shoulder: 5486,  pedestal: 6658,  full_mount: 13098, euro_skull: 1413, bleach_only: 1110 },
-  'Sable':               { shoulder: 10614, pedestal: 12874, full_mount: 48668, euro_skull: 2881, bleach_only: 2578 },
-  'Serval':              { shoulder: 0,     pedestal: 0,     full_mount: 12874, euro_skull: 1413, bleach_only: 1110 },
-  'Springbok':           { shoulder: 5486,  pedestal: 6658,  full_mount: 14415, euro_skull: 1680, bleach_only: 1110 },
-  'Steenbok':            { shoulder: 4886,  pedestal: 5937,  full_mount: 11837, euro_skull: 1413, bleach_only: 1110 },
-  'Tsessebe':            { shoulder: 6849,  pedestal: 8314,  full_mount: 19786, euro_skull: 2498, bleach_only: 1547 },
-  'Warthog':             { shoulder: 5775,  pedestal: 7005,  full_mount: 15051, euro_skull: 2498, bleach_only: 1547 },
-  'Waterbuck':           { shoulder: 9009,  pedestal: 10927, full_mount: 41100, euro_skull: 2498, bleach_only: 2226 },
-  'Wild Cat':            { shoulder: 0,     pedestal: 0,     full_mount: 7951,  euro_skull: 1413, bleach_only: 1110 },
-  'Wildebeest (Black)':  { shoulder: 8547,  pedestal: 10369, full_mount: 36183, euro_skull: 2498, bleach_only: 2226 },
-  'Wildebeest (Blue)':   { shoulder: 9009,  pedestal: 10927, full_mount: 41100, euro_skull: 2615, bleach_only: 2226 },
-  'Vervet Monkey':       { shoulder: 0,     pedestal: 0,     full_mount: 7951,  euro_skull: 1413, bleach_only: 1110 },
-  'Zebra':               { shoulder: 8709,  pedestal: 10563, full_mount: 40731, euro_skull: 2692, bleach_only: 2226 },
-};
+  // 2 — animals
+  const [animals, setAnimals] = useState<Animal[]>([emptyAnimal()]);
+  const [speciesOpen, setSpeciesOpen] = useState<string | null>(null);
+  const [speciesQ, setSpeciesQ] = useState<Record<string, string>>({});
+  const photoRef = useRef<HTMLInputElement>(null);
+  const [photoFor, setPhotoFor] = useState<string | null>(null);
 
-const MOUNT_PRICE_KEY: Record<string, string> = {
-  'Shoulder Mount': 'shoulder',
-  'Offset Shoulder Mount': 'shoulder',
-  'Pedestal Mount': 'pedestal',
-  'Full Mount': 'full_mount',
-  'Euro Skull': 'euro_skull',
-  'Bleach Only': 'bleach_only',
-};
-
-const SPECIES_EMOJI: Record<string, string> = {
-  'Buffalo': '🦬', 'Elephant': '🐘', 'Lion': '🦁', 'Leopard': '🐆', 'Giraffe': '🦒',
-  'Zebra': '🦓', 'Zebra (Cape)': '🦓', 'Hippo': '🦛', 'Crocodile': '🐊', 'Impala': '🦌',
-  'Kudu': '🦌', 'Warthog': '🐗', 'Wildebeest (Blue)': '🐃', 'Wildebeest (Black)': '🐃',
-};
-const speciesEmoji = (s: string) => SPECIES_EMOJI[s] ?? '🎯';
-
-function getAutoPrice(species: string, mountType: string, clientType: string): number | null {
-  const priceKey = MOUNT_PRICE_KEY[mountType];
-  if (!priceKey) return null;
-  const table = clientType === 'local' ? LOCAL_PRICE_DATA : EXPORT_PRICE_DATA;
-  const row = table[species];
-  if (!row) return null;
-  const val = row[priceKey];
-  return val && val > 0 ? val : null;
-}
-
-interface Trophy {
-  id: string;
-  species: string;
-  mountType: string;
-  quantity: number;
-  tagNumber: string;
-  condition: string;
-  instructions: string;
-  priceUsd: number | null;
-  priceOverride: string;
-  photos: File[];
-  photoPreviews: string[];
-  parts: TrophyPart[];  // physical parts for this trophy
-}
-
-function emptyTrophy(seq: number): Trophy {
-  return {
-    id: crypto.randomUUID(),
-    species: '',
-    mountType: '',
-    quantity: 1,
-    tagNumber: `A-${String(seq).padStart(4, '0')}`,
-    condition: 'fresh',
-    instructions: '',
-    priceUsd: null,
-    priceOverride: '',
-    photos: [],
-    photoPreviews: [],
-    parts: [],
-  };
-}
-
-export function ArrivalCheckIn({ onComplete }: ArrivalCheckInProps) {
-  const { user } = useAuth();
-  const { clients, createClient } = useClients();
-
-  const [step, setStep] = useState(1);
-  const [submitting, setSubmitting] = useState(false);
-  const [done, setDone] = useState(false);
+  // done
+  const [result, setResult] = useState<null | { clientId: string; name: string; number: string; email: string | null; phone: string | null; registered: boolean; huntRef: string; year: number; animals: Animal[]; link: string | null }>(null);
   const [showLabels, setShowLabels] = useState(false);
-  const [savedClientNumber, setSavedClientNumber] = useState('');
-  const [savedHuntYear, setSavedHuntYear] = useState(new Date().getFullYear());
 
-  // Step 1 — client
-  const [clientMode, setClientMode] = useState<'search' | 'new'>('search');
-  const [clientSearch, setClientSearch] = useState('');
-  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
-  const [newClient, setNewClient] = useState({ full_name: '', email: '', phone: '', country: '', client_type: 'export' });
-
-  // Step 1b — existing client: add to an open hunt file, or start a new one
-  type ExistingHunt = { id: string; year: string; ref_number: string | null; status: string | null; trophy_count: number };
-  const [existingHunts, setExistingHunts] = useState<ExistingHunt[]>([]);
-  const [huntsLoading, setHuntsLoading] = useState(false);
-  const [huntMode, setHuntMode] = useState<'existing' | 'new'>('new');
-  const [selectedHuntId, setSelectedHuntId] = useState<string | null>(null);
-
-  // Load the selected client's hunt files
+  // find hunter (server-side search — works with any number of clients)
   useEffect(() => {
-    if (!selectedClientId) { setExistingHunts([]); setHuntMode('new'); setSelectedHuntId(null); return; }
-    setHuntsLoading(true);
+    if (mode !== 'find' || client) return;
+    const q = query.trim().replace(/[%,()]/g, ' ');
+    if (q.length < 2) { setResults([]); return; }
+    setSearching(true);
+    const t = setTimeout(async () => {
+      const { data } = await (supabase as any).from('clients')
+        .select('id, full_name, email, phone, client_number, client_type, auth_user_id')
+        .or(`full_name.ilike.%${q}%,email.ilike.%${q}%,phone.ilike.%${q}%,client_number.ilike.%${q}%`)
+        .order('full_name').limit(8);
+      setResults(data ?? []); setSearching(false);
+    }, 250);
+    return () => clearTimeout(t);
+  }, [query, mode, client]);
+
+  // new hunter: warn about people who look the same
+  useEffect(() => {
+    if (mode !== 'new') { setSimilar([]); return; }
+    const name = fresh.full_name.trim().replace(/[%,()]/g, ' ');
+    const email = fresh.email.trim().replace(/[%,()]/g, ' ');
+    if (name.length < 4 && email.length < 5) { setSimilar([]); return; }
+    const t = setTimeout(async () => {
+      const parts = [name.length >= 4 ? `full_name.ilike.%${name}%` : '', email.length >= 5 ? `email.ilike.${email}` : ''].filter(Boolean).join(',');
+      const { data } = await (supabase as any).from('clients').select('id, full_name, email, phone, client_number, client_type, auth_user_id').or(parts).limit(4);
+      setSimilar(data ?? []);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [fresh.full_name, fresh.email, mode]);
+
+  // existing hunter: is there an open hunt file to add to?
+  useEffect(() => {
+    setOpenHunts([]); setNewFile(false);
+    if (!client) return;
     (async () => {
-      const { data } = await (supabase as any)
-        .from('client_hunts')
-        .select('id, year, ref_number, status, hunt_documents(id)')
-        .eq('client_id', selectedClientId)
-        .order('year', { ascending: false });
-      const rows: ExistingHunt[] = (data ?? []).map((h: any) => ({
-        id: h.id, year: String(h.year), ref_number: h.ref_number ?? null,
-        status: h.status ?? null, trophy_count: (h.hunt_documents ?? []).length,
-      }));
-      setExistingHunts(rows);
-      // Default to the most recent open file if there is one
-      const open = rows.find(r => r.status !== 'completed');
-      if (open) { setHuntMode('existing'); setSelectedHuntId(open.id); }
-      else { setHuntMode('new'); setSelectedHuntId(null); }
-      setHuntsLoading(false);
+      const { data } = await (supabase as any).from('client_hunts').select('id, ref_number, year, status').eq('client_id', client.id).order('year', { ascending: false }).limit(5);
+      setOpenHunts((data ?? []).filter((h: any) => h.status !== 'completed' && h.status !== 'cancelled'));
     })();
-  }, [selectedClientId]);
+  }, [client]);
 
-  // Step 2 — trophies
-  const [trophies, setTrophies] = useState<Trophy[]>([emptyTrophy(1)]);
-  const [speciesSearch, setSpeciesSearch] = useState<Record<string, string>>({});
-  const photoInputRef = useRef<HTMLInputElement | null>(null);
-  const [activePhotoTrophyId, setActivePhotoTrophyId] = useState<string | null>(null);
+  const clientType = client?.client_type ?? fresh.client_type;
+  const who = client ? client.full_name : fresh.full_name.trim();
+  const whoOk = client ? true : fresh.full_name.trim().length >= 2;
+  const animalsOk = animals.length > 0 && animals.every(a => a.species.trim() && a.parts.length > 0 && (!a.parts.includes('OTHER') || a.other.trim()));
 
-  const selectedClient = clients.find(c => c.id === selectedClientId);
-  const clientType = clientMode === 'search' ? (selectedClient as any)?.client_type ?? 'export' : newClient.client_type;
-  const clientNumber = clientMode === 'search' ? (selectedClient as any)?.client_number ?? '' : '';
-  const clientName = clientMode === 'search' ? (selectedClient?.full_name ?? '') : newClient.full_name;
-  const currency = '';
-
-  // Recalculate prices when client type switches between local/export
-  useEffect(() => {
-    setTrophies(prev => prev.map(t => {
-      if (!t.species || !t.mountType || t.priceOverride) return t;
-      const auto = getAutoPrice(t.species, t.mountType, clientType);
-      return { ...t, priceUsd: auto };
-    }));
-  }, [clientType]);
-
-  function updateTrophy(id: string, patch: Partial<Trophy>) {
-    setTrophies(prev => prev.map(t => {
-      if (t.id !== id) return t;
-      const updated = { ...t, ...patch };
-      if (patch.species !== undefined || patch.mountType !== undefined) {
-        const auto = getAutoPrice(updated.species, updated.mountType, clientType);
-        updated.priceUsd = auto;
-        if (auto !== null) updated.priceOverride = '';
-        // Recalculate parts whenever species or mount type changes
-        if (updated.species && updated.mountType) {
-          updated.parts = getPartsForTrophy(updated.species, updated.mountType);
-        }
-      }
-      return updated;
-    }));
+  const patch = (id: string, p: Partial<Animal>) => setAnimals(prev => prev.map(a => (a.id === id ? { ...a, ...p } : a)));
+  const toggle = (a: Animal, code: string) => patch(a.id, { parts: a.parts.includes(code) ? a.parts.filter(c => c !== code) : [...a.parts, code] });
+  const sameAgain = (a: Animal) => setAnimals(prev => [...prev, { ...emptyAnimal(), species: a.species, condition: a.condition, parts: [...a.parts], other: a.other }]);
+  function addPhotos(files: FileList | null) {
+    if (!files || !photoFor) return;
+    const list = Array.from(files);
+    setAnimals(prev => prev.map(a => a.id === photoFor ? { ...a, photos: [...a.photos, ...list].slice(0, 6), previews: [...a.previews, ...list.map(f => URL.createObjectURL(f))].slice(0, 6) } : a));
   }
 
-  function togglePart(trophyId: string, partCode: string) {
-    setTrophies(prev => prev.map(t => {
-      if (t.id !== trophyId) return t;
-      const exists = t.parts.some(p => p.code === partCode);
-      if (exists) {
-        // Only allow removing optional parts
-        return { ...t, parts: t.parts.filter(p => p.code !== partCode || p.required) };
-      } else {
-        // Add back an optional part (re-derive from full list and pick the one matching)
-        const allParts = getPartsForTrophy(t.species, t.mountType);
-        const part = allParts.find(p => p.code === partCode);
-        if (!part) return t;
-        return { ...t, parts: [...t.parts, part] };
-      }
-    }));
-  }
-
-  function addTrophy() {
-    if (trophies.length >= 20) { toast.error('Maximum 20 trophies per session'); return; }
-    setTrophies(prev => [...prev, emptyTrophy(prev.length + 1)]);
-  }
-
-  function removeTrophy(id: string) {
-    setTrophies(prev => prev.filter(t => t.id !== id));
-  }
-
-  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    if (!activePhotoTrophyId) return;
-    const files = Array.from(e.target.files ?? []);
-    setTrophies(prev => prev.map(t => {
-      if (t.id !== activePhotoTrophyId) return t;
-      const remaining = 3 - t.photos.length;
-      const toAdd = files.slice(0, remaining);
-      const previews = toAdd.map(f => URL.createObjectURL(f));
-      return { ...t, photos: [...t.photos, ...toAdd], photoPreviews: [...t.photoPreviews, ...previews] };
-    }));
-    e.target.value = '';
-  }
-
-  function removePhoto(trophyId: string, idx: number) {
-    setTrophies(prev => prev.map(t => {
-      if (t.id !== trophyId) return t;
-      const photos = t.photos.filter((_, i) => i !== idx);
-      const photoPreviews = t.photoPreviews.filter((_, i) => i !== idx);
-      return { ...t, photos, photoPreviews };
-    }));
-  }
-
-  const totalPrice = trophies.reduce((sum, t) => {
-    const p = t.priceOverride ? parseFloat(t.priceOverride) : (t.priceUsd ?? 0);
-    return sum + p * t.quantity;
-  }, 0);
-
-  // Validation
-  function step1Valid() {
-    if (clientMode === 'search') return !!selectedClientId;
-    return !!newClient.full_name.trim();
-  }
-
-  function step2Valid() {
-    return trophies.length > 0 && trophies.every(t => t.species && t.mountType && t.tagNumber);
-  }
-
-  async function handleSubmit() {
-    setSubmitting(true);
+  async function save() {
+    if (saving) return;
+    setSaving(true);
     try {
-      // 1. Resolve client
-      let clientId = selectedClientId;
-      if (clientMode === 'new') {
-        const result: any = await createClient(newClient as any);
-        if (result.error || !result.data) throw new Error(result.error ?? 'Failed to create client');
-        clientId = result.data.id;
+      // 1. the hunter
+      let c = client;
+      if (!c) {
+        const { data, error } = await (supabase as any).from('clients').insert({
+          full_name: fresh.full_name.trim(), phone: fresh.phone.trim() || null, email: fresh.email.trim() || null,
+          country: fresh.country.trim() || null, client_type: fresh.client_type, onboarding_status: 'not_started',
+        }).select('id, full_name, email, phone, client_number, client_type, auth_user_id').single();
+        if (error) throw new Error(error.message);
+        c = data as FoundClient;
       }
-
-      // 2. Resolve hunt file — add to an existing one, or open a new one
+      // 2. the hunt file
       const year = new Date().getFullYear();
-      let huntId: string;
-
-      if (clientMode === 'search' && huntMode === 'existing' && selectedHuntId) {
-        huntId = selectedHuntId;
-      } else {
-        const { data: huntData, error: huntError } = await (supabase as any)
-          .from('client_hunts')
-          // ref_number is auto-generated by DB trigger (trg_assign_hunt_ref)
-          // client_type lives on the clients table — do not insert it here
-          .insert({ client_id: clientId, year: year.toString(), status: 'active', client_type: clientType })
-          .select()
-          .single();
-        if (huntError) throw new Error(huntError.message);
-        huntId = huntData.id;
+      let huntId: string; let huntRef = '';
+      const existing = !newFile ? openHunts[0] : null;
+      if (existing) { huntId = existing.id; huntRef = existing.ref_number ?? ''; }
+      else {
+        const { data, error } = await (supabase as any).from('client_hunts')
+          .insert({ client_id: c.id, year: String(year), status: 'active', client_type: c.client_type ?? 'export' }).select('id, ref_number').single();
+        if (error) throw new Error(error.message);
+        huntId = data.id; huntRef = data.ref_number ?? '';
       }
-
-      // 3. Upload photos and create job cards
-      for (const trophy of trophies) {
-        const photoPaths: string[] = [];
-
-        for (const file of trophy.photos) {
-          const ext = file.name.split('.').pop();
-          const path = `${clientId}/${huntId}/${trophy.species}-${trophy.tagNumber}/${Date.now()}.${ext}`;
-          const { error: uploadError } = await supabase.storage
-            .from('trophy-references')
-            .upload(path, file, { upsert: true });
-          if (!uploadError) photoPaths.push(path);
+      // 3. one job card per animal — mount is "Pending Instructions" until the hunter chooses
+      const receivedAt = new Date().toISOString();
+      const number = c.client_number ?? 'NEW';
+      const { count: already } = await (supabase as any).from('hunt_documents').select('id', { count: 'exact', head: true }).eq('hunt_id', huntId).eq('doc_type', 'job_card');
+      for (let i = 0; i < animals.length; i++) {
+        const a = animals[i];
+        const idx = (already ?? 0) + i + 1;
+        const { data: doc, error } = await (supabase as any).from('hunt_documents').insert({
+          hunt_id: huntId, doc_type: 'job_card', status: 'in_progress', current_department: 'receiving',
+          title: `${a.species} - Pending Instructions${a.tag ? ` (Tag: ${a.tag})` : ''}`,
+          form_data: {
+            species: a.species, mount_type: 'Pending Instructions', quantity: 1, tag_number: a.tag.trim(), condition: a.condition,
+            instructions: '', notes: a.notes.trim(),
+            received_parts: a.parts.map(code => ({ code, label: RECEIVED_PARTS.find(p => p.code === code)?.label ?? code })),
+            received_other: a.other.trim(), received_at: receivedAt, received_by: profile?.full_name ?? '',
+            parts: partRecords(number, a.species, idx, a.parts),
+          },
+        }).select('id').single();
+        if (error) throw new Error(error.message);
+        if (a.photos.length) {
+          const blobs = await Promise.all(a.photos.map(f => shrinkPhoto(f)));
+          await savePhotos({ clientId: c.id, huntId, docId: doc.id, kind: 'arrival', shared: true, files: blobs, staffId: profile?.id ?? null, staffName: profile?.full_name ?? null });
         }
-
-        const priceUsd = trophy.priceOverride ? parseFloat(trophy.priceOverride) : trophy.priceUsd;
-        const trophyIdx = trophies.indexOf(trophy) + 1;
-        // Generate part tags using client number (may be empty for new clients — will be assigned by DB trigger)
-        const resolvedClientNum = clientMode === 'search'
-          ? ((selectedClient as any)?.client_number ?? `T${trophyIdx}`)
-          : 'NEW'; // will be updated after we know the assigned number
-
-        const partTags = trophy.parts.map(p => ({
-          code: p.code,
-          label: p.label,
-          required: p.required,
-          leather_option: p.leatherOption,
-          tag: makePartTag(resolvedClientNum, trophy.species, trophyIdx, p.code),
-        }));
-
-        await (supabase as any)
-          .from('hunt_documents')
-          .insert({
-            hunt_id: huntId,
-            doc_type: 'job_card',
-            title: `${trophy.species} - ${trophy.mountType} (Tag: ${trophy.tagNumber})`,
-            status: 'pending',
-            current_department: 'receiving',
-            form_data: {
-              species: trophy.species,
-              mount_type: trophy.mountType,
-              quantity: trophy.quantity,
-              tag_number: trophy.tagNumber,
-              condition: trophy.condition,
-              instructions: trophy.instructions,
-              price_usd: priceUsd,
-              reference_photo_paths: photoPaths,
-              parts: partTags,
-            },
-          });
       }
+      // 4. the workshop is now waiting for the hunter's mount choices (starts the reminder clock)
+      await (supabase as any).rpc('start_awaiting_instruction', { p_hunt_id: huntId });
 
-      // Capture client number for label printing
-      let finalClientNumber = clientNumber;
-      if (clientMode === 'new' && clientId) {
-        const { data: newClientData } = await (supabase as any)
-          .from('clients').select('client_number').eq('id', clientId).single();
-        finalClientNumber = newClientData?.client_number ?? 'NEW';
-      }
-      setSavedClientNumber(finalClientNumber);
-      setSavedHuntYear(new Date().getFullYear());
-
-      setDone(true);
-      toast.success(`Check-in complete — ${trophies.length} trophy job card${trophies.length > 1 ? 's' : ''} created`);
-    } catch (err: any) {
-      toast.error(err.message ?? 'Submission failed');
-    } finally {
-      setSubmitting(false);
-    }
+      let link: string | null = null;
+      try { link = await getInviteLink(c.id); } catch { /* migration 045 not run yet — papers still print */ }
+      setResult({ clientId: c.id, name: c.full_name, number, email: c.email, phone: c.phone, registered: !!c.auth_user_id, huntRef, year, animals, link });
+      toast.success(`${animals.length} animal${animals.length > 1 ? 's' : ''} checked in for ${c.full_name}`);
+    } catch (e: any) {
+      toast.error(e.message ?? 'Could not save the check-in');
+    } finally { setSaving(false); }
   }
 
-  const filteredClients = clients.filter(c =>
-    c.full_name.toLowerCase().includes(clientSearch.toLowerCase())
-  );
+  function reset() {
+    setResult(null); setStep(1); setAnimals([emptyAnimal()]); setClient(null); setQuery(''); setResults([]); setMode('find');
+    setFresh({ full_name: '', phone: '', email: '', country: '', client_type: 'export' });
+  }
 
-  if (done) {
-    const labelTrophies = trophies.map((t, idx) => ({
-      trophyIndex: idx + 1,
-      species: t.species,
-      mountType: t.mountType,
-      tagNumber: t.tagNumber,
-      parts: t.parts,
+  const dropOff = (r: NonNullable<typeof result>): DropOffPrint => ({
+    clientName: r.name, clientNumber: r.number, huntRef: r.huntRef, receivedBy: profile?.full_name ?? '', workshop: WORKSHOP,
+    inviteLink: r.registered ? null : r.link,
+    animals: r.animals.map(a => ({ species: a.species, tag: a.tag, condition: CONDITIONS.find(c => c.value === a.condition)?.label ?? a.condition, parts: a.parts, other: a.other, notes: a.notes })),
+  });
+
+  // ── done ───────────────────────────────────────────────────────────────────
+  if (result) {
+    const labelTrophies = result.animals.map((a, i) => ({
+      trophyIndex: i + 1, species: a.species, mountType: 'Pending', tagNumber: a.tag,
+      parts: a.parts.map(code => ({ code, label: RECEIVED_PARTS.find(p => p.code === code)?.label ?? code, required: false, leatherOption: false, accessory: false, description: '' } as TrophyPart)),
     }));
-
     return (
-      <>
-        {showLabels && (
-          <TrophyLabels
-            clientNumber={savedClientNumber || (clientType === 'local' ? 'L-???' : 'E-???')}
-            clientName={clientName}
-            huntYear={savedHuntYear}
-            trophies={labelTrophies}
-            onClose={() => setShowLabels(false)}
-          />
-        )}
-        <div className="flex flex-col items-center justify-center py-24 gap-6">
-          <CheckCircle2 className="w-16 h-16 text-green-500" />
-          <h2 className="text-2xl font-bold text-white">Check-in Complete</h2>
-          <p className="text-slate-400">{trophies.length} trophy{trophies.length > 1 ? ' trophies' : ''} · {trophies.reduce((n, t) => n + t.parts.length, 0)} parts tagged</p>
-          {savedClientNumber && (
-            <div className="bg-slate-800 rounded-xl px-6 py-3 text-center">
-              <p className="text-xs text-slate-400 mb-1">Client Number</p>
-              <p className="text-3xl font-mono font-bold text-white tracking-widest">{savedClientNumber}</p>
-            </div>
-          )}
-          <div className="flex gap-3 flex-wrap justify-center">
-            <Button className="bg-blue-600 hover:bg-blue-700 gap-2" onClick={() => setShowLabels(true)}>
-              <Upload className="w-4 h-4" /> Print QR Labels
-            </Button>
-            <Button variant="outline" onClick={onComplete}>Go to Receiving</Button>
-            <Button variant="ghost" onClick={() => { setDone(false); setStep(1); setTrophies([emptyTrophy(1)]); setSelectedClientId(null); setClientSearch(''); setClientMode('search'); }}>
-              New Check-in
-            </Button>
-          </div>
+      <div className="max-w-xl mx-auto space-y-4 pb-10">
+        {showLabels && <TrophyLabels clientNumber={result.number} clientName={result.name} huntYear={result.year} trophies={labelTrophies} onClose={() => setShowLabels(false)} />}
+        <div className="text-center py-4">
+          <CheckCircle2 className="w-14 h-14 text-green-500 mx-auto" />
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-2">Checked in</h1>
+          <p className="text-slate-600 dark:text-slate-300">{result.name} · {result.number} · {result.animals.length} animal{result.animals.length > 1 ? 's' : ''}</p>
         </div>
-      </>
+
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
+          {result.animals.map((a, i) => (
+            <div key={a.id} className="px-4 py-2.5 text-sm"><strong>{i + 1}. {a.species}</strong>{a.tag ? <span className="text-slate-400"> · {a.tag}</span> : null}<div className="text-slate-600 dark:text-slate-300">{listParts(a.parts, a.other)}</div></div>
+          ))}
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">1 · Hard copy</p>
+          <button className={`${bigBtn} w-full bg-[#0073ea] text-white`} onClick={() => printDropOffPapers(dropOff(result), { sheet: true, letter: !result.registered })}>
+            <Printer className="w-5 h-5" />Print receiving sheet{!result.registered ? ' + welcome letter' : ''}
+          </button>
+        </div>
+        <div className="space-y-2">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">2 · Tell the hunter</p>
+          <InvitePanel
+            target={{ clientId: result.clientId, name: result.name, email: result.email, phone: result.phone, registered: result.registered,
+              animals: result.animals.map(a => ({ species: a.species, parts: a.parts, other: a.other })) }}
+            onPrintLetter={() => printDropOffPapers(dropOff(result), { sheet: false, letter: true })}
+          />
+        </div>
+        <div className="space-y-2">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">3 · Label the parts</p>
+          <button className={`${bigBtn} w-full border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100`} onClick={() => setShowLabels(true)}>
+            <Tag className="w-5 h-5" />Print QR labels
+          </button>
+        </div>
+        <div className="flex gap-2 pt-2">
+          <button className={`${bigBtn} flex-1 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100`} onClick={reset}>Check in another</button>
+          <button className={`${bigBtn} flex-1 text-slate-600 dark:text-slate-300`} onClick={onComplete}>Done</button>
+        </div>
+      </div>
     );
   }
 
+  // ── steps ──────────────────────────────────────────────────────────────────
+  const steps = ['Hunter', 'Animals', 'Check'];
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
-      {/* Header / Step Indicator */}
-      <div className="flex items-center gap-4 mb-2">
-        {[1, 2, 3].map(s => (
-          <div key={s} className="flex items-center gap-2">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${step === s ? 'bg-blue-600 text-white' : step > s ? 'bg-green-600 text-white' : 'bg-slate-700 text-slate-400'}`}>
-              {step > s ? '✓' : s}
-            </div>
-            <span className={`text-sm hidden sm:inline ${step === s ? 'text-white font-medium' : 'text-slate-500'}`}>
-              {s === 1 ? 'Client' : s === 2 ? 'Trophies' : 'Review'}
-            </span>
-            {s < 3 && <div className="w-8 h-px bg-slate-700" />}
+    <div className="max-w-xl mx-auto pb-28">
+      <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Arrival check-in</h1>
+      <div className="flex items-center gap-2 my-4">
+        {steps.map((s, i) => (
+          <div key={s} className="flex items-center gap-2 flex-1">
+            <span className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${step === i + 1 ? 'bg-[#0073ea] text-white' : step > i + 1 ? 'bg-green-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-500'}`}>{step > i + 1 ? '✓' : i + 1}</span>
+            <span className={`text-sm ${step === i + 1 ? 'font-semibold text-slate-900 dark:text-slate-100' : 'text-slate-500'}`}>{s}</span>
+            {i < 2 && <span className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />}
           </div>
         ))}
       </div>
 
-      {/* Step 1: Client */}
       {step === 1 && (
-        <div className="bg-slate-800 rounded-xl p-6 space-y-5">
-          <h2 className="text-lg font-semibold text-white">Step 1 — Client</h2>
-
-          <div className="flex gap-2">
-            <Button size="sm" variant={clientMode === 'search' ? 'default' : 'outline'} onClick={() => setClientMode('search')} className={clientMode === 'search' ? 'bg-blue-600' : ''}>
-              Existing Client
-            </Button>
-            <Button size="sm" variant={clientMode === 'new' ? 'default' : 'outline'} onClick={() => setClientMode('new')} className={clientMode === 'new' ? 'bg-blue-600' : ''}>
-              + New Client
-            </Button>
-          </div>
-
-          {clientMode === 'search' && (
+        <div className="space-y-4">
+          <p className="text-slate-600 dark:text-slate-300 text-sm">Whose trophies are these?</p>
+          {client ? (
+            <div className="rounded-xl border-2 border-green-500 bg-green-50 dark:bg-green-950/30 p-4 flex items-start gap-3">
+              <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
+              <div className="min-w-0 flex-1">
+                <p className="font-bold text-slate-900 dark:text-slate-100">{client.full_name}</p>
+                <p className="text-xs text-slate-600 dark:text-slate-300">{[client.client_number, client.email, client.phone].filter(Boolean).join(' · ') || 'No contact details yet'}</p>
+                <p className="text-xs mt-1 text-slate-600 dark:text-slate-300">{client.auth_user_id ? 'Already has a profile on the hunter portal' : 'No hunter-portal profile yet — we will send an invitation'}</p>
+              </div>
+              <button className="text-sm text-[#0073ea] font-semibold min-h-11 px-2" onClick={() => { setClient(null); setQuery(''); }}>Change</button>
+            </div>
+          ) : mode === 'find' ? (
+            <>
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input className={`${field} pl-9`} placeholder="Search name, phone, e-mail or client number" value={query} onChange={e => setQuery(e.target.value)} autoFocus />
+              </div>
+              {searching && <p className="text-xs text-slate-400">Searching…</p>}
+              <div className="space-y-2">
+                {results.map(r => (
+                  <button key={r.id} onClick={() => setClient(r)} className="w-full text-left rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 min-h-14 hover:border-[#0073ea]">
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">{r.full_name} <span className="font-mono text-xs text-slate-400">{r.client_number}</span></p>
+                    <p className="text-xs text-slate-500">{[r.email, r.phone].filter(Boolean).join(' · ') || 'No contact details'}</p>
+                  </button>
+                ))}
+                {query.trim().length >= 2 && !searching && results.length === 0 && <p className="text-sm text-slate-500">No one found with that name.</p>}
+              </div>
+              <button className={`${bigBtn} w-full border-2 border-dashed border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200`} onClick={() => { setMode('new'); setFresh(f => ({ ...f, full_name: query.trim() })); }}>
+                <UserPlus className="w-5 h-5" />New hunter
+              </button>
+            </>
+          ) : (
             <div className="space-y-3">
-              <Label className="text-slate-300">Search clients</Label>
-              <Input
-                placeholder="Type a name..."
-                value={clientSearch}
-                onChange={e => setClientSearch(e.target.value)}
-                className="bg-slate-700 border-slate-600 text-white"
-              />
-              {clientSearch.length > 0 && (
-                <div className="bg-slate-900 rounded-lg border border-slate-700 max-h-48 overflow-y-auto">
-                  {filteredClients.length === 0
-                    ? <p className="p-3 text-slate-500 text-sm">No clients found</p>
-                    : filteredClients.map(c => (
-                      <button
-                        key={c.id}
-                        className={`w-full text-left px-4 py-2.5 hover:bg-slate-700 text-sm transition-colors ${selectedClientId === c.id ? 'bg-blue-900/40 text-blue-300' : 'text-slate-200'}`}
-                        onClick={() => { setSelectedClientId(c.id); setClientSearch(c.full_name); }}
-                      >
-                        <span className="font-medium">{c.full_name}</span>
-                        {(c as any).country && <span className="text-slate-500 ml-2">· {(c as any).country}</span>}
-                      </button>
-                    ))}
+              <div><label className={label}>Full name *</label><input className={field} value={fresh.full_name} onChange={e => setFresh(f => ({ ...f, full_name: e.target.value }))} autoFocus /></div>
+              {similar.length > 0 && (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-2">
+                  <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Is this someone we already have?</p>
+                  {similar.map(s => <button key={s.id} className="w-full text-left rounded-lg bg-white dark:bg-slate-900 border border-amber-200 p-2.5 min-h-12 text-sm" onClick={() => { setClient(s); setMode('find'); }}><strong>{s.full_name}</strong> <span className="text-slate-500">{[s.client_number, s.email].filter(Boolean).join(' · ')}</span> — use this one</button>)}
                 </div>
               )}
-              {selectedClient && (
-                <div className="bg-slate-700/50 rounded-lg p-3 text-sm text-slate-300 space-y-1">
-                  <p><span className="text-slate-500">Name:</span> {selectedClient.full_name}</p>
-                  {(selectedClient as any).email && <p><span className="text-slate-500">Email:</span> {(selectedClient as any).email}</p>}
-                  {(selectedClient as any).phone && <p><span className="text-slate-500">Phone:</span> {(selectedClient as any).phone}</p>}
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className={label}>Mobile / WhatsApp</label><input className={field} inputMode="tel" placeholder="082 123 4567" value={fresh.phone} onChange={e => setFresh(f => ({ ...f, phone: e.target.value }))} /></div>
+                <div><label className={label}>Country</label><input className={field} placeholder="USA" value={fresh.country} onChange={e => setFresh(f => ({ ...f, country: e.target.value }))} /></div>
+              </div>
+              <div><label className={label}>E-mail</label><input className={field} type="email" inputMode="email" placeholder="name@example.com" value={fresh.email} onChange={e => setFresh(f => ({ ...f, email: e.target.value }))} /></div>
+              <div>
+                <label className={label}>Where are the trophies going?</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[['export', '✈️ Overseas (export)'], ['local', '🇿🇦 South Africa (local)']].map(([v, l]) => (
+                    <button key={v} type="button" onClick={() => setFresh(f => ({ ...f, client_type: v }))} className={`rounded-lg border-2 min-h-12 text-sm font-semibold ${fresh.client_type === v ? 'border-[#0073ea] bg-[#0073ea]/10 text-[#0073ea]' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}>{l}</button>
+                  ))}
                 </div>
-              )}
-
-              {/* Which file do these trophies go into? */}
-              {selectedClient && (
-                <div className="space-y-3 pt-1">
-                  <Label className="text-slate-300">Where do these trophies go?</Label>
-
-                  {huntsLoading ? (
-                    <p className="text-sm text-slate-500">Loading this hunter's files…</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {existingHunts.map(h => (
-                        <button
-                          key={h.id}
-                          type="button"
-                          onClick={() => { setHuntMode('existing'); setSelectedHuntId(h.id); }}
-                          className={`w-full text-left p-3 rounded-lg border-2 transition-all ${
-                            huntMode === 'existing' && selectedHuntId === h.id
-                              ? 'border-blue-500 bg-blue-950/30'
-                              : 'border-slate-600 hover:border-slate-500'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <span className="font-medium text-white">
-                              Add to {h.ref_number ?? `${h.year} file`}
-                            </span>
-                            <span className="text-xs text-slate-400">
-                              {h.year} · {h.trophy_count} {h.trophy_count === 1 ? 'trophy' : 'trophies'}
-                              {h.status === 'completed' ? ' · closed' : ''}
-                            </span>
-                          </div>
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            These trophies join the hunter's existing file
-                          </p>
-                        </button>
-                      ))}
-
-                      <button
-                        type="button"
-                        onClick={() => { setHuntMode('new'); setSelectedHuntId(null); }}
-                        className={`w-full text-left p-3 rounded-lg border-2 transition-all ${
-                          huntMode === 'new'
-                            ? 'border-blue-500 bg-blue-950/30'
-                            : 'border-slate-600 hover:border-slate-500'
-                        }`}
-                      >
-                        <span className="font-medium text-white">Start a new file</span>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                          A separate {new Date().getFullYear()} hunt file with its own reference number
-                        </p>
-                      </button>
-
-                      {existingHunts.length === 0 && (
-                        <p className="text-xs text-slate-500">
-                          This hunter has no files yet — a new one will be created.
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
+              </div>
+              {!fresh.phone.trim() && !fresh.email.trim() && <p className="text-xs text-amber-700 dark:text-amber-400">Add a phone number or e-mail so we can send them their sign-up link.</p>}
+              <button className="text-sm text-[#0073ea] font-semibold min-h-11" onClick={() => setMode('find')}>← Search instead</button>
             </div>
           )}
-
-          {clientMode === 'new' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="sm:col-span-2 space-y-1">
-                <Label className="text-slate-300">Full Name *</Label>
-                <Input value={newClient.full_name} onChange={e => setNewClient(p => ({ ...p, full_name: e.target.value }))} placeholder="Hunter's full name" className="bg-slate-700 border-slate-600 text-white" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-slate-300">Email</Label>
-                <Input value={newClient.email} onChange={e => setNewClient(p => ({ ...p, email: e.target.value }))} placeholder="email@example.com" className="bg-slate-700 border-slate-600 text-white" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-slate-300">Phone</Label>
-                <Input value={newClient.phone} onChange={e => setNewClient(p => ({ ...p, phone: e.target.value }))} placeholder="+1 555 0100" className="bg-slate-700 border-slate-600 text-white" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-slate-300">Country</Label>
-                <Input value={newClient.country} onChange={e => setNewClient(p => ({ ...p, country: e.target.value }))} placeholder="USA" className="bg-slate-700 border-slate-600 text-white" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-slate-300">Client Type</Label>
-                <Select value={newClient.client_type} onValueChange={(v: string) => setNewClient(p => ({ ...p, client_type: v }))}>
-                  <SelectTrigger className="bg-slate-700 border-slate-600 text-white"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="export">✈️ Export</SelectItem>
-                    <SelectItem value="local">🇿🇦 Local</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+          {client && openHunts.length > 0 && (
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 text-sm bg-white dark:bg-slate-900">
+              {newFile ? <>Starting a <strong>new {new Date().getFullYear()} file</strong>.</> : <>These animals join their open file <strong>{openHunts[0].ref_number ?? openHunts[0].year}</strong>.</>}
+              <button className="ml-2 text-[#0073ea] font-semibold" onClick={() => setNewFile(v => !v)}>{newFile ? 'Add to the open file instead' : 'Start a new file instead'}</button>
             </div>
           )}
-
-          <div className="flex justify-end pt-2">
-            <Button className="bg-blue-600 hover:bg-blue-700" disabled={!step1Valid()} onClick={() => setStep(2)}>
-              Next: Add Trophies <ArrowRight className="ml-2 w-4 h-4" />
-            </Button>
-          </div>
         </div>
       )}
 
-      {/* Step 2: Trophies */}
       {step === 2 && (
         <div className="space-y-4">
-          <div className="bg-slate-800 rounded-xl p-6 space-y-5">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-white">Step 2 — Add Trophies</h2>
-              <Badge variant="outline" className="text-slate-400 border-slate-600">{trophies.length} / 20</Badge>
-            </div>
-
-            {trophies.map((t, idx) => {
-              const autoPrice = getAutoPrice(t.species, t.mountType, clientType);
-              const displayPrice = t.priceOverride ? parseFloat(t.priceOverride) : autoPrice;
-              const specFilter = speciesSearch[t.id] ?? t.species;
-              const filteredSpecies = SPECIES_LIST.filter(s => s.toLowerCase().includes((speciesSearch[t.id] ?? '').toLowerCase()));
-
-              return (
-                <div key={t.id} className="bg-slate-700/50 rounded-xl p-4 space-y-4 border border-slate-600">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-300 font-medium text-sm">Trophy {idx + 1}</span>
-                    {trophies.length > 1 && (
-                      <button onClick={() => removeTrophy(t.id)} className="text-red-400 hover:text-red-300 transition-colors">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {/* Species */}
-                    <div className="space-y-1">
-                      <Label className="text-slate-400 text-xs">Species *</Label>
-                      <div className="relative">
-                        <Input
-                          value={speciesSearch[t.id] !== undefined ? speciesSearch[t.id] : t.species}
-                          onChange={e => setSpeciesSearch(prev => ({ ...prev, [t.id]: e.target.value }))}
-                          onFocus={() => { if (!speciesSearch[t.id]) setSpeciesSearch(prev => ({ ...prev, [t.id]: '' })); }}
-                          onBlur={() => setTimeout(() => setSpeciesSearch(prev => { const n = { ...prev }; delete n[t.id]; return n; }), 150)}
-                          placeholder="Search species..."
-                          className="bg-slate-700 border-slate-600 text-white text-sm"
-                        />
-                        {speciesSearch[t.id] !== undefined && (
-                          <div className="absolute z-20 top-full left-0 right-0 bg-slate-900 border border-slate-700 rounded-lg max-h-44 overflow-y-auto shadow-xl">
-                            {filteredSpecies.map(s => (
-                              <button key={s} className="w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-700"
-                                onMouseDown={() => { updateTrophy(t.id, { species: s }); setSpeciesSearch(prev => { const n = { ...prev }; delete n[t.id]; return n; }); }}>
-                                {speciesEmoji(s)} {s}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Mount Type */}
-                    <div className="space-y-1">
-                      <Label className="text-slate-400 text-xs">Mount Type *</Label>
-                      <Select value={t.mountType} onValueChange={(v: string) => updateTrophy(t.id, { mountType: v })}>
-                        <SelectTrigger className="bg-slate-700 border-slate-600 text-white text-sm"><SelectValue placeholder="Select..." /></SelectTrigger>
-                        <SelectContent>
-                          {MOUNT_TYPES.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* Qty */}
-                    <div className="space-y-1">
-                      <Label className="text-slate-400 text-xs">Quantity</Label>
-                      <Input type="number" min={1} max={20} value={t.quantity} onChange={e => updateTrophy(t.id, { quantity: parseInt(e.target.value) || 1 })} className="bg-slate-700 border-slate-600 text-white text-sm" />
-                    </div>
-
-                    {/* Tag */}
-                    <div className="space-y-1">
-                      <Label className="text-slate-400 text-xs">Tag Number *</Label>
-                      <Input value={t.tagNumber} onChange={e => updateTrophy(t.id, { tagNumber: e.target.value })} placeholder="A-0042" className="bg-slate-700 border-slate-600 text-white text-sm" />
-                    </div>
-
-                    {/* Condition */}
-                    <div className="space-y-1">
-                      <Label className="text-slate-400 text-xs">Condition</Label>
-                      <Select value={t.condition} onValueChange={(v: string) => updateTrophy(t.id, { condition: v })}>
-                        <SelectTrigger className="bg-slate-700 border-slate-600 text-white text-sm"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {CONDITIONS.map(c => <SelectItem key={c} value={c}>{c.replace('_', ' ')}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* Price */}
-                    <div className="space-y-1">
-                      <Label className="text-slate-400 text-xs">Price</Label>
-                      <div className="flex items-center gap-2">
-                        {displayPrice !== null && !t.priceOverride
-                          ? <div className="flex-1 px-3 py-2 bg-slate-600/50 rounded-md text-sm text-slate-300 border border-slate-600">{displayPrice.toLocaleString()}</div>
-                          : null}
-                        <Input
-                          type="number"
-                          placeholder={autoPrice === null ? 'Quote' : `Override ${autoPrice}`}
-                          value={t.priceOverride}
-                          onChange={e => updateTrophy(t.id, { priceOverride: e.target.value })}
-                          className={`bg-slate-700 border-slate-600 text-white text-sm ${displayPrice !== null && !t.priceOverride ? 'w-28' : 'flex-1'}`}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Trophy Parts */}
-                  {t.parts.length > 0 && (
-                    <div className="space-y-1.5">
-                      <Label className="text-slate-400 text-xs">Trophy Parts ({t.parts.length})</Label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {getPartsForTrophy(t.species, t.mountType).map(p => {
-                          const active = t.parts.some(tp => tp.code === p.code);
-                          return (
-                            <button
-                              key={p.code}
-                              onClick={() => !p.required && togglePart(t.id, p.code)}
-                              title={p.description}
-                              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                                active
-                                  ? p.leatherOption && active
-                                    ? 'bg-amber-600 text-white border-amber-600'
-                                    : 'bg-green-700 text-white border-green-600'
-                                  : 'border-slate-600 text-slate-500 line-through opacity-50'
-                              } ${p.required ? 'cursor-default' : 'cursor-pointer hover:opacity-80'}`}
-                            >
-                              {p.label}
-                              {p.leatherOption && active && <span className="ml-1 text-amber-200 text-[10px]">leather</span>}
-                              {p.required && <span className="ml-1 text-[10px] opacity-60">req</span>}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <p className="text-slate-500 text-[11px]">Tap optional parts to include/exclude. Amber = leather work available.</p>
-                    </div>
-                  )}
-
-                  {/* Instructions */}
-                  <div className="space-y-1">
-                    <Label className="text-slate-400 text-xs">Pose & Instructions</Label>
-                    <Textarea value={t.instructions} onChange={e => updateTrophy(t.id, { instructions: e.target.value })} placeholder="e.g. Pedestal mount facing right, ears alert..." rows={2} className="bg-slate-700 border-slate-600 text-white text-sm resize-none" />
-                  </div>
-
-                  {/* Photos */}
-                  <div className="space-y-2">
-                    <Label className="text-slate-400 text-xs">Reference Photos (max 3)</Label>
-                    <div className="flex flex-wrap gap-2">
-                      {t.photoPreviews.map((src, i) => (
-                        <div key={i} className="relative w-20 h-20 rounded-lg overflow-hidden border border-slate-600">
-                          <img src={src} alt="" className="w-full h-full object-cover" />
-                          <button onClick={() => removePhoto(t.id, i)} className="absolute top-0.5 right-0.5 bg-black/60 rounded-full p-0.5">
-                            <X className="w-3 h-3 text-white" />
-                          </button>
-                        </div>
-                      ))}
-                      {t.photos.length < 3 && (
-                        <button
-                          onClick={() => { setActivePhotoTrophyId(t.id); photoInputRef.current?.click(); }}
-                          className="w-20 h-20 rounded-lg border-2 border-dashed border-slate-600 flex flex-col items-center justify-center text-slate-500 hover:border-blue-500 hover:text-blue-400 transition-colors"
-                        >
-                          <Upload className="w-5 h-5" />
-                          <span className="text-xs mt-1">Photo</span>
-                        </button>
+          <p className="text-slate-600 dark:text-slate-300 text-sm">For <strong>{who}</strong> — add each animal and tick every part that came in.</p>
+          <input ref={photoRef} type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={e => { addPhotos(e.target.files); e.target.value = ''; }} />
+          {animals.map((a, idx) => {
+            const matches = SPECIES_LIST.filter(s => s.toLowerCase().includes((speciesQ[a.id] ?? '').toLowerCase())).slice(0, 8);
+            return (
+              <div key={a.id} className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-900 dark:text-slate-100">Animal {idx + 1}</span>
+                  {animals.length > 1 && <button aria-label="Remove animal" className="p-2 -m-2 text-red-500" onClick={() => setAnimals(prev => prev.filter(x => x.id !== a.id))}><Trash2 className="w-5 h-5" /></button>}
+                </div>
+                <div className="relative">
+                  <label className={label}>Species *</label>
+                  <input className={field} placeholder="Start typing — Kudu, Impala…" value={speciesOpen === a.id ? (speciesQ[a.id] ?? '') : a.species}
+                    onFocus={() => { setSpeciesOpen(a.id); setSpeciesQ(q => ({ ...q, [a.id]: '' })); }}
+                    onChange={e => setSpeciesQ(q => ({ ...q, [a.id]: e.target.value }))}
+                    onBlur={() => setTimeout(() => setSpeciesOpen(o => (o === a.id ? null : o)), 180)} />
+                  {speciesOpen === a.id && (
+                    <div className="absolute z-20 left-0 right-0 mt-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl max-h-64 overflow-y-auto">
+                      {matches.map(s => <button key={s} type="button" className="w-full text-left px-4 min-h-12 text-base hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-900 dark:text-slate-100"
+                        onMouseDown={e => e.preventDefault()} onClick={() => { patch(a.id, { species: s }); setSpeciesOpen(null); }}>{speciesEmoji(s)} {s}</button>)}
+                      {(speciesQ[a.id] ?? '').trim().length > 1 && !SPECIES_LIST.some(s => s.toLowerCase() === (speciesQ[a.id] ?? '').trim().toLowerCase()) && (
+                        <button type="button" className="w-full text-left px-4 min-h-12 text-base text-[#0073ea] font-semibold" onMouseDown={e => e.preventDefault()}
+                          onClick={() => { patch(a.id, { species: (speciesQ[a.id] ?? '').trim() }); setSpeciesOpen(null); }}>Use “{(speciesQ[a.id] ?? '').trim()}”</button>
                       )}
                     </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className={label}>What came in? Tick every part *</label>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {PART_PRESETS.map(p => <button key={p.label} type="button" className="text-xs font-semibold px-3 min-h-9 rounded-full border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200" onClick={() => patch(a.id, { parts: p.codes })}>{p.label}</button>)}
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {RECEIVED_PARTS.map(p => {
+                      const on = a.parts.includes(p.code);
+                      return (
+                        <button key={p.code} type="button" aria-pressed={on} onClick={() => toggle(a, p.code)}
+                          className={`rounded-xl border-2 min-h-14 px-1 text-sm font-semibold flex flex-col items-center justify-center gap-0.5 ${on ? 'border-green-600 bg-green-600 text-white' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}>
+                          <span className="text-base leading-none">{on ? '✓' : '○'}</span>{p.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {a.parts.includes('OTHER') && <input className={`${field} mt-2`} placeholder="What else came in? (e.g. hide, antlers, bones)" value={a.other} onChange={e => patch(a.id, { other: e.target.value })} />}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className={label}>Tag / number (if any)</label><input className={field} value={a.tag} onChange={e => patch(a.id, { tag: e.target.value })} /></div>
+                  <div><label className={label}>Condition</label>
+                    <select className={field} value={a.condition} onChange={e => patch(a.id, { condition: e.target.value })}>{CONDITIONS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}</select>
                   </div>
                 </div>
-              );
-            })}
+                <div><label className={label}>Notes (damage, missing, special)</label><input className={field} value={a.notes} onChange={e => patch(a.id, { notes: e.target.value })} /></div>
 
-            <input ref={photoInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoChange} />
+                <div className="flex items-center gap-2 flex-wrap">
+                  {a.previews.map((src, i) => (
+                    <div key={src} className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
+                      <img src={src} alt="" className="w-full h-full object-cover" />
+                      <button aria-label="Remove photo" className="absolute top-0.5 right-0.5 w-5 h-5 bg-black/70 rounded-full flex items-center justify-center" onClick={() => patch(a.id, { photos: a.photos.filter((_, j) => j !== i), previews: a.previews.filter((_, j) => j !== i) })}><X className="w-3 h-3 text-white" /></button>
+                    </div>
+                  ))}
+                  <button type="button" className="inline-flex items-center gap-2 min-h-12 px-4 rounded-xl border border-slate-300 dark:border-slate-600 text-sm font-semibold text-slate-700 dark:text-slate-200" onClick={() => { setPhotoFor(a.id); setTimeout(() => photoRef.current?.click(), 0); }}><Camera className="w-4 h-4" />Photo</button>
+                </div>
 
-            <Button variant="outline" className="w-full border-dashed border-slate-600 text-slate-400 hover:text-white hover:border-blue-500" onClick={addTrophy}>
-              <Plus className="w-4 h-4 mr-2" /> Add Another Trophy
-            </Button>
-          </div>
-
-          <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setStep(1)}><ArrowLeft className="mr-2 w-4 h-4" /> Back</Button>
-            <Button className="bg-blue-600 hover:bg-blue-700" disabled={!step2Valid()} onClick={() => setStep(3)}>
-              Review <ArrowRight className="ml-2 w-4 h-4" />
-            </Button>
-          </div>
+                <button type="button" className="text-sm text-[#0073ea] font-semibold min-h-10 inline-flex items-center gap-1.5" onClick={() => sameAgain(a)}><CopyIcon className="w-4 h-4" />Add another {a.species || 'animal'} with the same parts</button>
+              </div>
+            );
+          })}
+          <button className={`${bigBtn} w-full border-2 border-dashed border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200`} onClick={() => animals.length < 40 ? setAnimals(prev => [...prev, emptyAnimal()]) : toast.error('Maximum 40 animals per check-in')}><Plus className="w-5 h-5" />Add another animal</button>
         </div>
       )}
 
-      {/* Step 3: Review */}
       {step === 3 && (
         <div className="space-y-4">
-          <div className="bg-slate-800 rounded-xl p-6 space-y-5">
-            <h2 className="text-lg font-semibold text-white">Step 3 — Review & Submit</h2>
-
-            <div className="bg-slate-700/40 rounded-lg p-4 space-y-1 text-sm">
-              <p className="text-slate-300"><span className="text-slate-500">Client:</span> {clientMode === 'search' ? selectedClient?.full_name : newClient.full_name}</p>
-              <p className="text-slate-300"><span className="text-slate-500">Trophies:</span> {trophies.length}</p>
-              <p className="text-slate-300"><span className="text-slate-500">Type:</span> {clientType === 'local' ? '🇿🇦 Local' : '✈️ Export'}</p>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-700 text-slate-500 text-left">
-                    <th className="pb-2 font-medium">Trophy</th>
-                    <th className="pb-2 font-medium">Mount</th>
-                    <th className="pb-2 font-medium">Tag</th>
-                    <th className="pb-2 font-medium text-right">Qty</th>
-                    <th className="pb-2 font-medium text-right">Price</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {trophies.map(t => {
-                    const price = t.priceOverride ? parseFloat(t.priceOverride) : t.priceUsd;
-                    const rowTotal = price ? price * t.quantity : null;
-                    return (
-                      <tr key={t.id} className="border-b border-slate-700/50">
-                        <td className="py-2 text-slate-200">{speciesEmoji(t.species)} {t.species}</td>
-                        <td className="py-2 text-slate-400">{t.mountType}</td>
-                        <td className="py-2 text-slate-400 font-mono text-xs">{t.tagNumber}</td>
-                        <td className="py-2 text-slate-300 text-right">{t.quantity}</td>
-                        <td className="py-2 text-slate-300 text-right">{rowTotal ? rowTotal.toLocaleString() : <span className="text-slate-500 italic">Quote</span>}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td colSpan={4} className="pt-3 text-slate-400 font-medium">Total</td>
-                    <td className="pt-3 text-white font-bold text-right">{totalPrice.toLocaleString()}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+            <p className="text-xs uppercase font-bold text-slate-500">Hunter</p>
+            <p className="font-bold text-lg text-slate-900 dark:text-slate-100">{who}</p>
+            <p className="text-xs text-slate-500">{client ? (client.client_number ?? '') : `New · ${fresh.client_type === 'local' ? 'Local' : 'Export'} · ${[fresh.phone, fresh.email].filter(Boolean).join(' · ') || 'no contact details'}`}</p>
           </div>
-
-          <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setStep(2)}><ArrowLeft className="mr-2 w-4 h-4" /> Back</Button>
-            <Button className="bg-blue-600 hover:bg-blue-700 min-w-48" disabled={submitting} onClick={handleSubmit}>
-              {submitting ? 'Saving...' : 'Save & Generate Job Cards'}
-              {!submitting && <CheckCircle2 className="ml-2 w-4 h-4" />}
-            </Button>
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
+            {animals.map((a, i) => (
+              <div key={a.id} className="px-4 py-3 text-sm">
+                <p className="font-semibold text-slate-900 dark:text-slate-100">{i + 1}. {speciesEmoji(a.species)} {a.species}{a.tag ? <span className="text-slate-400 font-normal"> · {a.tag}</span> : null}</p>
+                <p className="text-slate-600 dark:text-slate-300">{listParts(a.parts, a.other)} · {CONDITIONS.find(c => c.value === a.condition)?.label}{a.photos.length ? ` · ${a.photos.length} photo${a.photos.length > 1 ? 's' : ''}` : ''}</p>
+              </div>
+            ))}
           </div>
+          <p className="text-sm text-slate-600 dark:text-slate-300">After saving you can print the receiving sheet, send {who.split(' ')[0] || 'the hunter'} their link, and print the part labels.</p>
         </div>
       )}
+
+      {/* action bar, always in reach on a phone */}
+      <div className="fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-slate-950/95 backdrop-blur border-t border-slate-200 dark:border-slate-700 p-3 lg:left-60">
+        <div className="max-w-xl mx-auto flex gap-2">
+          {step > 1 && <button className={`${bigBtn} border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100`} onClick={() => setStep((step - 1) as 1 | 2)}><ArrowLeft className="w-5 h-5" />Back</button>}
+          {step === 1 && <button className={`${bigBtn} flex-1 bg-[#0073ea] text-white`} disabled={!whoOk || (mode === 'new' && !client && fresh.full_name.trim().length < 2)} onClick={() => setStep(2)}>Next: what came in<ArrowRight className="w-5 h-5" /></button>}
+          {step === 2 && <button className={`${bigBtn} flex-1 bg-[#0073ea] text-white`} disabled={!animalsOk} onClick={() => setStep(3)}>{animalsOk ? 'Next: check it' : 'Pick a species and tick the parts'}<ArrowRight className="w-5 h-5" /></button>}
+          {step === 3 && <button className={`${bigBtn} flex-1 bg-green-600 text-white`} disabled={saving} onClick={save}>{saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}Save check-in</button>}
+        </div>
+      </div>
     </div>
   );
 }

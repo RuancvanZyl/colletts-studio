@@ -279,6 +279,7 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
       }
 
       // Process each line
+      let waitingCount = 0;
       for (const line of lines) {
         // Per-trophy arrival photos — shown to the client in their tracking view
         const photoPaths: string[] = [];
@@ -293,6 +294,16 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
         const { data: doc } = await (supabase as any)
           .from('hunt_documents').select('form_data').eq('id', line.docId).single();
         const fd = doc?.form_data ?? {};
+
+        // No mount chosen yet → just record the condition; the animal stays in Receiving until the hunter decides
+        if (/^pending instructions$/i.test(line.mountType.trim()) || !line.mountType) {
+          await (supabase as any).from('hunt_documents').update({
+            status: line.status === 'issue' ? 'flagged' : 'in_progress',
+            form_data: { ...fd, condition_notes: line.conditionNotes },
+          }).eq('id', line.docId);
+          waitingCount++;
+          continue;
+        }
         const pipeline = getPipeline(line.mountType);
         const nextDept = pipeline[1] ?? 'skinning'; // first dept after receiving
 
@@ -329,7 +340,7 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
         });
       }
 
-      toast.success('Receiving complete — trophies queued into pipeline');
+      toast.success(waitingCount ? `Receiving saved — ${waitingCount} animal${waitingCount > 1 ? 's are' : ' is'} waiting for the hunter to choose a mount` : 'Receiving complete — trophies queued into pipeline');
       onBack();
     } catch (err: any) {
       toast.error('Save failed: ' + err.message);

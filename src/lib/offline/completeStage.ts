@@ -33,6 +33,10 @@ export const completeStageExecutor: Executor = async a => {
       return { ok: false, retry: false, error: `This job card had already moved on from ${x.dept} (now at ${doc.current_department}). Nothing was changed.` };
     }
 
+    if (/^pending instructions$/i.test(String(doc.form_data?.mount_type ?? '').trim())) {
+      return { ok: false, retry: false, error: 'The hunter has not chosen a mount for this animal yet, so work cannot move on. Nothing was changed.' };
+    }
+
     // 1. photos first (stable names, so a retry overwrites instead of duplicating)
     const photoPaths: string[] = [];
     for (let i = 0; i < x.blobIds.length; i++) {

@@ -5,6 +5,7 @@ import { HunterProfile } from './hunter/HunterProfile';
 import { SpecialRequests } from './hunter/SpecialRequests';
 import { TrophyMessages } from './hunter/TrophyMessages';
 import { UniversalAIAssistant } from './shared/UniversalAIAssistant';
+import { HunterTrophies } from './hunter/HunterTrophies';
 import { Button } from '../ui/button';
 import { Home, Bell, User, MessageCircle, Wand2, Moon, Sun, Package } from 'lucide-react';
 import { useClientNotifications } from '../../../lib/hooks/useClientNotifications';
@@ -25,12 +26,12 @@ export function LocalHunterPortal({ onLogout }: LocalHunterPortalProps) {
 
   const renderView = () => {
     switch (currentView) {
-      case 'home':             return <LocalTrophyTracking />;
+      case 'home':             return <HunterTrophies />;
       case 'notifications':    return <Notifications notifications={notifications} loading={false} unreadCount={unreadCount} onMarkRead={markRead} onMarkAllRead={markAllRead} />;
       case 'messages':         return <TrophyMessages />;
       case 'special-requests': return <SpecialRequests />;
       case 'profile':          return <HunterProfile onLogout={onLogout} />;
-      default:                 return <LocalTrophyTracking />;
+      default:                 return <HunterTrophies />;
     }
   };
 

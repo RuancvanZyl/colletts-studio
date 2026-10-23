@@ -18,4 +18,24 @@ export const AUTH_LINK = {
   error: linkError ? decodeURIComponent(linkError[1].replace(/\+/g, ' ')) : null,
 };
 
+
+/**
+ * Invitation link (?invite=TOKEN) from the workshop's welcome message. Remembered for the session so it
+ * survives sign-in / sign-up redirects, and removed from the address bar.
+ */
+export function readInviteToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const t = new URLSearchParams(window.location.search).get('invite');
+    if (t) {
+      sessionStorage.setItem('apex_invite', t);
+      const u = new URL(window.location.href); u.searchParams.delete('invite');
+      window.history.replaceState({}, '', u.pathname + (u.search || '') + u.hash);
+    }
+    return sessionStorage.getItem('apex_invite');
+  } catch { return null; }
+}
+export const clearInviteToken = () => { try { sessionStorage.removeItem('apex_invite'); } catch { /* ignore */ } };
+export const INVITE_AT_LOAD = readInviteToken();
+
 export const supabase = createClient<Database>(url, key);

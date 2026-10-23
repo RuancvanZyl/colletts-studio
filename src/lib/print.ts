@@ -27,7 +27,7 @@ const qr = (value: string, size = 64) =>
 
 const CSS = `
   @page { size: A4; margin: 12mm; }
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #111; margin: 0; }
   .page { page-break-after: always; }
   .page:last-child { page-break-after: auto; }
@@ -310,4 +310,75 @@ export function printPackingList(p: PackingPrint): void {
     <div class="foot">Apex Trophy Solutions · packing list · ${esc(p.clientName)}</div>
   </section>`;
   printHtml(`Packing List — ${p.clientName}`, body);
+}
+
+// ── drop-off sheet + welcome letter (what the hunter handed in) ──────────────
+
+export interface DropOffAnimal {
+  species: string; tag: string; condition: string; parts: string[]; other: string; notes: string;
+}
+export interface DropOffPrint {
+  clientName: string; clientNumber?: string | null; huntRef?: string; receivedBy?: string; receivedAt?: string;
+  animals: DropOffAnimal[];
+  inviteLink?: string | null;       // shown as a QR code so the hunter can scan it and register
+  workshop: { name: string; platform: string; portalUrl: string };
+}
+
+const PART_COLS: [string, string][] = [
+  ['SKULL', 'Skull'], ['CAPE', 'Cape'], ['BSKIN', 'Back skin'], ['FLATSKIN', 'Flat skin'], ['FSKIN', 'Full skin'],
+  ['FEET', 'Feet'], ['TAIL', 'Tail'], ['TUSKS', 'Tusks'], ['OTHER', 'Other'],
+];
+
+function dropOffSheetHtml(p: DropOffPrint): string {
+  const when = fmtDate(p.receivedAt ?? new Date().toISOString());
+  const rows = p.animals.map((a, i) => `<tr>
+      <td style="width:4%">${i + 1}</td>
+      <td><strong>${esc(a.species)}</strong>${a.tag ? `<div class="sub">Tag ${esc(a.tag)}</div>` : ''}<div class="sub">${esc(a.condition)}</div></td>
+      ${PART_COLS.map(([code]) => `<td style="text-align:center;width:6.5%"><span class="tick ${a.parts.includes(code) ? 'on' : ''}"></span></td>`).join('')}
+      <td style="width:18%">${esc([a.other ? `Other: ${a.other}` : '', a.notes].filter(Boolean).join(' · '))}</td>
+    </tr>`).join('');
+  return `<section class="page">
+    ${head('Receiving Sheet', `${esc(p.workshop.name)}<br>${esc(p.huntRef ?? '')}<br>${esc(when)}`)}
+    <table>
+      <tr><td class="k">Hunter</td><td><strong>${esc(p.clientName)}</strong></td><td class="k">Client no.</td><td>${esc(p.clientNumber ?? '') || '—'}</td></tr>
+      <tr><td class="k">Received by</td><td>${esc(p.receivedBy ?? '') || '&nbsp;'}</td><td class="k">Animals</td><td>${p.animals.length}</td></tr>
+    </table>
+    <h3>What was handed in — a filled box means we received it</h3>
+    <table>
+      <tr><th>#</th><th>Animal</th>${PART_COLS.map(([, l]) => `<th style="text-align:center">${l}</th>`).join('')}<th>Notes</th></tr>
+      ${rows}
+    </table>
+    <p class="sub">Please check this sheet against what you handed in. Anything not listed was not received.</p>
+    <div class="sig"><div>Received by (name &amp; signature)</div><div>Handed in by (name &amp; signature)</div><div>Date</div></div>
+    <div class="foot">${esc(p.workshop.name)} · receiving sheet · ${esc(p.clientName)}</div>
+  </section>`;
+}
+
+function welcomeLetterHtml(p: DropOffPrint): string {
+  const first = p.clientName.split(' ')[0] || 'there';
+  const list = p.animals.map(a => {
+    const names = a.parts.map(c => PART_COLS.find(x => x[0] === c)?.[1] ?? c);
+    if (a.other) { const i = names.indexOf('Other'); if (i >= 0) names[i] = `Other (${a.other})`; }
+    return `<li><strong>${esc(a.species)}</strong>${names.length ? ` — ${esc(names.join(', '))}` : ''}</li>`;
+  }).join('');
+  return `<section class="page">
+    ${head('Welcome', `${esc(p.workshop.name)}<br>${esc(fmtDate(p.receivedAt ?? new Date().toISOString()))}`)}
+    <p style="font-size:13px;line-height:1.6">Dear ${esc(first)},</p>
+    <p style="font-size:13px;line-height:1.6">Thank you for choosing <strong>${esc(p.workshop.name)}</strong> for your trophies. We have received the following from you:</p>
+    <ul style="font-size:13px;line-height:1.7">${list}</ul>
+    <p style="font-size:13px;line-height:1.6">The next step is yours: create your profile on our hunter portal, see exactly what we received, and choose how you would like each animal mounted. Once you have chosen, we start work and you can follow every stage — with photos — from your phone.</p>
+    ${p.inviteLink ? `<div style="display:flex;gap:16px;align-items:center;border:1px solid #555;padding:12px;margin:14px 0">
+        ${qr(p.inviteLink, 110)}
+        <div style="font-size:12px;line-height:1.6"><strong>Scan this code with your phone camera</strong><br>or open this link:<br><span style="font-family:monospace;word-break:break-all">${esc(p.inviteLink)}</span></div>
+      </div>` : `<p style="font-size:13px">Sign in to your profile at <strong>${esc(p.workshop.portalUrl)}</strong> to choose your mounts.</p>`}
+    <p style="font-size:13px;line-height:1.6">If you have any questions, reply to this letter or message us through the portal.</p>
+    <p style="font-size:13px;line-height:1.6">Kind regards,<br><strong>${esc(p.workshop.name)}</strong></p>
+    <div class="foot">Powered by ${esc(p.workshop.platform)}</div>
+  </section>`;
+}
+
+/** The receiving sheet (what was dropped off) and, optionally, the welcome letter with the sign-up QR code. */
+export function printDropOffPapers(p: DropOffPrint, opts: { sheet?: boolean; letter?: boolean } = { sheet: true, letter: true }): void {
+  const parts = [opts.sheet !== false ? dropOffSheetHtml(p) : '', opts.letter ? welcomeLetterHtml(p) : ''].join('');
+  printHtml(`Receiving Sheet — ${p.clientName}`, parts);
 }

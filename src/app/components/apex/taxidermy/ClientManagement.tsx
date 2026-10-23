@@ -1,4 +1,5 @@
 import { PhotoGallery } from '../shared/TrophyPhotos';
+import { ClientPortalAccess } from '../shared/ClientPortalAccess';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { Button } from '../../ui/button';
@@ -357,6 +358,7 @@ function ClientDetailPanel({ client, onEdit, onBack }: { client: Client; onEdit:
       <div className="flex-1 overflow-y-auto space-y-4">
         {tab === 'info' && (
           <>
+            <ClientPortalAccess client={client as any} />
             <div className="flex flex-col items-center p-4 bg-slate-50 dark:bg-slate-900 rounded-xl">
               <QRCodeSVG value={`APEX-CLIENT:${client.id}`} size={100} />
               <p className="text-xs text-slate-500 mt-2">Client QR</p>

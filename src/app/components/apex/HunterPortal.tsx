@@ -7,6 +7,7 @@ import { HunterProfile } from './hunter/HunterProfile';
 import { TrophySelection } from './hunter/TrophySelection';
 import { HunterRegistration } from './hunter/HunterRegistration';
 import { VerificationPending } from './hunter/VerificationPending';
+import { HunterTrophies } from './hunter/HunterTrophies';
 import { TrophyTrackingDashboard } from './hunter/TrophyTrackingDashboard';
 import { TrophyMessages } from './hunter/TrophyMessages';
 import { SpecialRequests } from './hunter/SpecialRequests';
@@ -107,27 +108,6 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
     );
   }
 
-  // New hunter — no hunts yet → show creation wizard
-  if (hunts.length === 0 && flow !== 'create-hunt') {
-    return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-6 text-center gap-6">
-        <div>
-          <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-950/50 flex items-center justify-center mx-auto mb-4">
-            <TrophyIcon className="w-8 h-8 text-amber-500" />
-          </div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Welcome, {displayName}!</h2>
-          <p className="text-sm text-slate-500 mt-2 max-w-sm mx-auto">
-            Let's register your hunt and trophies so our team can start processing them.
-          </p>
-        </div>
-        <Button onClick={() => setFlow('create-hunt')} size="lg" className="gap-2">
-          <Plus className="w-5 h-5" /> Register My Hunt & Trophies
-        </Button>
-        <button onClick={onLogout} className="text-xs text-slate-400 hover:text-slate-600">Sign out</button>
-      </div>
-    );
-  }
-
   // Hunt creation wizard
   if (flow === 'create-hunt') {
     return (
@@ -147,7 +127,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
     switch (currentView) {
       case 'home':
       case 'trophies':
-        return <TrophyTrackingDashboard />;
+        return <HunterTrophies onRegisterHunt={() => setFlow('create-hunt')} onChanged={refreshHunts} />;
       case 'trophy-detail':
         return selectedTrophy ? (
           <TrophyDetail trophy={selectedTrophy} onBack={handleBackToList} />
@@ -176,7 +156,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
           />
         );
       default:
-        return <TrophyTrackingDashboard />;
+        return <HunterTrophies onRegisterHunt={() => setFlow('create-hunt')} onChanged={refreshHunts} />;
     }
   };
 
@@ -232,34 +212,18 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
 
       {/* Mobile Bottom Navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-stone-900/90 backdrop-blur-lg border-t border-green-200 dark:border-green-900 z-50">
-        <div className="grid grid-cols-5 gap-1 p-2">
+        <div className="grid grid-cols-4 gap-1 p-2">
           <Button
-            variant={currentView === 'home' ? 'default' : 'ghost'}
-            className="flex flex-col items-center gap-1 h-auto py-2"
+            variant={currentView === 'home' || currentView === 'trophies' ? 'default' : 'ghost'}
+            className="flex flex-col items-center gap-1 h-auto min-h-14 py-2"
             onClick={() => setCurrentView('home')}
           >
-            <Home className="w-5 h-5" />
-            <span className="text-xs">Home</span>
-          </Button>
-          <Button
-            variant={currentView === 'trophies' ? 'default' : 'ghost'}
-            className="flex flex-col items-center gap-1 h-auto py-2"
-            onClick={() => setCurrentView('trophies')}
-          >
             <Award className="w-5 h-5" />
-            <span className="text-xs">Trophies</span>
-          </Button>
-          <Button
-            variant="ghost"
-            className="flex flex-col items-center gap-1 h-auto py-2"
-            onClick={() => setFlow('create-hunt')}
-          >
-            <Plus className="w-5 h-5" />
-            <span className="text-xs">Add</span>
+            <span className="text-xs">My Trophies</span>
           </Button>
           <Button
             variant={currentView === 'notifications' ? 'default' : 'ghost'}
-            className="flex flex-col items-center gap-1 h-auto py-2 relative"
+            className="flex flex-col items-center gap-1 h-auto min-h-14 py-2 relative"
             onClick={() => setCurrentView('notifications')}
           >
             <Bell className="w-5 h-5" />
@@ -268,19 +232,19 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
                 {unreadCount}
               </span>
             )}
-            <span className="text-xs">Alerts</span>
+            <span className="text-xs">Updates</span>
           </Button>
           <Button
             variant={currentView === 'messages' ? 'default' : 'ghost'}
-            className="flex flex-col items-center gap-1 h-auto py-2"
+            className="flex flex-col items-center gap-1 h-auto min-h-14 py-2"
             onClick={() => setCurrentView('messages')}
           >
             <MessageCircle className="w-5 h-5" />
-            <span className="text-xs">Ask</span>
+            <span className="text-xs">Ask us</span>
           </Button>
           <Button
             variant={currentView === 'profile' ? 'default' : 'ghost'}
-            className="flex flex-col items-center gap-1 h-auto py-2"
+            className="flex flex-col items-center gap-1 h-auto min-h-14 py-2"
             onClick={() => setCurrentView('profile')}
           >
             <User className="w-5 h-5" />
@@ -292,58 +256,20 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
       {/* Desktop Navigation */}
       <nav className="hidden md:block fixed left-0 top-16 bottom-0 w-64 bg-white/90 dark:bg-stone-900/90 backdrop-blur-lg border-r border-green-200 dark:border-green-900 p-4">
         <div className="space-y-2">
-          <Button
-            variant={currentView === 'home' ? 'default' : 'ghost'}
-            className="w-full justify-start"
-            onClick={() => setCurrentView('home')}
-          >
-            <Home className="w-5 h-5 mr-3" />
-            Home
+          <Button variant={currentView === 'home' || currentView === 'trophies' ? 'default' : 'ghost'} className="w-full justify-start min-h-11" onClick={() => setCurrentView('home')}>
+            <Award className="w-5 h-5 mr-3" />My Trophies
           </Button>
-          <Button
-            variant={currentView === 'trophies' ? 'default' : 'ghost'}
-            className="w-full justify-start"
-            onClick={() => setCurrentView('trophies')}
-          >
-            <Award className="w-5 h-5 mr-3" />
-            My Trophies
-          </Button>
-          <Button
-            variant="ghost"
-            className="w-full justify-start"
-            onClick={() => setFlow('create-hunt')}
-          >
-            <Plus className="w-5 h-5 mr-3" />
-            Add Trophy / Hunt
-          </Button>
-          <Button
-            variant={currentView === 'messages' ? 'default' : 'ghost'}
-            className="w-full justify-start"
-            onClick={() => setCurrentView('messages')}
-          >
-            <MessageCircle className="w-5 h-5 mr-3" />
-            Ask the Taxidermy
-          </Button>
-          <Button
-            variant="ghost"
-            className="w-full justify-start"
-            onClick={() => setFlow('create-hunt')}
-          >
-            <Plus className="w-5 h-5 mr-3" />
-            Register New Hunt
-          </Button>
-          <Button
-            variant={currentView === 'notifications' ? 'default' : 'ghost'}
-            className="w-full justify-start relative"
-            onClick={() => setCurrentView('notifications')}
-          >
-            <Bell className="w-5 h-5 mr-3" />
-            Notifications
+          <Button variant={currentView === 'notifications' ? 'default' : 'ghost'} className="w-full justify-start relative min-h-11" onClick={() => setCurrentView('notifications')}>
+            <Bell className="w-5 h-5 mr-3" />Updates
             {unreadCount > 0 && (
-              <span className="ml-auto bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center">
-                {unreadCount}
-              </span>
+              <span className="ml-auto bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center">{unreadCount}</span>
             )}
+          </Button>
+          <Button variant={currentView === 'messages' ? 'default' : 'ghost'} className="w-full justify-start min-h-11" onClick={() => setCurrentView('messages')}>
+            <MessageCircle className="w-5 h-5 mr-3" />Ask the workshop
+          </Button>
+          <Button variant={currentView === 'profile' ? 'default' : 'ghost'} className="w-full justify-start min-h-11" onClick={() => setCurrentView('profile')}>
+            <User className="w-5 h-5 mr-3" />My profile
           </Button>
         </div>
       </nav>

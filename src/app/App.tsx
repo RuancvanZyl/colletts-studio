@@ -14,17 +14,20 @@ import { PortalThemeProvider, PortalType } from './components/apex/PortalThemePr
 import { Toaster } from './components/ui/sonner';
 import { toast } from 'sonner';
 import { AuthProvider, useAuth } from '../lib/auth';
-import { supabase, AUTH_LINK } from '../lib/supabase';
+import { supabase, AUTH_LINK, INVITE_AT_LOAD, clearInviteToken } from '../lib/supabase';
+import { InviteScreen } from './components/apex/InviteScreen';
 
 export type UserRole = 'hunter' | 'local-hunter' | 'admin' | 'outfitter' | 'taxidermy' | 'unified' | null;
 
-type AppView = 'landing' | 'login' | 'register' | 'portal' | 'dashboard' | 'reset-password';
+type AppView = 'landing' | 'login' | 'register' | 'portal' | 'dashboard' | 'reset-password' | 'invite';
 
 function AppInner() {
   const { user, profile, profileResolved, loading, signOut } = useAuth();
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   void profile; // used in useEffect below
-  const [currentView, setCurrentView] = useState<AppView>(AUTH_LINK.recovery ? 'reset-password' : 'landing');
+  const [inviteToken, setInviteToken] = useState<string | null>(INVITE_AT_LOAD);
+  const [signedUpHere, setSignedUpHere] = useState(false);
+  const [currentView, setCurrentView] = useState<AppView>(AUTH_LINK.recovery ? 'reset-password' : INVITE_AT_LOAD ? 'invite' : 'landing');
   const [selectedPortal, setSelectedPortal] = useState<PortalType | null>(
     () => (localStorage.getItem('apex_portal') as PortalType | null)
   );
@@ -57,6 +60,21 @@ function AppInner() {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  // Someone already signed in opened an invitation link → skip the sign-up page, go to their portal and claim it
+  useEffect(() => {
+    if (currentView === 'invite' && user && profileResolved && !signedUpHere) setCurrentView('landing');
+  }, [currentView, user, profileResolved, signedUpHere]);
+
+  // A signed-in hunter who opened their invitation link: attach the workshop's profile to this account
+  useEffect(() => {
+    if (!user || !profileResolved || profile || !inviteToken || currentView === 'invite') return;
+    (async () => {
+      const { error } = await (supabase as any).rpc('claim_client_invite', { p_token: inviteToken });
+      if (error) toast.error(error.message);
+      clearInviteToken(); setInviteToken(null);
+    })();
+  }, [user, profile, profileResolved, inviteToken, currentView]);
 
   // Auto-redirect authenticated users to their portal
   useEffect(() => {
@@ -167,6 +185,23 @@ function AppInner() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
       </div>
+    );
+  }
+
+  // Invitation from the workshop's welcome message
+  if (currentView === 'invite' && inviteToken && (!user || signedUpHere)) {
+    return (
+      <ErrorBoundary>
+        <ThemeProvider>
+          <InviteScreen
+            token={inviteToken}
+            onAccountCreated={() => setSignedUpHere(true)}
+            onDone={() => { setInviteToken(null); setPortalAndPersist('hunter'); setCurrentView('portal'); }}
+            onSignIn={() => { setPortalAndPersist('hunter'); setCurrentView('login'); }}
+          />
+          <Toaster closeButton toastOptions={{ duration: 9000 }} />
+        </ThemeProvider>
+      </ErrorBoundary>
     );
   }
 
