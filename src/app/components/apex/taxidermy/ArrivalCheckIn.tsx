@@ -235,7 +235,7 @@ export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
   // ── steps ──────────────────────────────────────────────────────────────────
   const steps = ['Hunter', 'Animals', 'Check'];
   return (
-    <div className="max-w-xl mx-auto pb-28">
+    <div className="max-w-xl mx-auto pb-44 lg:pb-28">
       <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Arrival check-in</h1>
       <div className="flex items-center gap-2 my-4">
         {steps.map((s, i) => (
@@ -410,7 +410,7 @@ export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
       )}
 
       {/* action bar, always in reach on a phone */}
-      <div className="fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-slate-950/95 backdrop-blur border-t border-slate-200 dark:border-slate-700 p-3 lg:left-60">
+      <div className="fixed bottom-16 lg:bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-slate-950/95 backdrop-blur border-t border-slate-200 dark:border-slate-700 p-3 lg:left-60">
         <div className="max-w-xl mx-auto flex gap-2">
           {step > 1 && <button className={`${bigBtn} border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100`} onClick={() => setStep((step - 1) as 1 | 2)}><ArrowLeft className="w-5 h-5" />Back</button>}
           {step === 1 && <button className={`${bigBtn} flex-1 bg-[#0073ea] text-white`} disabled={!whoOk || (mode === 'new' && !client && fresh.full_name.trim().length < 2)} onClick={() => setStep(2)}>Next: what came in<ArrowRight className="w-5 h-5" /></button>}

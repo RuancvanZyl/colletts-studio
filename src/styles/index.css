@@ -3,3 +3,16 @@
 @import 'tw-animate-css';
 @import './default_theme.css';
 @import './globals.css';
+
+/* ── Staff portal readability ─────────────────────────────────────────────────
+   Many screens use very small type (9–11px). On a phone in a workshop that is unreadable,
+   so inside the staff portal nothing is allowed to be smaller than ~12.5px. */
+.staff-readable .text-\[9px\]  { font-size: 12px; }
+.staff-readable .text-\[10px\] { font-size: 12.5px; }
+.staff-readable .text-\[11px\] { font-size: 13px; }
+.staff-readable .text-xs       { font-size: 0.82rem; line-height: 1.3rem; }
+.staff-readable .text-slate-400 { color: #a9b8c6; }
+.staff-readable .text-slate-500 { color: #b4c2cf; }
+.staff-readable .text-\[\#7AADB8\] { color: #b5d3db; }
+.staff-readable .text-\[\#7AADB8\]\/60 { color: #98b8c1; }
+.staff-readable .text-\[\#7AADB8\]\/70 { color: #a6c4cc; }

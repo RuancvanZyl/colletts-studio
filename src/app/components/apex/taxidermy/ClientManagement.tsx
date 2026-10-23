@@ -577,7 +577,7 @@ export function ClientManagement({ initialClientId }: { initialClientId?: string
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-slate-900 dark:text-slate-100">Client Management</h1>
+          <h1 className="text-slate-900 dark:text-slate-100">Hunters</h1>
           <p className="text-slate-500 text-sm">{clients.length} clients · {localCount} local · {exportCount} export</p>
         </div>
         <div className="flex gap-2">

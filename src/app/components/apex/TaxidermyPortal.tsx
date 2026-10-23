@@ -41,6 +41,11 @@ import { DispatchBoard } from './taxidermy/DispatchBoard';
 import { OfflineBanner } from './shared/OfflineBanner';
 import { Messages } from './taxidermy/Messages';
 import { WorkshopSetup } from './taxidermy/WorkshopSetup';
+import { TodayScreen } from './taxidermy/TodayScreen';
+import { StationsHome } from './taxidermy/StationsHome';
+import { ClientStatusBoard } from './taxidermy/ClientStatusBoard';
+import { SectionTabs } from './shared/SectionTabs';
+import { STATIONS } from '../../../lib/stations';
 import { useUnreadMessages, canCommunicate } from '../../../lib/hooks/useMessages';
 import { NoticeBoard } from './shared/NoticeBoard';
 import { GlobalSearch } from './shared/GlobalSearch';
@@ -49,7 +54,7 @@ import { Input } from '../ui/input';
 import {
   LayoutDashboard, Scan, ClipboardCheck, Droplet, Skull,
   Warehouse, Scissors, Paintbrush, CheckCircle2, Package,
-  List, Settings, Search, LogOut, Menu, X, Moon, Sun,
+  List, Settings, Search, LogOut, Menu, X, Moon, Sun, Home, MoreHorizontal,
   Users, FileText, ChevronRight, ChevronLeft, BarChart3, ClipboardList, ListTodo, FolderOpen, CreditCard, Calendar, MessageCircle, AlertTriangle, Clock,
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
@@ -92,7 +97,9 @@ type TaxidermyView =
   | 'hunt-archive'
   | 'client-care'
   | 'deadline-watch'
-  | 'awaiting-instruction';
+  | 'awaiting-instruction'
+  | 'stations'
+  | 'status-board';
 
 interface NavItem {
   view: TaxidermyView;
@@ -117,6 +124,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [navClientId, setNavClientId] = useState<string | undefined>(undefined);
   const [myTaskCount, setMyTaskCount] = useState<number | null>(null);
+  const [lastTab, setLastTab] = useState<Record<string, string>>({});
   const { theme, toggleTheme } = useTheme();
   const { profile, profileError } = useAuth();
 
@@ -244,6 +252,9 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     setCurrentView(view as TaxidermyView);
     setNavClientId(clientId);
     setSidebarOpen(false);
+    window.scrollTo({ top: 0 });
+    const sec = sectionOf(view);
+    if (sec) setLastTab(m => ({ ...m, [sec.key]: STATION_VIEWS.includes(view) ? 'stations' : view }));
   };
 
   const role = profile?.role;
@@ -286,10 +297,11 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     if (isAdmin) return true;
     // Everyone gets their tasks + daily list + workshop instructions
     if (['daily-todo', 'tasks', 'workshop-brief', 'messages'].includes(view)) return true;
+    if (view === 'stations') return STATIONS.some(st => canSeeView(st.view as TaxidermyView));
     // department managers also handle client conversations
     if (isManager && view === 'client-inbox') return true;
     if (isBookkeeper) {
-      return ['summary', 'dashboard', 'client-inbox', 'payment-confirmation', 'invoices', 'inventory', 'clients', 'hunt-archive', 'client-care', 'deadline-watch', 'awaiting-instruction'].includes(view);
+      return ['summary', 'dashboard', 'client-inbox', 'payment-confirmation', 'invoices', 'inventory', 'clients', 'hunt-archive', 'client-care', 'deadline-watch', 'awaiting-instruction', 'status-board'].includes(view);
     }
     // Department staff / ground staff: only stations in their departments
     const deptsNeeded = VIEW_DEPT[view];
@@ -297,86 +309,66 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     return false; // summary, dashboard, job tracker, clients, business, staff — admin/bookkeeper only
   };
 
-  const allNavGroups: (NavGroup & { roles?: string[] })[] = [
-    {
-      heading: 'Overview',
-      items: [
-        { view: 'summary',   icon: BarChart3,       label: 'Workshop Whiteboard' },
-        { view: 'daily-todo', icon: Calendar,        label: 'Daily Tasks' },
-        { view: 'tasks',     icon: ListTodo,        label: 'My Tasks', badge: myTaskCount },
-        { view: 'messages' as TaxidermyView, icon: MessageCircle, label: 'Messages', badge: unreadMessages },
-        ...(isManager && !canSeeBusiness ? [{ view: 'client-inbox' as TaxidermyView, icon: MessageCircle, label: 'Client Messages' }] : []),
-      ],
-    },
-    {
-      heading: 'Intake',
-      items: [
-        { view: 'scan',        icon: Scan,          label: 'Scan Parts' },
-        { view: 'arrival',     icon: ClipboardCheck, label: 'Arrival Check-In' },
-        { view: 'receiving',   icon: ClipboardList,  label: 'Receiving Sheet' },
-        { view: 'quick-entry',    icon: ClipboardList,  label: 'Quick Job Entry' },
-        { view: 'dropbox-import', icon: FolderOpen,     label: 'Dropbox Import' },
-      ],
-    },
-    {
-      heading: 'Processing',
-      items: [
-        { view: 'skinning',         icon: Scissors,  label: 'Skinning' },
-        { view: 'salting',          icon: Droplet,   label: 'Salting' },
-        { view: 'tannery',          icon: Droplet,   label: 'Tannery' },
-        { view: 'skin-processing',  icon: Droplet,   label: 'Cleaning & Bleach' },
-        { view: 'skull-processing', icon: Skull,     label: 'Skull Processing' },
-        { view: 'dip-pack',         icon: Package,   label: 'Dip & Pack' },
-        { view: 'storage',          icon: Warehouse, label: 'Storage' },
-      ],
-    },
-    {
-      heading: 'Assembly',
-      items: [
-        { view: 'mounting',  icon: Scissors,    label: 'Mounting' },
-        { view: 'finishing', icon: Paintbrush,  label: 'Finishing' },
-        { view: 'quality',   icon: CheckCircle2, label: 'Quality Check' },
-      ],
-    },
-    {
-      heading: 'Logistics',
-      items: [
-        { view: 'workshop-brief', icon: ClipboardList, label: 'Job Cards' },
-        { view: 'packing',       icon: Package, label: 'Packing & Crating' },
-        { view: 'photos-admin',  icon: FileText, label: 'Photos & Dispatch' },
-        { view: 'ready-to-ship', icon: Package, label: 'Ready to Ship' },
-        { view: 'inventory',     icon: List,    label: 'Job Tracker' },
-        { view: 'hunt-archive',  icon: FolderOpen, label: 'Hunt Archive' },
-        { view: 'clients',      icon: Users,   label: 'Clients' },
-        { view: 'client-care',   icon: MessageCircle, label: 'Client Care' },
-        { view: 'deadline-watch', icon: AlertTriangle, label: 'Deadline Watch' },
-        { view: 'awaiting-instruction', icon: Clock, label: 'Awaiting Instruction' },
-      ],
-    },
-    ...(canSeeBusiness ? [{
-      heading: 'Business',
-      items: [
-        { view: 'client-inbox' as TaxidermyView, icon: MessageCircle, label: 'Client Messages' },
-        { view: 'payment-confirmation' as TaxidermyView, icon: CreditCard, label: 'Payments' },
-        { view: 'invoices' as TaxidermyView, icon: FileText, label: 'Invoicing' },
-        ...(isAdmin ? [{ view: 'admin' as TaxidermyView, icon: Settings, label: 'Admin' }] : []),
-      ],
-    }] : []),
-    ...(isAdmin ? [{
-      heading: 'Staff',
-      items: [
-        { view: 'dispatch' as TaxidermyView,           icon: ListTodo, label: 'Dispatch Board' },
-        { view: 'staff-overview' as TaxidermyView,    icon: Users,    label: 'Staff Overview' },
-        { view: 'staff-management' as TaxidermyView,  icon: Settings, label: 'Manage Staff' },
-        { view: 'workshop-setup' as TaxidermyView,    icon: ClipboardCheck, label: 'Workshop Setup' },
-      ],
-    }] : []),
+  // ── The menu: a few plain sections; related screens are tabs inside them ────────────
+  interface Section { key: string; label: string; icon: React.ComponentType<{ className?: string }>; tabs: { view: TaxidermyView; label: string; badge?: number | null }[] }
+  const allSections: Section[] = [
+    { key: 'today', label: isAdmin || isBookkeeper ? 'Today' : 'My work', icon: Home, tabs: [
+      { view: 'summary',    label: 'Overview' },
+      { view: 'tasks',      label: 'My tasks', badge: isAdmin ? null : myTaskCount },
+      { view: 'daily-todo', label: 'Daily list' },
+    ] },
+    { key: 'checkin', label: 'Check in', icon: ClipboardCheck, tabs: [
+      { view: 'arrival',     label: 'Check in trophies' },
+      { view: 'receiving',   label: 'Receiving sheet' },
+      { view: 'scan',        label: 'Scan parts' },
+      { view: 'quick-entry', label: 'Quick job entry' },
+    ] },
+    { key: 'hunters', label: 'Hunters', icon: Users, tabs: [
+      { view: 'clients',              label: 'All hunters' },
+      { view: 'client-care',          label: 'Need contact' },
+      { view: 'awaiting-instruction', label: 'Waiting for mounts' },
+      { view: 'deadline-watch',       label: 'Past deadline' },
+      { view: 'status-board',         label: 'Status board' },
+      { view: 'hunt-archive',         label: 'Archive' },
+    ] },
+    { key: 'workshop', label: 'Workshop', icon: Scissors, tabs: [
+      { view: 'workshop-brief', label: 'Job cards' },
+      { view: 'stations',       label: 'Stations' },
+      { view: 'dispatch',       label: 'Assign work' },
+      { view: 'inventory',      label: 'Job tracker' },
+      { view: 'staff-overview', label: 'Who does what' },
+    ] },
+    { key: 'shipping', label: 'Shipping', icon: Package, tabs: [
+      { view: 'packing',       label: 'Packing' },
+      { view: 'photos-admin',  label: 'Photos & dispatch' },
+      { view: 'ready-to-ship', label: 'Ready to ship' },
+    ] },
+    { key: 'messages', label: 'Messages', icon: MessageCircle, tabs: [
+      { view: 'messages',     label: 'Team', badge: unreadMessages },
+      { view: 'client-inbox', label: 'Hunters' },
+    ] },
+    { key: 'money', label: 'Money', icon: CreditCard, tabs: [
+      { view: 'payment-confirmation', label: 'Payments' },
+      { view: 'invoices',             label: 'Invoices' },
+    ] },
+    { key: 'setup', label: 'Setup', icon: Settings, tabs: [
+      { view: 'staff-management', label: 'Staff' },
+      { view: 'workshop-setup',   label: 'Checklists' },
+      { view: 'admin',            label: 'Settings' },
+      { view: 'dropbox-import',   label: 'Dropbox import' },
+    ] },
   ];
 
-  // Filter every group's items by role tier; drop empty groups
-  const navGroups = allNavGroups
-    .map(g => ({ ...g, items: g.items.filter(i => canSeeView(i.view)) }))
-    .filter(g => g.items.length > 0);
+  const STATION_VIEWS = STATIONS.map(st => st.view);
+  const sections = allSections
+    .map(sec => ({ ...sec, tabs: sec.tabs.filter(t => canSeeView(t.view)) }))
+    .filter(sec => sec.tabs.length > 0);
+  const sectionOf = (v: string) => sections.find(sec => sec.tabs.some(t => t.view === v) || (sec.key === 'workshop' && STATION_VIEWS.includes(v)));
+  const activeSection = sectionOf(currentView);
+  const activeTab = STATION_VIEWS.includes(currentView) ? 'stations' : currentView;
+  const sectionBadge = (sec: { tabs: { badge?: number | null }[] }) => sec.tabs.reduce((n, t) => n + (t.badge ?? 0), 0);
+  const openSection = (sec: { key: string; tabs: { view: TaxidermyView }[] }) => navigate(lastTab[sec.key] && sec.tabs.some(t => t.view === lastTab[sec.key]) ? lastTab[sec.key] : sec.tabs[0].view);
+  const viewLabel = (v: string) => STATIONS.find(st => st.view === v)?.label ?? sections.flatMap(sec => sec.tabs).find(t => t.view === v)?.label ?? v.replace(/-/g, ' ');
 
   const renderView = () => {
     // Enforce role tier — even if a view is reached programmatically
@@ -384,10 +376,12 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     switch (currentView) {
       case 'daily-todo':      return <DailyTodoList onNavigateDept={navigate} />;
       case 'tasks':           return <MyTasks />;
-      case 'summary':         return <SummarySheet onNavigate={navigate} />;
+      case 'summary':         return <TodayScreen onNavigate={navigate} />;
+      case 'stations':        return <StationsHome stations={STATIONS.filter(st => canSeeView(st.view as TaxidermyView))} onOpen={navigate} />;
+      case 'status-board':    return <ClientStatusBoard onNavigate={navigate} />;
       case 'dashboard':       return <WorkshopDashboard onNavigate={navigate} />;
       case 'scan':            return <PartScanningStation onNavigate={navigate} />;
-      case 'arrival':         return <ArrivalCheckIn onComplete={() => navigate('receiving')} />;
+      case 'arrival':         return <ArrivalCheckIn onComplete={() => navigate(isAdmin ? 'summary' : 'tasks')} />;
       case 'receiving':       return <ReceivingSheet onNavigate={navigate} />;
       case 'quick-entry':     return <QuickJobEntry onDone={() => navigate('tasks')} />;
       case 'dropbox-import':  return <DropboxImport />;
@@ -420,12 +414,12 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'deadline-watch':    return <DeadlineWatch onOpenHunt={(clientId) => navigate('clients', clientId)} />;
       case 'awaiting-instruction': return <AwaitingInstruction onOpenClient={(id) => navigate('clients', id)} />;
       case 'staff-management':  return <StaffManagement />;
-      default:                  return <SummarySheet onNavigate={navigate} />;
+      default:                  return <TodayScreen onNavigate={navigate} />;
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#080C0C] dark:bg-[#080C0C] flex">
+    <div className="staff-readable min-h-screen bg-[#080C0C] dark:bg-[#080C0C] flex">
 
       {/* ── Sidebar ─────────────────────────────────────── */}
       <aside className={`
@@ -451,36 +445,30 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-5">
-          {navGroups.map(group => (
-            <div key={group.heading}>
-              <p className="text-[9px] font-bold text-[#3AAECC]/50 uppercase tracking-[0.18em] px-3 mb-1.5">
-                {group.heading}
-              </p>
-              {group.items.map(item => {
-                const active = currentView === item.view;
-                return (
-                  <button
-                    key={item.view}
-                    onClick={() => navigate(item.view)}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
-                      active
-                        ? 'bg-[rgba(58,174,204,0.15)] text-[#3AAECC] border border-[rgba(58,174,204,0.3)]'
-                        : 'text-[#7AADB8] hover:bg-[rgba(58,174,204,0.07)] hover:text-[#EDF6F9]'
-                    }`}
-                  >
-                    <item.icon className={`w-4 h-4 flex-shrink-0 ${active ? 'text-[#3AAECC]' : ''}`} />
-                    <span className="truncate font-medium">{item.label}</span>
-                    {item.badge != null && item.badge > 0 && (
-                      <span className="ml-auto bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center flex-shrink-0">
-                        {item.badge > 9 ? '9+' : item.badge}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
+        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1.5">
+          {sections.map(sec => {
+            const active = activeSection?.key === sec.key;
+            const badge = sectionBadge(sec);
+            return (
+              <button
+                key={sec.key}
+                onClick={() => openSection(sec)}
+                className={`w-full flex items-center gap-3 px-4 min-h-12 rounded-xl text-base transition-colors ${
+                  active
+                    ? 'bg-[rgba(58,174,204,0.18)] text-white border border-[rgba(58,174,204,0.4)] font-semibold'
+                    : 'text-[#B5D3DB] hover:bg-[rgba(58,174,204,0.08)] hover:text-white border border-transparent'
+                }`}
+              >
+                <sec.icon className={`w-5 h-5 flex-shrink-0 ${active ? 'text-[#3AAECC]' : ''}`} />
+                <span className="truncate">{sec.label}</span>
+                {badge > 0 && (
+                  <span className="ml-auto bg-red-500 text-white text-xs font-bold rounded-full min-w-5 h-5 px-1 flex items-center justify-center flex-shrink-0">
+                    {badge > 9 ? '9+' : badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </nav>
 
         {/* User */}
@@ -527,19 +515,11 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
             <Menu className="w-5 h-5" />
           </button>
 
-          {/* Breadcrumb */}
-          <div className="hidden sm:flex items-center gap-1 text-sm text-[#7AADB8]">
-            <button
-              onClick={() => navigate('tasks')}
-              className="hover:text-[#EDF6F9] transition-colors flex items-center gap-1"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-              Workshop
-            </button>
-            <ChevronRight className="w-3.5 h-3.5" />
-            <span className="text-[#EDF6F9] font-medium capitalize">
-              {currentView.replace(/-/g, ' ')}
-            </span>
+          {/* Where am I */}
+          <div className="flex items-center gap-1.5 text-base text-[#B5D3DB] min-w-0">
+            {activeSection && <span className="hidden sm:inline">{activeSection.label}</span>}
+            {activeSection && <ChevronRight className="hidden sm:block w-4 h-4 shrink-0" />}
+            <span className="text-white font-semibold truncate">{viewLabel(currentView)}</span>
           </div>
 
           {/* Search */}
@@ -563,10 +543,39 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 min-w-0 p-4 md:p-6 overflow-x-auto bg-[#080C0C]">
+        <main className="flex-1 min-w-0 p-4 md:p-6 pb-28 lg:pb-6 overflow-x-auto bg-[#080C0C]">
           <OfflineBanner />
+          {activeSection && (
+            <>
+              <SectionTabs tabs={activeSection.tabs} active={activeTab} onSelect={navigate} />
+              {STATION_VIEWS.includes(currentView) && (
+                <button onClick={() => navigate('stations')} className="mb-3 -mt-2 inline-flex items-center gap-1 text-base text-[#3AAECC] font-semibold min-h-11">
+                  <ChevronLeft className="w-4 h-4" />All stations
+                </button>
+              )}
+            </>
+          )}
           {renderView()}
         </main>
+
+        {/* Phone: the four main places, always one tap away */}
+        <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-[#0F1A1C] border-t border-[rgba(58,174,204,0.2)] grid" style={{ gridTemplateColumns: `repeat(${Math.min(sections.length, 5)}, minmax(0, 1fr))` }}>
+          {sections.slice(0, sections.length > 5 ? 4 : 5).map(sec => {
+            const active = activeSection?.key === sec.key;
+            const badge = sectionBadge(sec);
+            return (
+              <button key={sec.key} onClick={() => openSection(sec)} className={`relative flex flex-col items-center justify-center gap-0.5 min-h-16 text-xs font-semibold ${active ? 'text-[#3AAECC]' : 'text-[#B5D3DB]'}`}>
+                <sec.icon className="w-6 h-6" />{sec.label}
+                {badge > 0 && <span className="absolute top-1.5 left-1/2 ml-2 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-4 h-4 px-1 flex items-center justify-center">{badge > 9 ? '9+' : badge}</span>}
+              </button>
+            );
+          })}
+          {sections.length > 5 && (
+            <button onClick={() => setSidebarOpen(true)} className="flex flex-col items-center justify-center gap-0.5 min-h-16 text-xs font-semibold text-[#B5D3DB]">
+              <MoreHorizontal className="w-6 h-6" />More
+            </button>
+          )}
+        </nav>
       </div>
     </div>
   );
