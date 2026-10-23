@@ -15,6 +15,7 @@ import { useDeadlineWatch } from '../../../../lib/hooks/useDeadlineWatch';
 import { useAwaitingInstruction } from '../../../../lib/hooks/useAwaitingInstruction';
 import { DEPT_COLORS } from '../../../../lib/pipeline';
 import { ClientStatusBoard } from './ClientStatusBoard';
+import { DEPT_TO_VIEW } from '../../../../lib/stations';
 
 interface SummarySheetProps {
   onNavigate: (view: string, clientId?: string) => void;
@@ -148,7 +149,7 @@ export function SummarySheet({ onNavigate }: SummarySheetProps) {
                   return (
                     <button
                       key={d.dept}
-                      onClick={() => onNavigate(d.dept.replace('_', '-'))}
+                      onClick={() => onNavigate(DEPT_TO_VIEW[d.dept] ?? 'workshop-brief')}
                       className="flex-shrink-0 flex flex-col items-center gap-1 px-4 py-3 rounded-lg border-2 hover:shadow-md transition-all min-w-[88px]"
                       style={{ borderColor: color, backgroundColor: color + '15' }}
                     >

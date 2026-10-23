@@ -99,7 +99,8 @@ type TaxidermyView =
   | 'deadline-watch'
   | 'awaiting-instruction'
   | 'stations'
-  | 'status-board';
+  | 'status-board'
+  | 'whiteboard';
 
 interface NavItem {
   view: TaxidermyView;
@@ -155,7 +156,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
   useEffect(() => {
     if (!profile?.role || landed) return;
     setLanded(true);
-    if (['admin', 'studio_manager'].includes(profile.role)) setCurrentView('summary');
+    if (['admin', 'studio_manager'].includes(profile.role)) setCurrentView('whiteboard');
     else if (profile.role === 'bookkeeper') setCurrentView('payment-confirmation');
     else setCurrentView('tasks');
   }, [profile?.role, landed]);
@@ -301,7 +302,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     // department managers also handle client conversations
     if (isManager && view === 'client-inbox') return true;
     if (isBookkeeper) {
-      return ['summary', 'dashboard', 'client-inbox', 'payment-confirmation', 'invoices', 'inventory', 'clients', 'hunt-archive', 'client-care', 'deadline-watch', 'awaiting-instruction', 'status-board'].includes(view);
+      return ['summary', 'whiteboard', 'dashboard', 'client-inbox', 'payment-confirmation', 'invoices', 'inventory', 'clients', 'hunt-archive', 'client-care', 'deadline-watch', 'awaiting-instruction', 'status-board'].includes(view);
     }
     // Department staff / ground staff: only stations in their departments
     const deptsNeeded = VIEW_DEPT[view];
@@ -313,7 +314,8 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
   interface Section { key: string; label: string; icon: React.ComponentType<{ className?: string }>; tabs: { view: TaxidermyView; label: string; badge?: number | null }[] }
   const allSections: Section[] = [
     { key: 'today', label: isAdmin || isBookkeeper ? 'Today' : 'My work', icon: Home, tabs: [
-      { view: 'summary',    label: 'Overview' },
+      { view: 'whiteboard', label: 'Whiteboard' },
+      { view: 'summary',    label: 'Needs you' },
       { view: 'tasks',      label: 'My tasks', badge: isAdmin ? null : myTaskCount },
       { view: 'daily-todo', label: 'Daily list' },
     ] },
@@ -377,11 +379,12 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'daily-todo':      return <DailyTodoList onNavigateDept={navigate} />;
       case 'tasks':           return <MyTasks />;
       case 'summary':         return <TodayScreen onNavigate={navigate} />;
+      case 'whiteboard':      return <SummarySheet onNavigate={navigate} />;
       case 'stations':        return <StationsHome stations={STATIONS.filter(st => canSeeView(st.view as TaxidermyView))} onOpen={navigate} />;
       case 'status-board':    return <ClientStatusBoard onNavigate={navigate} />;
       case 'dashboard':       return <WorkshopDashboard onNavigate={navigate} />;
       case 'scan':            return <PartScanningStation onNavigate={navigate} />;
-      case 'arrival':         return <ArrivalCheckIn onComplete={() => navigate(isAdmin ? 'summary' : 'tasks')} />;
+      case 'arrival':         return <ArrivalCheckIn onComplete={() => navigate(isAdmin ? 'whiteboard' : 'tasks')} />;
       case 'receiving':       return <ReceivingSheet onNavigate={navigate} />;
       case 'quick-entry':     return <QuickJobEntry onDone={() => navigate('tasks')} />;
       case 'dropbox-import':  return <DropboxImport />;
