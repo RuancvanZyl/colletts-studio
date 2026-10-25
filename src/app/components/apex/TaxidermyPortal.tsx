@@ -42,6 +42,7 @@ import { OfflineBanner } from './shared/OfflineBanner';
 import { Messages } from './taxidermy/Messages';
 import { WorkshopSetup } from './taxidermy/WorkshopSetup';
 import { TodayScreen } from './taxidermy/TodayScreen';
+import { AnimalGuideEditor } from './taxidermy/AnimalGuideEditor';
 import { StationsHome } from './taxidermy/StationsHome';
 import { ClientStatusBoard } from './taxidermy/ClientStatusBoard';
 import { SectionTabs } from './shared/SectionTabs';
@@ -100,7 +101,8 @@ type TaxidermyView =
   | 'awaiting-instruction'
   | 'stations'
   | 'status-board'
-  | 'whiteboard';
+  | 'whiteboard'
+  | 'animal-guide';
 
 interface NavItem {
   view: TaxidermyView;
@@ -356,6 +358,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     { key: 'setup', label: 'Setup', icon: Settings, tabs: [
       { view: 'staff-management', label: 'Staff' },
       { view: 'workshop-setup',   label: 'Checklists' },
+      { view: 'animal-guide',     label: 'Animal guide' },
       { view: 'admin',            label: 'Settings' },
       { view: 'dropbox-import',   label: 'Dropbox import' },
     ] },
@@ -380,6 +383,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'tasks':           return <MyTasks />;
       case 'summary':         return <TodayScreen onNavigate={navigate} />;
       case 'whiteboard':      return <SummarySheet onNavigate={navigate} />;
+      case 'animal-guide':    return <AnimalGuideEditor />;
       case 'stations':        return <StationsHome stations={STATIONS.filter(st => canSeeView(st.view as TaxidermyView))} onOpen={navigate} />;
       case 'status-board':    return <ClientStatusBoard onNavigate={navigate} />;
       case 'dashboard':       return <WorkshopDashboard onNavigate={navigate} />;

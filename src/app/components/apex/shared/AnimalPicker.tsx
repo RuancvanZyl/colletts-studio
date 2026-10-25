@@ -9,6 +9,8 @@ import { Plus, Search, Trash2, Minus } from 'lucide-react';
 import { toast } from 'sonner';
 import { SPECIES, SPECIES_GROUPS, findSpecies, sciName, composeName, variantsOf, splitVariant, type Species } from '../../../../lib/species';
 import { GROUP_STYLE, rankOf } from '../../../../lib/collection';
+import { SpeciesGuide } from '../hunter/SpeciesGuide';
+import { Info } from 'lucide-react';
 import { speciesEmoji } from '../../../../lib/pricing';
 
 const POPULAR = ['Kudu', 'Impala', 'Wildebeest (Blue)', 'Zebra (Burchell\'s)', 'Warthog', 'Gemsbok', 'Springbok', 'Eland', 'Waterbuck', 'Blesbok', 'Nyala', 'Bushbuck', 'Giraffe', 'Buffalo (Cape)', 'Sable', 'Hartebeest', 'Tsessebe', 'Wildebeest (Black)', 'Duiker (Common)', 'Steenbok', 'Lion', 'Leopard'];
@@ -67,6 +69,7 @@ export function AnimalPicker({ items, onChange, hunted }: { items: PickedAnimal[
   const [query, setQuery] = useState('');
   const [group, setGroup] = useState('Popular');
   const [justAdded, setJustAdded] = useState<string | null>(null);
+  const [guide, setGuide] = useState<string | null>(null);
   const list = useCatalogue(query, group);
   const before = hunted ?? new Set<string>();
   const live = new Set<string>([...before, ...items.map(i => i.base)]);
@@ -80,6 +83,7 @@ export function AnimalPicker({ items, onChange, hunted }: { items: PickedAnimal[
 
   return (
     <div className="space-y-4">
+      {guide && <SpeciesGuide species={guide} collected={0} onClose={() => setGuide(null)} />}
       <CollectionStrip speciesCount={[...live].filter(n => n !== 'Other').length} total={SPECIES.length - 1} />
 
       {items.length > 0 && (
@@ -129,6 +133,7 @@ export function AnimalPicker({ items, onChange, hunted }: { items: PickedAnimal[
                   {sp.sci && <span className="block text-[11px] italic text-slate-500 leading-snug mt-0.5">{sp.sci}</span>}
                 </span>
               </button>
+              <button type="button" aria-label={`About the ${sp.name}`} onClick={() => setGuide(sp.name)} className="absolute bottom-2 left-2 min-h-9 min-w-9 rounded-full bg-white/90 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 flex items-center justify-center"><Info className="w-4 h-4" /></button>
               {isNew && n === 0 && <span className="absolute top-2 left-2 text-[11px] font-bold rounded-full bg-amber-400 text-amber-950 px-2 py-0.5">NEW</span>}
               {sp.variants && <span className="absolute top-2 right-2 text-[11px] font-semibold rounded-full bg-white/90 text-slate-700 px-2 py-0.5">colours</span>}
               {n > 0 ? (

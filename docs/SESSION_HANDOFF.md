@@ -11,3 +11,8 @@
 - Hunter portal: "Add my animals" (only once the hunt has ended; enforced in `hunter_register_animals`), collectible card picker, My collection (life list, ranks, badges), pose choice (head direction + neck), prices shown, CUSTOM mount (description, reference photos, combine several animals into one) and REPLICA (type + reasons).
 - Staff Arrival Check-In shows "expected" animals the hunter registered; tap "It arrived" and tick the parts instead of creating a duplicate.
 - Needs: run `release_045_hunter_onboarding.sql` THEN `release_046_hunter_preregister.sql` in the Supabase SQL Editor.
+
+## 2026-10-25 — Animal guide (migration 047)
+- Hunters get a field-guide page for every animal (real photos, tracks, Roland Ward record, facts, hunting notes) from the "i" on picker cards, My collection cards, the mount chooser and a daily fact on My collection.
+- Staff fill it in at Setup → Animal guide (admins only). Photos go to the public `species-guide` bucket; add the photographer in Credit. No content is pre-filled — Roland Ward figures must be copied exactly from the record book.
+- Release script (044–047 combined, all run): supabase/launch/release_044_to_047_all.sql

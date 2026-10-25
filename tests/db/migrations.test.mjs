@@ -24,7 +24,7 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql']) {
+for (const f of ['041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
@@ -287,5 +287,18 @@ await db.query(`INSERT INTO trophy_photos (client_id, hunt_doc_id, kind, storage
 ok((await q(`SELECT count(*)::int n FROM trophy_photos WHERE kind='reference'`))[0].n === 1, 'a hunter can attach reference photos to their own animals');
 ok((await fails(`INSERT INTO trophy_photos (client_id, kind, storage_path) VALUES ('c1000000-0000-0000-0000-000000000001','finished','trophy-photos/x/f.jpg')`)) !== null, 'a hunter still cannot add any other kind of photo');
 ok((await fails(`INSERT INTO trophy_photos (client_id, kind, storage_path) VALUES ('${OTHER_CLIENT}','reference','trophy-photos/y/r.jpg')`)) !== null, 'or add photos for someone else');
+
+console.log('\nAnimal guide');
+await as(null);
+await as(ids.admin);
+await db.query(`INSERT INTO species_guide (species, summary, facts, record_label, record_value) VALUES ('Kudu','Tall spiral-horned antelope','[{"kind":"cool","text":"Can clear a 2 m fence"}]'::jsonb,'Horn length','test value')`);
+ok((await q(`SELECT count(*)::int n FROM species_guide`))[0].n === 1, 'an admin can write the animal guide');
+await as(ids.worker);
+ok((await fails(`INSERT INTO species_guide (species) VALUES ('Impala')`)) !== null, 'a worker cannot change the guide');
+ok((await q(`SELECT count(*)::int n FROM species_guide`))[0].n === 1, 'but staff can read it');
+await as(HUN2);
+ok((await q(`SELECT species FROM species_guide`)).length === 1, 'a hunter can read the guide');
+ok((await fails(`UPDATE species_guide SET summary = 'hacked'`)) === null && (await q(`SELECT summary FROM species_guide`))[0].summary === 'Tall spiral-horned antelope', 'a hunter cannot change the guide');
+ok((await fails(`INSERT INTO species_photos (species, kind, storage_path) VALUES ('Kudu','animal','x.jpg')`)) !== null, 'or add photos to it');
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -12,6 +12,7 @@ import { mountsFor, formatPrice, speciesEmoji, HEAD_POSITIONS, NECK_POSITIONS, R
 import { sciName } from '../../../../lib/species';
 import { listParts } from '../../../../lib/received';
 import { savePhotos, shrinkPhoto } from '../../../../lib/offline/photos';
+import { SpeciesGuide } from './SpeciesGuide';
 
 export interface MountAnimal { docId: string; huntId?: string; species: string; parts: { code: string; label: string }[]; other: string; mount: string; instructions: string; expected?: boolean }
 export interface MountPick {
@@ -38,6 +39,7 @@ export function ChooseMounts({ animals, clientType, clientId, combinable = [], o
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [guide, setGuide] = useState<string | null>(null);
 
   const a = animals[i];
   const set = (id: string, p: Partial<MountPick>) => setPicks(prev => ({ ...prev, [id]: { ...prev[id], ...p } }));
@@ -147,6 +149,7 @@ export function ChooseMounts({ animals, clientType, clientId, combinable = [], o
 
   return (
     <div className="max-w-xl mx-auto space-y-4 pb-28">
+      {guide && <SpeciesGuide species={guide} onClose={() => setGuide(null)} />}
       <input ref={fileRef} type="file" accept="image/*" multiple className="hidden"
         onChange={e => { const f = Array.from(e.target.files ?? []); if (f.length) setCustom(a.docId, { files: [...p.custom.files, ...f].slice(0, 6) }); e.target.value = ''; }} />
       <div className="flex items-center justify-between">
@@ -158,6 +161,7 @@ export function ChooseMounts({ animals, clientType, clientId, combinable = [], o
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 leading-tight">{a.species}</h1>
           {sciName(a.species) && <p className="text-sm italic text-slate-500">{sciName(a.species)}</p>}
+          <button type="button" className="text-sm font-semibold text-[#0073ea] min-h-9" onClick={() => setGuide(a.species)}>About this animal</button>
           {!a.expected && <p className="text-sm text-slate-600 dark:text-slate-300">We received: {a.parts.length ? listParts(a.parts.map(x => x.code), a.other) : 'details to follow'}</p>}
         </div>
       </div>
