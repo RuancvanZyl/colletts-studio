@@ -51,6 +51,16 @@ export function QuoteCard({ quote, ref_, onChanged }: { quote: Quote; ref_?: str
           </div>
         )}
 
+        {['accepted', 'deposit_paid', 'paid'].includes(s) && (
+          <div className="grid grid-cols-3 gap-2 text-center">
+            {[{ l: 'Total', v: total }, { l: 'Paid', v: paid }, { l: 'Outstanding', v: Math.max(0, total - paid) }].map(x => (
+              <div key={x.l} className={`rounded-xl border px-2 py-2 bg-white dark:bg-slate-900 ${x.l === 'Outstanding' && x.v > 0.005 ? 'border-amber-400' : 'border-slate-200 dark:border-slate-700'}`}>
+                <p className="text-xs text-slate-500">{x.l}</p><p className="text-base font-bold tabular-nums text-slate-900 dark:text-slate-100">{money(x.v, quote.currency)}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
         <button onClick={() => setOpen(true)} className="w-full min-h-12 rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-bold">{s === 'sent' ? 'Review and accept' : 'View the quote'}</button>
       </div>
       {open && <QuoteSheet quote={quote} total={total} paid={paid} onClose={() => setOpen(false)} onChanged={() => { setOpen(false); onChanged(); }} />}
@@ -105,7 +115,7 @@ function QuoteSheet({ quote, total, paid, onClose, onChanged }: { quote: Quote; 
             <button onClick={() => setAsking(false)} className="w-full min-h-11 text-slate-500">Back</button>
           </>
         )}
-        {quote.status !== 'sent' && paid > 0 && <p className="text-sm text-slate-600 dark:text-slate-300">Received so far: <strong>{money(paid, quote.currency)}</strong>.</p>}
+        {quote.status !== 'sent' && paid > 0 && <p className="text-sm text-slate-600 dark:text-slate-300">Received so far: <strong>{money(paid, quote.currency)}</strong>. Outstanding: <strong>{money(Math.max(0, total - paid), quote.currency)}</strong>.</p>}
       </div>
     </div>
   );

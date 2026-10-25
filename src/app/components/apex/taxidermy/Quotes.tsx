@@ -25,6 +25,10 @@ export function Quotes({ onChanged }: { onChanged?: () => void }) {
   if (open) return <QuoteEditor huntId={open} onBack={() => { setOpen(null); refresh(); onChanged?.(); }} />;
 
   const order = ['to_quote', 'declined', 'awaiting_deposit', 'sent', 'draft', 'authorised'];
+  // money still to come in, from every quote the hunter has accepted
+  const outstanding = ['USD', 'ZAR'].map(cur => ({
+    cur, amount: rows.filter(r => r.currency === cur && ['accepted', 'deposit_paid'].includes(r.quote_status ?? '')).reduce((n, r) => n + Math.max(0, (r.total ?? 0) - r.amount_paid), 0),
+  })).filter(x => x.amount > 0);
   const groups = order.map(s => ({ s, items: rows.filter(r => r.stage === s) })).filter(g => g.items.length);
 
   return (
@@ -33,6 +37,12 @@ export function Quotes({ onChanged }: { onChanged?: () => void }) {
         <h1 className="text-3xl font-bold text-slate-100">Quotes</h1>
         <p className="text-base text-slate-400 mt-1">Hunters who have chosen their mounts, and where each quote stands. Work only starts once the hunter has accepted and paid a deposit or the full amount.</p>
       </div>
+      {outstanding.length > 0 && (
+        <div className="rounded-2xl border-2 border-amber-500 bg-amber-950/20 p-4 flex flex-wrap items-baseline gap-x-6 gap-y-1">
+          <span className="text-sm font-bold uppercase tracking-wider text-amber-300">Amount outstanding</span>
+          {outstanding.map(o => <span key={o.cur} className="text-3xl font-bold text-white tabular-nums">{money(o.amount, o.cur)}</span>)}
+        </div>
+      )}
       {loading && <div className="flex items-center gap-2 text-slate-400"><Loader2 className="w-5 h-5 animate-spin" />Loading…</div>}
       {!loading && groups.length === 0 && <p className="rounded-2xl border border-dashed border-slate-600 p-8 text-center text-slate-400 text-lg">Nothing to quote right now.</p>}
       {groups.map(g => (
@@ -53,6 +63,9 @@ function Row({ r, onOpen }: { r: PipelineRow; onOpen: () => void }) {
       <span className="flex-1 min-w-0">
         <span className="block text-lg font-semibold text-slate-100">{r.client_name} <span className="font-mono text-xs text-slate-500">{r.ref_number}</span></span>
         <span className="block text-sm text-slate-400">{r.chosen} of {r.animals} animals have a mount{r.total != null ? ` · ${money(r.total, r.currency ?? 'USD')}` : ''}{r.amount_paid > 0 ? ` · paid ${money(r.amount_paid, r.currency ?? 'USD')}` : ''}</span>
+        {r.total != null && ['accepted', 'deposit_paid', 'paid'].includes(r.quote_status ?? '') && (
+          <span className={`block text-sm font-semibold ${r.total - r.amount_paid > 0.005 ? 'text-amber-300' : 'text-emerald-300'}`}>{r.total - r.amount_paid > 0.005 ? `Outstanding ${money(r.total - r.amount_paid, r.currency ?? 'USD')}` : 'Nothing outstanding'}</span>
+        )}
       </span>
       <span className={`text-xs font-semibold rounded-full px-2.5 py-1 whitespace-nowrap ${STAGE_COLOUR[r.stage]}`}>{STAGE_LABEL[r.stage]}</span>
     </button>
@@ -186,7 +199,19 @@ function QuoteEditor({ huntId, onBack }: { huntId: string; onBack: () => void })
       {quote && ['accepted', 'deposit_paid', 'paid'].includes(status) && (
         <section className="space-y-3 rounded-2xl border border-slate-700 bg-[#111c26] p-4">
           <h2 className="text-lg font-bold text-slate-100">Payment</h2>
-          <p className="text-slate-300">The hunter accepted on {quote.accepted_at ? new Date(quote.accepted_at).toLocaleDateString('en-ZA') : ''} and chose to <strong>{quote.payment_option === 'full' ? 'pay in full' : 'pay a deposit first'}</strong>. Due now: <strong>{money(dueNow, quote.currency)}</strong>. Received: <strong>{money(paid, quote.currency)}</strong>. Balance: <strong>{money(Math.max(0, total - paid), quote.currency)}</strong>.</p>
+          <p className="text-slate-300">The hunter accepted on {quote.accepted_at ? new Date(quote.accepted_at).toLocaleDateString('en-ZA') : ''} and chose to <strong>{quote.payment_option === 'full' ? 'pay in full' : 'pay a deposit first'}</strong>.</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {[
+              { l: 'Total', v: total, c: 'text-white' },
+              { l: 'Due now', v: dueNow, c: 'text-white' },
+              { l: 'Received', v: paid, c: 'text-emerald-300' },
+              { l: 'Outstanding', v: Math.max(0, total - paid), c: total - paid > 0.005 ? 'text-amber-300' : 'text-emerald-300' },
+            ].map(x => (
+              <div key={x.l} className={`rounded-xl border px-3 py-2 ${x.l === 'Outstanding' ? 'border-amber-500 bg-amber-950/20' : 'border-slate-700 bg-[#0f1a24]'}`}>
+                <p className="text-xs text-slate-400">{x.l}</p><p className={`text-xl font-bold tabular-nums ${x.c}`}>{money(x.v, quote.currency)}</p>
+              </div>
+            ))}
+          </div>
           {quote.payments.length > 0 && <ul className="text-sm text-slate-300 divide-y divide-slate-800 rounded-lg border border-slate-700">{quote.payments.map(p => <li key={p.id} className="px-3 py-2 flex justify-between gap-3"><span>{new Date(p.received_at).toLocaleDateString('en-ZA')} · {p.method ?? ''} {p.reference ? `· ${p.reference}` : ''}{p.source === 'xero' ? ' · from Xero' : ''}</span><strong>{money(p.amount, quote.currency)}</strong></li>)}</ul>}
           {status !== 'paid' && (
             <div className="grid sm:grid-cols-2 gap-3">
