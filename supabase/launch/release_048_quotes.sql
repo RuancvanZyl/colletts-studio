@@ -3,6 +3,9 @@
 -- confirmed, and only then can the hunt's animals leave Receiving. Hunts that never get a quote (all the existing
 -- ones) are not affected.
 
+-- (an older migration was meant to add these two; some databases never got them)
+alter table client_hunts add column if not exists deposit_amount     numeric(10, 2);
+alter table client_hunts add column if not exists deposit_paid_at    timestamptz;
 alter table client_hunts add column if not exists quote_required       boolean not null default false;
 alter table client_hunts add column if not exists work_authorised_at   timestamptz;
 alter table client_hunts add column if not exists work_authorised_by   uuid references staff_profiles(id);
