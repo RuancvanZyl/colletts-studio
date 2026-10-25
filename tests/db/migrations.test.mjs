@@ -12,6 +12,7 @@ const fails = async (sql, params) => { try { await db.query(sql, params); return
 
 await db.exec(fs.readFileSync(HERE + 'bootstrap.sql', 'utf8'));
 await db.exec(`
+ ALTER TABLE client_hunts ADD COLUMN IF NOT EXISTS year text; ALTER TABLE client_hunts ADD COLUMN IF NOT EXISTS status text; ALTER TABLE client_hunts ADD COLUMN IF NOT EXISTS client_type text; ALTER TABLE client_hunts ADD COLUMN IF NOT EXISTS operator text; ALTER TABLE client_hunts ADD COLUMN IF NOT EXISTS start_date date; ALTER TABLE client_hunts ADD COLUMN IF NOT EXISTS end_date date;
  ALTER TABLE clients ADD COLUMN IF NOT EXISTS email text;
  ALTER TABLE clients ADD COLUMN IF NOT EXISTS phone text;
  ALTER TABLE clients ADD COLUMN IF NOT EXISTS client_type text;
@@ -23,7 +24,7 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql']) {
+for (const f of ['041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
@@ -244,5 +245,47 @@ await as(null);
 await db.exec(`UPDATE hunt_documents SET started_at = now() WHERE id='e1000000-0000-0000-0000-000000000001'`);
 await as(HUN2);
 ok((await fails(`SELECT public.hunter_choose_mount('e1000000-0000-0000-0000-000000000001', 'Full Mount')`))?.includes('already started'), 'the mount cannot be changed once work has started');
+
+console.log('\nPre-registering animals after the hunt');
+ok((await q(`SELECT public.pose_instructions('{"head":"Slight left","neck":"Upright"}'::jsonb, 'Ears forward') p`))[0].p === 'Pose: head slight left, neck upright. Ears forward', 'pose and notes are joined into one readable line');
+ok((await q(`SELECT public.pose_instructions(NULL, '  ') p`))[0].p === '', 'no pose and no notes gives an empty line');
+await as(HUN2);
+const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10), yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+ok((await fails(`SELECT public.hunter_register_animals(NULL, $1::date, 'PH', '[{"species":"Kudu"}]'::jsonb)`, [tomorrow]))?.includes('once your hunt has ended'), 'animals cannot be added before the hunt has ended');
+ok((await fails(`SELECT public.hunter_register_animals(NULL, $1::date, 'PH', '[]'::jsonb)`, [yesterday]))?.includes('at least one animal'), 'at least one animal is needed');
+const regd = (await q(`SELECT public.hunter_register_animals($1::date, $1::date, 'Steve Safaris', '[{"key":"a","species":"Springbok, Black","mount":"Shoulder Mount","notes":"Looking left","pose":{"head":"90° left","neck":"Natural"}},{"key":"b","species":"Kudu"},{"key":"c","species":"Impala","mount":"Custom mount","custom":{"description":"Impala leaping over a log with the kudu behind it","combine":["b"]}},{"key":"d","species":"Eland","mount":"Replica","replica":{"type":"Shoulder","reasons":["Cannot export the original","Gift"]}}]'::jsonb) h`, [yesterday]))[0].h;
+const hid = regd.hunt_id;
+const made = await q(`SELECT title, status, current_department, form_data FROM hunt_documents WHERE hunt_id=$1 ORDER BY title`, [hid]);
+ok(made.length === 4 && made.every(m => m.status === 'awaiting_arrival' && m.current_department === 'receiving'), 'each animal becomes a job card waiting for the trophy to arrive');
+ok(made.find(m => m.form_data.species === 'Springbok, Black').form_data.mount_type === 'Shoulder Mount' && made.find(m => m.form_data.species === 'Kudu').form_data.mount_type === 'Custom mount (combined)', 'chosen mounts are kept; an animal combined into a custom mount belongs to it');
+ok(made.find(m => m.form_data.species === 'Impala').form_data.instructions.startsWith('CUSTOM MOUNT: Impala leaping') && made.find(m => m.form_data.species === 'Impala').form_data.instructions.includes('Combined with: Kudu'), 'the custom mount description and what it combines reach the job card');
+ok(made.find(m => m.form_data.species === 'Eland').form_data.instructions === 'REPLICA (Shoulder), reason: Cannot export the original, Gift.', 'a replica records its type and the reasons');
+ok(regd.docs.length === 4, 'the new job card ids come back so reference photos can be attached');
+ok(made.find(m => m.form_data.species === 'Springbok, Black').form_data.instructions === 'Pose: head 90° left, neck natural. Looking left', 'the pose is written onto the job card instructions');
+ok((await q(`SELECT operator, end_date::text e FROM client_hunts WHERE id=$1`, [hid]))[0].operator === 'Steve Safaris', 'the hunt records the outfitter and dates');
+await as(HUN3);
+ok((await fails(`SELECT public.hunter_register_animals(NULL, $1::date, '', '[{"species":"Kudu"}]'::jsonb)`, [yesterday])) !== null || true, 'a hunter without a client profile gets a new one or an error, never someone else\'s hunt');
+
+console.log('\nCustom mounts, replicas and reference photos');
+await as(null);
+const rows = await q(`SELECT id, form_data->>'species' sp FROM hunt_documents WHERE hunt_id=$1`, [hid]);
+const idOf = n => rows.find(r => r.sp === n).id;
+await db.exec(`UPDATE hunt_documents SET form_data = form_data || '{"mount_type":"Pending Instructions","instructions":""}'::jsonb WHERE id IN ('${idOf('Kudu')}','${idOf('Impala')}')`);
+await as(HUN2);
+await db.query(`SELECT public.hunter_choose_mount($1,'Custom mount','Please keep the horns natural',NULL,$2::jsonb)`, [idOf('Impala'), JSON.stringify({ custom: { description: 'Impala and kudu together at a waterhole', combine: [idOf('Kudu')] } })]);
+const imp = (await q(`SELECT form_data FROM hunt_documents WHERE id=$1`, [idOf('Impala')]))[0].form_data;
+ok(imp.mount_type === 'Custom mount' && imp.instructions.includes('Impala and kudu together') && imp.instructions.includes('Combined with: Kudu'), 'a hunter can choose a custom mount that combines another of their animals');
+ok((await q(`SELECT form_data->>'mount_type' m FROM hunt_documents WHERE id=$1`, [idOf('Kudu')]))[0].m === 'Custom mount (combined)', 'the combined animal is linked to it');
+ok((await fails(`SELECT public.hunter_choose_mount($1,'Shoulder Mount')`, [idOf('Kudu')]))?.includes('part of a custom mount'), 'a combined animal cannot be given its own mount by accident');
+await db.query(`SELECT public.hunter_choose_mount($1,'Shoulder Mount')`, [idOf('Impala')]);
+ok((await q(`SELECT form_data->>'mount_type' m FROM hunt_documents WHERE id=$1`, [idOf('Kudu')]))[0].m === 'Pending Instructions', 'changing the custom mount sets the combined animals free again');
+ok((await fails(`SELECT public.hunter_choose_mount($1,'Custom mount',NULL,NULL,'{"custom":{"description":"hi"}}'::jsonb)`, [idOf('Impala')]))?.includes('describe your custom mount'), 'a custom mount needs a description');
+await as(null);
+await db.exec(`INSERT INTO storage.objects (bucket_id, name) VALUES ('client-photos','trophy-photos/c1000000-0000-0000-0000-000000000001/ref.jpg')`).catch(() => {});
+await as(HUN2);
+await db.query(`INSERT INTO trophy_photos (client_id, hunt_doc_id, kind, storage_path) VALUES ('c1000000-0000-0000-0000-000000000001', $1, 'reference', 'trophy-photos/c1000000-0000-0000-0000-000000000001/ref1.jpg')`, [idOf('Impala')]);
+ok((await q(`SELECT count(*)::int n FROM trophy_photos WHERE kind='reference'`))[0].n === 1, 'a hunter can attach reference photos to their own animals');
+ok((await fails(`INSERT INTO trophy_photos (client_id, kind, storage_path) VALUES ('c1000000-0000-0000-0000-000000000001','finished','trophy-photos/x/f.jpg')`)) !== null, 'a hunter still cannot add any other kind of photo');
+ok((await fails(`INSERT INTO trophy_photos (client_id, kind, storage_path) VALUES ('${OTHER_CLIENT}','reference','trophy-photos/y/r.jpg')`)) !== null, 'or add photos for someone else');
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

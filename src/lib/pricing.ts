@@ -3,14 +3,8 @@
  * Export prices are USD, local prices are ZAR (VAT exclusive). 0 / missing = not offered for that animal.
  */
 
-export const SPECIES_LIST = [
-  'Baboon','Blesbok','Bontebok','Buffalo','Bushbuck','Bushpig','Caracal','Civet','Crocodile',
-  'Duiker','Eland','Elephant','Fallow Deer','Gemsbok','Genet Cat','Giraffe','Grysbok',
-  'Hartebeest','Hippo','Hyena','Impala','Jackal','Klipspringer','Kudu','Lechwe','Leopard',
-  'Lion','Nguni','Nyala','Oribi','Ostrich','Reedbuck (Common)','Reedbuck (Mountain)',
-  'Reedbuck (Vaal)','Sable','Serval','Springbok','Steenbok','Tsessebe','Warthog','Waterbuck',
-  'Wild Cat','Wildebeest (Black)','Wildebeest (Blue)','Vervet Monkey','Zebra','Other',
-];
+import { SPECIES_NAMES, findSpecies } from './species';
+export const SPECIES_LIST = SPECIES_NAMES;
 
 // 2026 Export USD prices — from SA Price List 2026.xlsx (Export Prices folder)
 export const EXPORT_PRICE_DATA: Record<string, Record<string, number>> = {
@@ -114,10 +108,27 @@ export const SPECIES_EMOJI: Record<string, string> = {
   'Zebra': '🦓', 'Zebra (Cape)': '🦓', 'Hippo': '🦛', 'Crocodile': '🐊', 'Impala': '🦌',
   'Kudu': '🦌', 'Warthog': '🐗', 'Wildebeest (Blue)': '🐃', 'Wildebeest (Black)': '🐃',
 };
-export const speciesEmoji = (s: string) => SPECIES_EMOJI[s] ?? '🎯';
+const EMOJI_BY_NAME: Record<string, string> = {
+  'Zebra (Burchell\'s)': '🦓', 'Zebra (Hartmann\'s Mountain)': '🦓', 'Zebra (Cape Mountain)': '🦓', 'Giraffe': '🦒', 'Elephant': '🐘', 'Hippo': '🦛',
+  'Rhinoceros (White)': '🦏', 'Rhinoceros (Black)': '🦏', 'Lion': '🦁', 'Leopard': '🐆', 'Cheetah': '🐆', 'Buffalo (Cape)': '🐃', 'Ostrich': '🦃',
+  'Crocodile (Nile)': '🐊', 'Python (Rock)': '🐍', 'Hyena (Spotted)': '🐺', 'Hyena (Brown)': '🐺', 'Hyena (Striped)': '🐺',
+  'Jackal (Black-backed)': '🐺', 'Jackal (Side-striped)': '🐺', 'Jackal (African golden wolf)': '🐺', 'Fox (Cape)': '🦊', 'Fox (Bat-eared)': '🦊',
+  'Caracal': '🐈', 'Serval': '🐈', 'Wild Cat': '🐈', 'Civet': '🐈', 'Genet (Small-spotted)': '🐈', 'Genet (Large-spotted)': '🐈',
+  'Honey badger': '🦡', 'Porcupine': '🦔', 'Hare (Scrub)': '🐇', 'Hare (Cape)': '🐇', 'Springhare': '🐇', 'Nguni': '🐄',
+  'Duck (Yellow-billed)': '🦆', 'Duck (Red-billed teal)': '🦆', 'Duck (Knob-billed)': '🦆',
+};
+const EMOJI_BY_GROUP: Record<string, string> = {
+  'Antelope': '🦌', 'Buffalo and big game': '🐃', 'Pigs and warthogs': '🐗', 'Predators': '🐆', 'Small carnivores': '🦡',
+  'Primates': '🐒', 'Small game': '🐇', 'Birds': '🐦', 'Reptiles': '🐊', 'Introduced game': '🦌',
+};
+/** A friendly picture for an animal until real illustrations are added. */
+export const speciesEmoji = (s: string) => {
+  const sp = findSpecies(s);
+  return EMOJI_BY_NAME[sp?.name ?? s] ?? SPECIES_EMOJI[s] ?? (sp ? EMOJI_BY_GROUP[sp.group] : undefined) ?? '🎯';
+};
 
 /** What a hunter can choose to have done with an animal. `key` is the column in the price tables. */
-export interface MountOption { name: string; key: string; blurb: string }
+export interface MountOption { name: string; key: string; blurb: string; special?: 'custom' | 'replica' }
 export const MOUNT_OPTIONS: MountOption[] = [
   { name: 'Shoulder Mount',        key: 'shoulder',        blurb: 'Head, neck and shoulders on a wall pedestal — the classic trophy.' },
   { name: 'Offset Shoulder Mount', key: 'offset_shoulder', blurb: 'Shoulder mount with the head turned to one side for a more natural look.' },
@@ -131,23 +142,42 @@ export const MOUNT_OPTIONS: MountOption[] = [
   { name: 'Something else',        key: 'other',           blurb: 'Tell us what you have in mind and we will quote you.' },
 ];
 
+/** The price-list row for an animal: its own name, or the entry the catalogue points to. */
+const priceKeyOf = (species: string) => findSpecies(species)?.priceKey ?? species;
+
 /** Estimated price for a mount, or null when there is no fixed price (we quote it). */
 export function mountPrice(species: string, mountName: string, clientType: string): number | null {
   const opt = MOUNT_OPTIONS.find(m => m.name === mountName);
   if (!opt) return null;
   const table = clientType === 'local' ? LOCAL_PRICE_DATA : EXPORT_PRICE_DATA;
-  const val = table[species]?.[opt.key];
+  const val = table[priceKeyOf(species)]?.[opt.key];
   return val && val > 0 ? val : null;
 }
 
 /** Mount options that have a fixed price for this animal, plus the ones we always quote on request. */
 export function mountsFor(species: string, clientType: string): (MountOption & { price: number | null })[] {
   const table = clientType === 'local' ? LOCAL_PRICE_DATA : EXPORT_PRICE_DATA;
-  const row = table[species];
+  const row = table[priceKeyOf(species)];
   const priced = MOUNT_OPTIONS.filter(m => row?.[m.key] && row[m.key] > 0).map(m => ({ ...m, price: row[m.key] }));
   const quoted = MOUNT_OPTIONS.filter(m => ['tan_only', 'rug', 'dip_pack', 'other'].includes(m.key)).map(m => ({ ...m, price: null as number | null }));
-  return [...priced, ...quoted];
+  const specials: (MountOption & { price: number | null })[] = [
+    { name: 'Custom mount', key: 'custom', special: 'custom', price: null, blurb: 'Your own idea. Describe it, add photos, even combine several of your animals into one mount.' },
+    { name: 'Replica', key: 'replica', special: 'replica', price: null, blurb: 'A lifelike copy instead of (or as well as) the real animal.' },
+  ];
+  return [...priced, ...quoted, ...specials];
 }
 
 export const formatPrice = (n: number, clientType: string) =>
   clientType === 'local' ? `R ${n.toLocaleString('en-ZA')}` : `US$ ${n.toLocaleString('en-US')}`;
+
+/** Pose choices for mounts that include a head. (Neck wording is the workshop's to adjust.) */
+export const HEAD_POSITIONS = ['Forward', 'Slight left', 'Slight right', '90° left', '90° right'];
+export const NECK_POSITIONS = ['Upright', 'Natural', 'Lowered'];
+export const mountHasHead = (mountName: string) =>
+  ['Shoulder Mount', 'Offset Shoulder Mount', 'Pedestal Mount', 'Full Mount', 'Rug Mount on Felt'].includes(mountName);
+
+export const REPLICA_TYPES = ['Skull and horns', 'Shoulder / head', 'Full body', 'Horns only'];
+export const REPLICA_REASONS = [
+  'Cannot export the original', 'Keep the original and display a copy', 'Trophy is damaged', 'Gift or second copy',
+  'Weight or size of the original', 'Permit or legal reasons', 'Other (tell us in the notes)',
+];

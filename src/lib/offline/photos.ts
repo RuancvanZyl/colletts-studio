@@ -7,7 +7,7 @@ import { blobPut, blobGet, blobDelete } from './idb';
 import { classify, performActionWith, registerExecutor } from './outbox';
 import type { Executor } from './outboxCore';
 
-export type PhotoKind = 'arrival' | 'progress' | 'finished';
+export type PhotoKind = 'arrival' | 'progress' | 'finished' | 'reference';
 
 export interface PhotoBatch {
   clientId: string;

@@ -13,7 +13,7 @@ export interface HunterAnimal {
   species: string; tag: string; condition: string;
   parts: { code: string; label: string }[]; other: string; receivedAt: string | null;
   mount: string; mountChosen: boolean; instructions: string;
-  dept: string; status: string; started: boolean; finished: boolean;
+  dept: string; status: string; started: boolean; finished: boolean; expected: boolean;
   history: { dept: string; completedAt?: string }[];
 }
 export interface HunterClient { id: string; name: string; email: string | null; type: string }
@@ -46,6 +46,7 @@ export function useHunterAnimals() {
           parts, other: fd.received_other ?? '', receivedAt: fd.received_at ?? null,
           mount: chosen ? mount : '', mountChosen: chosen, instructions: fd.instructions ?? '',
           dept: d.current_department ?? 'receiving', status: d.status ?? '', started: !!d.started_at,
+          expected: d.status === 'awaiting_arrival',
           finished: d.status === 'completed' || d.status === 'complete' || d.current_department === 'done',
           history: fd.stage_history ?? [],
         } as HunterAnimal;

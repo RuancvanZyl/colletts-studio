@@ -6,8 +6,9 @@ import { SpecialRequests } from './hunter/SpecialRequests';
 import { TrophyMessages } from './hunter/TrophyMessages';
 import { UniversalAIAssistant } from './shared/UniversalAIAssistant';
 import { HunterTrophies } from './hunter/HunterTrophies';
+import { HunterCollection } from './hunter/HunterCollection';
 import { Button } from '../ui/button';
-import { Home, Bell, User, MessageCircle, Wand2, Moon, Sun, Package } from 'lucide-react';
+import { Home, Bell, User, MessageCircle, Trophy, Moon, Sun, Package } from 'lucide-react';
 import { useClientNotifications } from '../../../lib/hooks/useClientNotifications';
 import { useTheme } from './ThemeProvider';
 import { useHunterClient } from '../../../lib/hooks/useHunterClient';
@@ -16,7 +17,7 @@ interface LocalHunterPortalProps {
   onLogout: () => void;
 }
 
-type LocalView = 'home' | 'notifications' | 'profile' | 'messages' | 'special-requests';
+type LocalView = 'home' | 'collection' | 'add-animals' | 'notifications' | 'profile' | 'messages' | 'special-requests';
 
 export function LocalHunterPortal({ onLogout }: LocalHunterPortalProps) {
   const { client, displayName } = useHunterClient();
@@ -27,6 +28,8 @@ export function LocalHunterPortal({ onLogout }: LocalHunterPortalProps) {
   const renderView = () => {
     switch (currentView) {
       case 'home':             return <HunterTrophies />;
+      case 'collection':       return <HunterCollection onAddAnimals={() => setCurrentView('add-animals')} />;
+      case 'add-animals':      return <HunterTrophies startAdding />;
       case 'notifications':    return <Notifications notifications={notifications} loading={false} unreadCount={unreadCount} onMarkRead={markRead} onMarkAllRead={markAllRead} />;
       case 'messages':         return <TrophyMessages />;
       case 'special-requests': return <SpecialRequests />;
@@ -72,7 +75,7 @@ export function LocalHunterPortal({ onLogout }: LocalHunterPortalProps) {
           {[
             { view: 'home' as LocalView,             icon: Home,          label: 'My Trophies' },
             { view: 'messages' as LocalView,         icon: MessageCircle, label: 'Ask' },
-            { view: 'special-requests' as LocalView, icon: Wand2,         label: 'Requests' },
+            { view: 'collection' as LocalView,       icon: Trophy,        label: 'Collection' },
             { view: 'notifications' as LocalView,    icon: Bell,          label: 'Alerts', badge: unreadCount },
             { view: 'profile' as LocalView,          icon: User,          label: 'Profile' },
           ].map(item => (
@@ -97,7 +100,7 @@ export function LocalHunterPortal({ onLogout }: LocalHunterPortalProps) {
         {[
           { view: 'home' as LocalView,             icon: Home,          label: 'My Trophies' },
           { view: 'messages' as LocalView,         icon: MessageCircle, label: 'Ask the Taxidermy' },
-          { view: 'special-requests' as LocalView, icon: Wand2,         label: 'Special Requests' },
+          { view: 'collection' as LocalView,       icon: Trophy,        label: 'My collection' },
           { view: 'notifications' as LocalView,    icon: Bell,          label: 'Notifications', badge: unreadCount },
           { view: 'profile' as LocalView,          icon: User,          label: 'Profile' },
         ].map(item => (

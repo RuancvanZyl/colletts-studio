@@ -120,6 +120,7 @@ export function ClientJobCards({ clientId }: { clientId: string }) {
                   <td className="px-3 py-2.5">
                     <p className="font-semibold text-slate-900 dark:text-slate-100">{r.species || r.title}</p>
                     <p className="text-xs text-slate-500">{r.mount}</p>
+                    {/^(custom mount|replica)/i.test(r.mount) && <span className="inline-block text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-400 text-amber-950 mt-1">{r.mount.startsWith('Custom') ? 'CUSTOM — see photos' : 'REPLICA'}</span>}
                     <p className="text-[11px] font-mono text-slate-400">{r.huntRef} · {r.huntYear}</p>
                     <button type="button" onClick={() => setPhotoRow(r)} className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-[#0073ea] hover:underline"><Camera className="w-3 h-3" />Photos</button>
                     {r.instructions && <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5 max-w-[220px] line-clamp-2" title={r.instructions}>{r.instructions}</p>}
@@ -185,6 +186,7 @@ export function ClientJobCards({ clientId }: { clientId: string }) {
                 <div className="min-w-0">
                   <p className="font-semibold text-slate-900 dark:text-slate-100">{r.species || r.title}</p>
                   <p className="text-xs text-slate-500">{r.mount} · <span className="font-mono">{r.huntRef}</span></p>
+                  {/^(custom mount|replica)/i.test(r.mount) && <span className="inline-block text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-400 text-amber-950 mt-1">{r.mount.startsWith('Custom') ? 'CUSTOM — see photos' : 'REPLICA'}</span>}
                 </div>
                 <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full bg-[#0073ea]/10 text-[#0073ea]">
                   {done ? 'Done' : (DEPT_LABELS[r.dept] ?? r.dept)}{!done && idx >= 0 ? ` · ${idx + 1}/${pipeline.length}` : ''}

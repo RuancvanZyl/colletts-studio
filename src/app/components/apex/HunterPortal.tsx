@@ -8,6 +8,7 @@ import { TrophySelection } from './hunter/TrophySelection';
 import { HunterRegistration } from './hunter/HunterRegistration';
 import { VerificationPending } from './hunter/VerificationPending';
 import { HunterTrophies } from './hunter/HunterTrophies';
+import { HunterCollection } from './hunter/HunterCollection';
 import { TrophyTrackingDashboard } from './hunter/TrophyTrackingDashboard';
 import { TrophyMessages } from './hunter/TrophyMessages';
 import { SpecialRequests } from './hunter/SpecialRequests';
@@ -47,7 +48,7 @@ type HunterFlow =
   | 'create-hunt'
   | 'main';
 
-type HunterView = 'home' | 'trophies' | 'trophy-detail' | 'notifications' | 'profile' | 'trophy-selection' | 'messages' | 'special-requests';
+type HunterView = 'home' | 'collection' | 'add-animals' | 'trophies' | 'trophy-detail' | 'notifications' | 'profile' | 'trophy-selection' | 'messages' | 'special-requests';
 
 export function HunterPortal({ onLogout }: HunterPortalProps) {
   const { user } = useAuth();
@@ -142,6 +143,10 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
             onMarkAllRead={markAllRead}
           />
         );
+      case 'collection':
+        return <HunterCollection onAddAnimals={() => setCurrentView('add-animals')} />;
+      case 'add-animals':
+        return <HunterTrophies startAdding onChanged={refreshHunts} />;
       case 'messages':
         return <TrophyMessages />;
       case 'special-requests':
@@ -212,7 +217,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
 
       {/* Mobile Bottom Navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-stone-900/90 backdrop-blur-lg border-t border-green-200 dark:border-green-900 z-50">
-        <div className="grid grid-cols-4 gap-1 p-2">
+        <div className="grid grid-cols-5 gap-1 p-2">
           <Button
             variant={currentView === 'home' || currentView === 'trophies' ? 'default' : 'ghost'}
             className="flex flex-col items-center gap-1 h-auto min-h-14 py-2"
@@ -220,6 +225,14 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
           >
             <Award className="w-5 h-5" />
             <span className="text-xs">My Trophies</span>
+          </Button>
+          <Button
+            variant={currentView === 'collection' ? 'default' : 'ghost'}
+            className="flex flex-col items-center gap-1 h-auto min-h-14 py-2"
+            onClick={() => setCurrentView('collection')}
+          >
+            <TrophyIcon className="w-5 h-5" />
+            <span className="text-xs">Collection</span>
           </Button>
           <Button
             variant={currentView === 'notifications' ? 'default' : 'ghost'}
@@ -258,6 +271,9 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
         <div className="space-y-2">
           <Button variant={currentView === 'home' || currentView === 'trophies' ? 'default' : 'ghost'} className="w-full justify-start min-h-11" onClick={() => setCurrentView('home')}>
             <Award className="w-5 h-5 mr-3" />My Trophies
+          </Button>
+          <Button variant={currentView === 'collection' ? 'default' : 'ghost'} className="w-full justify-start min-h-11" onClick={() => setCurrentView('collection')}>
+            <TrophyIcon className="w-5 h-5 mr-3" />My collection
           </Button>
           <Button variant={currentView === 'notifications' ? 'default' : 'ghost'} className="w-full justify-start relative min-h-11" onClick={() => setCurrentView('notifications')}>
             <Bell className="w-5 h-5 mr-3" />Updates

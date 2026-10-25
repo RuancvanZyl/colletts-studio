@@ -7,23 +7,27 @@ import { ChevronDown, ChevronUp, Loader2, Printer, CheckCircle2, AlertCircle } f
 import { useHunterAnimals, type HunterAnimal } from '../../../../lib/hooks/useHunterAnimals';
 import { getPipeline, DEPT_LABELS } from '../../../../lib/pipeline';
 import { speciesEmoji } from '../../../../lib/pricing';
+import { sciName } from '../../../../lib/species';
 import { WORKSHOP } from '../../../../lib/workshop';
 import { printDropOffPapers } from '../../../../lib/print';
 import { PhotoGallery } from '../shared/TrophyPhotos';
 import { ChooseMounts } from './ChooseMounts';
+import { AddAnimalsFlow } from './AddAnimalsFlow';
 
 function statusOf(a: HunterAnimal): { text: string; tone: 'todo' | 'wait' | 'work' | 'done'; pct: number } {
   if (a.finished) return { text: 'Finished — ready for you', tone: 'done', pct: 100 };
+  if (a.expected && a.mountChosen) return { text: 'Mount chosen — waiting for your trophy to arrive', tone: 'wait', pct: 2 };
   if (!a.mountChosen) return { text: 'Waiting for your choice', tone: 'todo', pct: 0 };
   if (!a.started && a.dept === 'receiving') return { text: 'Mount chosen — we will start soon', tone: 'wait', pct: 3 };
   const pipe = getPipeline(a.mount); const idx = pipe.indexOf(a.dept);
   return { text: `${DEPT_LABELS[a.dept] ?? a.dept}${idx >= 0 ? ` · stage ${idx + 1} of ${pipe.length}` : ''}`, tone: 'work', pct: idx >= 0 ? Math.max(5, Math.round((idx / Math.max(1, pipe.length - 1)) * 100)) : 5 };
 }
 
-export function HunterTrophies({ onRegisterHunt, onChanged }: { onRegisterHunt?: () => void; onChanged?: () => void }) {
+export function HunterTrophies({ onRegisterHunt, onChanged, startAdding = false }: { onRegisterHunt?: () => void; onChanged?: () => void; startAdding?: boolean }) {
   const { client, animals, loading, refresh } = useHunterAnimals();
   const [choosing, setChoosing] = useState<string[] | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [adding, setAdding] = useState(startAdding);
 
   if (loading) return <div className="flex items-center justify-center py-20 text-slate-400"><Loader2 className="w-6 h-6 animate-spin" /></div>;
   if (!client) return null;
@@ -31,9 +35,11 @@ export function HunterTrophies({ onRegisterHunt, onChanged }: { onRegisterHunt?:
   const first = client.name.split(' ')[0];
   const waiting = animals.filter(a => !a.mountChosen && !a.finished);
 
+  if (adding) return <AddAnimalsFlow clientId={client.id} clientType={client.type} onClose={() => setAdding(false)} onSaved={() => { refresh(); onChanged?.(); }} />;
+
   if (choosing) {
     const subset = animals.filter(a => choosing.includes(a.docId));
-    return <ChooseMounts animals={subset} clientType={client.type} onClose={() => setChoosing(null)} onSaved={() => { refresh(); onChanged?.(); }} />;
+    return <ChooseMounts animals={subset.map(x => ({ ...x }))} clientType={client.type} clientId={client.id} combinable={animals.filter(x => !x.finished && !x.started && x.dept === 'receiving').map(x => ({ docId: x.docId, species: x.species }))} onClose={() => setChoosing(null)} onSaved={() => { refresh(); onChanged?.(); }} />;
   }
 
   const hunts = [...new Set(animals.map(a => a.huntId))].map(id => ({ id, rows: animals.filter(a => a.huntId === id) }));
@@ -44,6 +50,10 @@ export function HunterTrophies({ onRegisterHunt, onChanged }: { onRegisterHunt?:
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Hello, {first}</h1>
         <p className="text-sm text-slate-600 dark:text-slate-300">{animals.length > 0 ? `This is everything ${WORKSHOP.name} has received from you.` : 'Your trophies will appear here as soon as the workshop receives them.'}</p>
       </div>
+
+      <button onClick={() => setAdding(true)} className="w-full min-h-14 rounded-2xl border-2 border-green-700 text-green-800 dark:text-green-300 font-bold text-lg flex items-center justify-center gap-2 bg-white dark:bg-slate-900">
+        <span className="text-2xl">🎯</span>Add my animals<span className="text-xs font-normal text-slate-500 hidden sm:inline">after your hunt</span>
+      </button>
 
       {waiting.length > 0 && (
         <div className="rounded-2xl border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/30 p-4 space-y-3">
@@ -85,9 +95,11 @@ export function HunterTrophies({ onRegisterHunt, onChanged }: { onRegisterHunt?:
                   <span className="text-3xl leading-none">{speciesEmoji(a.species)}</span>
                   <span className="flex-1 min-w-0 space-y-1.5">
                     <span className="block font-bold text-slate-900 dark:text-slate-100 text-lg leading-tight">{a.species}{a.tag ? <span className="text-slate-400 font-normal text-sm"> · {a.tag}</span> : null}</span>
+                    {sciName(a.species) && <span className="block text-xs italic text-slate-500 -mt-1">{sciName(a.species)}</span>}
                     <span className="flex flex-wrap gap-1">
                       {a.parts.map(p => <span key={p.code} className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300">✓ {p.code === 'OTHER' && a.other ? `Other: ${a.other}` : p.label}</span>)}
-                      {a.parts.length === 0 && <span className="text-xs text-slate-400">Parts list not recorded</span>}
+                      {a.expected && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300">Not received yet</span>}
+                      {!a.expected && a.parts.length === 0 && <span className="text-xs text-slate-400">Parts list not recorded</span>}
                     </span>
                     <span className={`flex items-center gap-1.5 text-sm font-semibold ${st.tone === 'todo' ? 'text-amber-600' : st.tone === 'done' ? 'text-green-700 dark:text-green-400' : 'text-slate-700 dark:text-slate-200'}`}>
                       {st.tone === 'done' && <CheckCircle2 className="w-4 h-4" />}{a.mountChosen ? `${a.mount} · ` : ''}{st.text}

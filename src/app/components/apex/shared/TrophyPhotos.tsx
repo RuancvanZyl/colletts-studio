@@ -17,6 +17,7 @@ export const KIND_META: Record<PhotoKind, { label: string; hint: string }> = {
   arrival:  { label: 'Arrival',  hint: 'How it looked when it came in' },
   progress: { label: 'Progress', hint: 'Work in progress — staff only' },
   finished: { label: 'Finished', hint: 'Ready to ship — the client can see these' },
+  reference: { label: 'Hunter\'s reference photos', hint: 'Ideas the hunter sent for a custom mount' },
 };
 
 interface Photo { id: string; kind: PhotoKind; storage_path: string; caption: string | null; shared_with_client: boolean; taken_by_name: string | null; taken_at: string; url?: string }
@@ -158,7 +159,7 @@ export function PhotoGallery({ docId, huntId, clientId, canManage = false, refre
 
   if (loading) return <div className="flex items-center gap-2 text-xs text-slate-400 py-3"><Loader2 className="w-3.5 h-3.5 animate-spin" />Loading photos…</div>;
 
-  const groups = (['arrival', 'progress', 'finished'] as PhotoKind[]).filter(k => !kinds || kinds.includes(k))
+  const groups = (['reference', 'arrival', 'progress', 'finished'] as PhotoKind[]).filter(k => !kinds || kinds.includes(k))
     .map(k => ({ k, rows: photos.filter(p => p.kind === k) })).filter(g => g.rows.length);
 
   return (

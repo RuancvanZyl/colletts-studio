@@ -10,18 +10,19 @@ import { Camera, CheckCircle2, ArrowLeft, ArrowRight, Copy as CopyIcon, Loader2,
 import { toast } from 'sonner';
 import { supabase } from '../../../../lib/supabase';
 import { useAuth } from '../../../../lib/auth';
-import { SPECIES_LIST, speciesEmoji } from '../../../../lib/pricing';
+import { speciesEmoji } from '../../../../lib/pricing';
 import { RECEIVED_PARTS, PART_PRESETS, CONDITIONS, partRecords, listParts } from '../../../../lib/received';
 import { WORKSHOP } from '../../../../lib/workshop';
 import { getInviteLink } from '../../../../lib/invite';
 import { printDropOffPapers, type DropOffPrint } from '../../../../lib/print';
 import { savePhotos, shrinkPhoto } from '../../../../lib/offline/photos';
 import { InvitePanel } from '../shared/InvitePanel';
+import { SpeciesField } from '../shared/AnimalPicker';
 import { TrophyLabels } from './TrophyLabels';
 import type { TrophyPart } from '../../../../lib/trophyParts';
 
 interface FoundClient { id: string; full_name: string; email: string | null; phone: string | null; client_number: string | null; client_type: string | null; auth_user_id: string | null }
-interface Animal { id: string; species: string; tag: string; condition: string; parts: string[]; other: string; notes: string; photos: File[]; previews: string[] }
+interface Animal { id: string; docId?: string; mount?: string; species: string; tag: string; condition: string; parts: string[]; other: string; notes: string; photos: File[]; previews: string[] }
 interface OpenHunt { id: string; ref_number: string | null; year: string; status: string | null }
 
 const emptyAnimal = (): Animal => ({ id: crypto.randomUUID(), species: '', tag: '', condition: 'fresh', parts: [], other: '', notes: '', photos: [], previews: [] });
@@ -48,8 +49,7 @@ export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
 
   // 2 — animals
   const [animals, setAnimals] = useState<Animal[]>([emptyAnimal()]);
-  const [speciesOpen, setSpeciesOpen] = useState<string | null>(null);
-  const [speciesQ, setSpeciesQ] = useState<Record<string, string>>({});
+  const [expected, setExpected] = useState<{ docId: string; species: string; mount: string; huntId: string }[]>([]);
   const photoRef = useRef<HTMLInputElement>(null);
   const [photoFor, setPhotoFor] = useState<string | null>(null);
 
@@ -97,11 +97,28 @@ export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
     })();
   }, [client]);
 
+  // animals this hunter registered themselves after their hunt and that have not arrived yet
+  useEffect(() => {
+    setExpected([]);
+    if (!client) return;
+    (async () => {
+      const { data: hunts } = await (supabase as any).from('client_hunts').select('id').eq('client_id', client.id);
+      const ids = (hunts ?? []).map((h: any) => h.id);
+      if (!ids.length) return;
+      const { data } = await (supabase as any).from('hunt_documents').select('id, hunt_id, form_data').in('hunt_id', ids).eq('doc_type', 'job_card').eq('status', 'awaiting_arrival').limit(60);
+      setExpected((data ?? []).map((d: any) => ({ docId: d.id, huntId: d.hunt_id, species: d.form_data?.species ?? 'Animal', mount: d.form_data?.mount_type ?? '' })));
+    })();
+  }, [client]);
+
   const clientType = client?.client_type ?? fresh.client_type;
   const who = client ? client.full_name : fresh.full_name.trim();
   const whoOk = client ? true : fresh.full_name.trim().length >= 2;
   const animalsOk = animals.length > 0 && animals.every(a => a.species.trim() && a.parts.length > 0 && (!a.parts.includes('OTHER') || a.other.trim()));
 
+  const arrived = (e: { docId: string; species: string; mount: string }) => {
+    setAnimals(prev => [...prev.filter(a => a.species || a.parts.length), { ...emptyAnimal(), docId: e.docId, species: e.species, mount: e.mount }]);
+    setExpected(prev => prev.filter(x => x.docId !== e.docId));
+  };
   const patch = (id: string, p: Partial<Animal>) => setAnimals(prev => prev.map(a => (a.id === id ? { ...a, ...p } : a)));
   const toggle = (a: Animal, code: string) => patch(a.id, { parts: a.parts.includes(code) ? a.parts.filter(c => c !== code) : [...a.parts, code] });
   const sameAgain = (a: Animal) => setAnimals(prev => [...prev, { ...emptyAnimal(), species: a.species, condition: a.condition, parts: [...a.parts], other: a.other }]);
@@ -125,43 +142,61 @@ export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
         if (error) throw new Error(error.message);
         c = data as FoundClient;
       }
-      // 2. the hunt file
+      // 2. the hunt file (only needed when some animals were not pre-registered by the hunter)
       const year = new Date().getFullYear();
-      let huntId: string; let huntRef = '';
-      const existing = !newFile ? openHunts[0] : null;
-      if (existing) { huntId = existing.id; huntRef = existing.ref_number ?? ''; }
-      else {
-        const { data, error } = await (supabase as any).from('client_hunts')
-          .insert({ client_id: c.id, year: String(year), status: 'active', client_type: c.client_type ?? 'export' }).select('id, ref_number').single();
-        if (error) throw new Error(error.message);
-        huntId = data.id; huntRef = data.ref_number ?? '';
+      let huntId = ''; let huntRef = '';
+      if (animals.some(a => !a.docId)) {
+        const existing = !newFile ? openHunts[0] : null;
+        if (existing) { huntId = existing.id; huntRef = existing.ref_number ?? ''; }
+        else {
+          const { data, error } = await (supabase as any).from('client_hunts')
+            .insert({ client_id: c.id, year: String(year), status: 'active', client_type: c.client_type ?? 'export' }).select('id, ref_number').single();
+          if (error) throw new Error(error.message);
+          huntId = data.id; huntRef = data.ref_number ?? '';
+        }
       }
-      // 3. one job card per animal — mount is "Pending Instructions" until the hunter chooses
+      // 3. one job card per animal; mount is "Pending Instructions" until the hunter chooses
       const receivedAt = new Date().toISOString();
       const number = c.client_number ?? 'NEW';
-      const { count: already } = await (supabase as any).from('hunt_documents').select('id', { count: 'exact', head: true }).eq('hunt_id', huntId).eq('doc_type', 'job_card');
+      const { count: already } = huntId
+        ? await (supabase as any).from('hunt_documents').select('id', { count: 'exact', head: true }).eq('hunt_id', huntId).eq('doc_type', 'job_card')
+        : { count: 0 };
+      let waitingForMount = false; let waitHunt = huntId;
       for (let i = 0; i < animals.length; i++) {
         const a = animals[i];
         const idx = (already ?? 0) + i + 1;
-        const { data: doc, error } = await (supabase as any).from('hunt_documents').insert({
-          hunt_id: huntId, doc_type: 'job_card', status: 'in_progress', current_department: 'receiving',
-          title: `${a.species} - Pending Instructions${a.tag ? ` (Tag: ${a.tag})` : ''}`,
-          form_data: {
-            species: a.species, mount_type: 'Pending Instructions', quantity: 1, tag_number: a.tag.trim(), condition: a.condition,
-            instructions: '', notes: a.notes.trim(),
-            received_parts: a.parts.map(code => ({ code, label: RECEIVED_PARTS.find(p => p.code === code)?.label ?? code })),
-            received_other: a.other.trim(), received_at: receivedAt, received_by: profile?.full_name ?? '',
-            parts: partRecords(number, a.species, idx, a.parts),
-          },
-        }).select('id').single();
-        if (error) throw new Error(error.message);
+        const received = {
+          received_parts: a.parts.map(code => ({ code, label: RECEIVED_PARTS.find(p => p.code === code)?.label ?? code })),
+          received_other: a.other.trim(), received_at: receivedAt, received_by: profile?.full_name ?? '',
+          tag_number: a.tag.trim(), condition: a.condition, notes: a.notes.trim(),
+        };
+        let docId: string; let docHunt = huntId;
+        if (a.docId) {
+          // the hunter registered this one already: tick it off as received instead of making a second job card
+          const { data: cur, error: e1 } = await (supabase as any).from('hunt_documents').select('hunt_id, form_data').eq('id', a.docId).single();
+          if (e1) throw new Error(e1.message);
+          const fd = { ...(cur.form_data ?? {}), ...received, parts: partRecords(number, a.species, idx, a.parts) };
+          const { error } = await (supabase as any).from('hunt_documents').update({ status: 'in_progress', form_data: fd }).eq('id', a.docId);
+          if (error) throw new Error(error.message);
+          docId = a.docId; docHunt = cur.hunt_id;
+          if (/^pending instructions$/i.test(String(fd.mount_type ?? '').trim()) || !fd.mount_type) { waitingForMount = true; waitHunt = cur.hunt_id; }
+        } else {
+          waitingForMount = true;
+          const { data: doc, error } = await (supabase as any).from('hunt_documents').insert({
+            hunt_id: huntId, doc_type: 'job_card', status: 'in_progress', current_department: 'receiving',
+            title: `${a.species} - Pending Instructions${a.tag ? ` (Tag: ${a.tag})` : ''}`,
+            form_data: { species: a.species, mount_type: 'Pending Instructions', quantity: 1, instructions: '', ...received, parts: partRecords(number, a.species, idx, a.parts) },
+          }).select('id').single();
+          if (error) throw new Error(error.message);
+          docId = doc.id;
+        }
         if (a.photos.length) {
           const blobs = await Promise.all(a.photos.map(f => shrinkPhoto(f)));
-          await savePhotos({ clientId: c.id, huntId, docId: doc.id, kind: 'arrival', shared: true, files: blobs, staffId: profile?.id ?? null, staffName: profile?.full_name ?? null });
+          await savePhotos({ clientId: c.id, huntId: docHunt, docId, kind: 'arrival', shared: true, files: blobs, staffId: profile?.id ?? null, staffName: profile?.full_name ?? null });
         }
       }
       // 4. the workshop is now waiting for the hunter's mount choices (starts the reminder clock)
-      await (supabase as any).rpc('start_awaiting_instruction', { p_hunt_id: huntId });
+      if (waitingForMount && waitHunt) await (supabase as any).rpc('start_awaiting_instruction', { p_hunt_id: waitHunt });
 
       let link: string | null = null;
       try { link = await getInviteLink(c.id); } catch { /* migration 045 not run yet — papers still print */ }
@@ -318,32 +353,28 @@ export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
       {step === 2 && (
         <div className="space-y-4">
           <p className="text-slate-600 dark:text-slate-300 text-sm">For <strong>{who}</strong> — add each animal and tick every part that came in.</p>
+          {expected.length > 0 && (
+            <div className="rounded-2xl border-2 border-green-600 bg-green-50 dark:bg-green-950/30 p-3 space-y-2">
+              <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{who.split(' ')[0]} told us to expect {expected.length} animal{expected.length > 1 ? 's' : ''}. Tap each one that arrived.</p>
+              {expected.map(e => (
+                <button key={e.docId} type="button" onClick={() => arrived(e)} className="w-full text-left flex items-center gap-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-3 min-h-14">
+                  <span className="text-2xl">{speciesEmoji(e.species)}</span>
+                  <span className="flex-1"><span className="block font-semibold text-slate-900 dark:text-slate-100">{e.species}</span><span className="block text-xs text-slate-500">{/pending/i.test(e.mount) ? 'Mount not chosen yet' : e.mount}</span></span>
+                  <span className="text-sm font-bold text-green-700">It arrived</span>
+                </button>
+              ))}
+            </div>
+          )}
           <input ref={photoRef} type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={e => { addPhotos(e.target.files); e.target.value = ''; }} />
           {animals.map((a, idx) => {
-            const matches = SPECIES_LIST.filter(s => s.toLowerCase().includes((speciesQ[a.id] ?? '').toLowerCase())).slice(0, 8);
             return (
               <div key={a.id} className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-slate-900 dark:text-slate-100">Animal {idx + 1}</span>
                   {animals.length > 1 && <button aria-label="Remove animal" className="p-2 -m-2 text-red-500" onClick={() => setAnimals(prev => prev.filter(x => x.id !== a.id))}><Trash2 className="w-5 h-5" /></button>}
                 </div>
-                <div className="relative">
-                  <label className={label}>Species *</label>
-                  <input className={field} placeholder="Start typing — Kudu, Impala…" value={speciesOpen === a.id ? (speciesQ[a.id] ?? '') : a.species}
-                    onFocus={() => { setSpeciesOpen(a.id); setSpeciesQ(q => ({ ...q, [a.id]: '' })); }}
-                    onChange={e => setSpeciesQ(q => ({ ...q, [a.id]: e.target.value }))}
-                    onBlur={() => setTimeout(() => setSpeciesOpen(o => (o === a.id ? null : o)), 180)} />
-                  {speciesOpen === a.id && (
-                    <div className="absolute z-20 left-0 right-0 mt-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl max-h-64 overflow-y-auto">
-                      {matches.map(s => <button key={s} type="button" className="w-full text-left px-4 min-h-12 text-base hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-900 dark:text-slate-100"
-                        onMouseDown={e => e.preventDefault()} onClick={() => { patch(a.id, { species: s }); setSpeciesOpen(null); }}>{speciesEmoji(s)} {s}</button>)}
-                      {(speciesQ[a.id] ?? '').trim().length > 1 && !SPECIES_LIST.some(s => s.toLowerCase() === (speciesQ[a.id] ?? '').trim().toLowerCase()) && (
-                        <button type="button" className="w-full text-left px-4 min-h-12 text-base text-[#0073ea] font-semibold" onMouseDown={e => e.preventDefault()}
-                          onClick={() => { patch(a.id, { species: (speciesQ[a.id] ?? '').trim() }); setSpeciesOpen(null); }}>Use “{(speciesQ[a.id] ?? '').trim()}”</button>
-                      )}
-                    </div>
-                  )}
-                </div>
+                <SpeciesField value={a.species} onChange={v => patch(a.id, { species: v })} labelClass={label} fieldClass={field} />
+                {a.docId && <p className="text-xs rounded-lg bg-green-50 dark:bg-green-950/30 text-green-800 dark:text-green-300 px-3 py-2">Registered by the hunter{a.mount && !/pending/i.test(a.mount) ? `, they chose: ${a.mount}` : ', mount not chosen yet'}</p>}
 
                 <div>
                   <label className={label}>What came in? Tick every part *</label>
