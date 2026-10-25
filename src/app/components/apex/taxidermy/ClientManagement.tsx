@@ -1,5 +1,6 @@
 import { PhotoGallery } from '../shared/TrophyPhotos';
 import { ClientPortalAccess } from '../shared/ClientPortalAccess';
+import { ClientMoney } from './ClientMoney';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { Button } from '../../ui/button';
@@ -280,9 +281,9 @@ function PassportUploadSection({ clientId }: { clientId: string | null }) {
 }
 
 // ── Detail tabs ───────────────────────────────────────────────────────────────
-type DetailTab = 'info' | 'hunts' | 'photos' | 'messages' | 'jobcards';
+type DetailTab = 'info' | 'hunts' | 'photos' | 'messages' | 'jobcards' | 'money';
 
-function ClientDetailPanel({ client, onEdit, onBack }: { client: Client; onEdit: () => void; onBack: () => void }) {
+function ClientDetailPanel({ client, onEdit, onBack, onOpenQuote }: { client: Client; onEdit: () => void; onBack: () => void; onOpenQuote?: (huntId: string) => void }) {
   const [tab, setTab] = useState<DetailTab>('jobcards');
   const { photos, loading: photosLoading, refresh: refreshPhotos } = useClientPhotos(client.id);
   const [inviting, setInviting] = useState(false);
@@ -304,6 +305,7 @@ function ClientDetailPanel({ client, onEdit, onBack }: { client: Client; onEdit:
 
   const TABS: { key: DetailTab; label: string }[] = [
     { key: 'jobcards', label: 'Job Cards' },
+    { key: 'money',    label: 'Money' },
     { key: 'hunts',    label: 'Hunts & Docs' },
     { key: 'messages', label: 'Messages' },
     { key: 'info',     label: 'Client Info' },
@@ -417,6 +419,7 @@ function ClientDetailPanel({ client, onEdit, onBack }: { client: Client; onEdit:
         )}
 
         {tab === 'jobcards' && <ClientJobCards clientId={client.id} />}
+        {tab === 'money' && <ClientMoney clientId={client.id} onOpenQuote={onOpenQuote ?? (() => {})} />}
         {tab === 'hunts' && <HuntTimeline clientId={client.id} />}
 
         {tab === 'messages' && (
@@ -465,7 +468,7 @@ function ClientDetailPanel({ client, onEdit, onBack }: { client: Client; onEdit:
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
-export function ClientManagement({ initialClientId }: { initialClientId?: string } = {}) {
+export function ClientManagement({ initialClientId, onOpenQuote }: { initialClientId?: string; onOpenQuote?: (huntId: string) => void } = {}) {
   const { clients, loading, error, createClient, updateClient, refresh } = useClients();
   const { jobs } = useJobs();
   const [search, setSearch] = useState('');
@@ -706,6 +709,7 @@ export function ClientManagement({ initialClientId }: { initialClientId?: string
                   client={selected}
                   onEdit={() => openEdit(selected)}
                   onBack={() => setSelected(null)}
+                  onOpenQuote={onOpenQuote}
                 />
               </CardContent>
             </Card>

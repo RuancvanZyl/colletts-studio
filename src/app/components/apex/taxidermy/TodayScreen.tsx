@@ -117,7 +117,7 @@ export function TodayScreen({ onNavigate }: { onNavigate: (view: string, clientI
           {[
             { n: Math.max(0, (stats?.totalActive ?? 0) - (stats?.byDept.find(d => d.dept === 'receiving')?.count ?? 0)), label: 'Being worked on' },
             { n: stats?.completedThisMonth ?? 0, label: 'Finished' },
-            { n: stats?.pendingPayment ?? 0, label: 'Waiting for payment' },
+            { n: (stats?.pendingPayment ?? 0) + awaitingPay, label: 'Waiting for payment' },
           ].map(s => (
             <div key={s.label} className="rounded-2xl border border-slate-700 bg-[#111c26] p-4 text-center">
               <p className="text-4xl font-bold text-white tabular-nums">{loading && !stats ? '–' : s.n}</p>

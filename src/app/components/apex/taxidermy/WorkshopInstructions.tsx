@@ -29,6 +29,7 @@ interface JobCard {
   species: string;
   mountType: string;
   instructions: string;
+  received: string;
   specialRequests: string[];
   department: string;
   stageHistory: StageHistory[];
@@ -114,6 +115,7 @@ export function WorkshopInstructions() {
         species:         fd.species       ?? '—',
         mountType:       fd.mount_type    ?? '—',
         instructions:    fd.instructions  ?? '',
+        received:        (fd.received_parts ?? []).length ? (fd.received_parts as any[]).map(p => p.label ?? p.code).join(', ') + (fd.received_other ? ` (${fd.received_other})` : '') : '',
         specialRequests: custByHunt[doc.hunt_id] ?? [],
         department:      doc.current_department ?? 'receiving',
         stageHistory:    fd.stage_history ?? [],
@@ -466,6 +468,7 @@ function CardList({ cards, expanded, toggle, completing, markDone, photos, addPh
                   </div>
                 </div>
 
+                {card.received && <p className="text-sm text-slate-700 dark:text-slate-200"><span className="font-semibold">Received:</span> {card.received}</p>}
                 {card.instructions ? (
                   <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-xl px-4 py-3">
                     <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wider mb-1.5">Client Instructions</p>

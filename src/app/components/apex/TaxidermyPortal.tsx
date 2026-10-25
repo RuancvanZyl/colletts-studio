@@ -44,6 +44,7 @@ import { WorkshopSetup } from './taxidermy/WorkshopSetup';
 import { TodayScreen } from './taxidermy/TodayScreen';
 import { AnimalGuideEditor } from './taxidermy/AnimalGuideEditor';
 import { Quotes } from './taxidermy/Quotes';
+import { PaymentsLedger } from './taxidermy/PaymentsLedger';
 import { StationsHome } from './taxidermy/StationsHome';
 import { ClientStatusBoard } from './taxidermy/ClientStatusBoard';
 import { SectionTabs } from './shared/SectionTabs';
@@ -387,7 +388,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'summary':         return <TodayScreen onNavigate={navigate} />;
       case 'whiteboard':      return <SummarySheet onNavigate={navigate} />;
       case 'animal-guide':    return <AnimalGuideEditor />;
-      case 'quotes':          return <Quotes />;
+      case 'quotes':          return <Quotes key={navClientId ?? 'all'} initialHuntId={navClientId} />;
       case 'stations':        return <StationsHome stations={STATIONS.filter(st => canSeeView(st.view as TaxidermyView))} onOpen={navigate} />;
       case 'status-board':    return <ClientStatusBoard onNavigate={navigate} />;
       case 'dashboard':       return <WorkshopDashboard onNavigate={navigate} />;
@@ -411,9 +412,9 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'photos-admin':           return <PackingShipping />;
       case 'ready-to-ship':          return <ReadyToShip onOpenClient={(id) => navigate('clients', id)} />;
       case 'client-inbox':           return <ClientInbox />;
-      case 'payment-confirmation':   return <PaymentConfirmation />;
+      case 'payment-confirmation':   return <PaymentsLedger onOpenQuote={(id) => navigate('quotes', id)} />;
       case 'inventory':              return <JobTracker />;
-      case 'clients':         return <ClientManagement initialClientId={navClientId} />;
+      case 'clients':         return <ClientManagement initialClientId={navClientId} onOpenQuote={(id) => navigate('quotes', id)} />;
       case 'invoices':        return <InvoiceManagement />;
       case 'admin':             return <AdminConfiguration />;
       case 'staff-overview':    return <StaffOverview />;

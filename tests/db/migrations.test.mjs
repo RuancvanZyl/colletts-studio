@@ -25,7 +25,7 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql']) {
+for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
@@ -389,5 +389,14 @@ await db.query(`SELECT public.staff_record_payment($1, 300, 'Cash', 'Receipt 12'
 ok((await q(`SELECT status FROM quotes WHERE id=$1`, [q4]))[0].status === 'deposit_paid' && (await q(`SELECT received_at::date::text d FROM quote_payments WHERE quote_id=$1`, [q4]))[0].d === '2026-10-20', 'a deposit marked paid by hand keeps the date it was received');
 await db.query(`SELECT public.staff_record_payment($1, 700, 'Cash', 'Receipt 13')`, [q4]);
 ok((await q(`SELECT status FROM quotes WHERE id=$1`, [q4]))[0].status === 'paid', 'the balance marked paid by hand settles the quote');
+
+console.log('\nPayment starts the order timeline');
+await as(ids.admin);
+const tl = (await q(`SELECT timeline_started_at::date::text d, timeline_started_via v, deadline_current::text dl, order_size s FROM client_hunts WHERE id='d3000000-0000-0000-0000-000000000004'`))[0];
+ok(tl.d === '2026-10-20' && tl.v === 'cash_manual' && !!tl.dl, 'marking the deposit paid starts the order timeline from the date the payment was received');
+ok((await q(`SELECT milestones FROM client_hunts WHERE id='d3000000-0000-0000-0000-000000000004'`))[0].milestones.length >= 3, 'the milestones and deadline are created');
+ok((await q(`SELECT timeline_started_at IS NOT NULL t FROM client_hunts WHERE id='d3000000-0000-0000-0000-000000000002'`))[0].t === true, 'a full payment starts it too');
+await db.query(`SELECT public.staff_authorise_work('d3000000-0000-0000-0000-000000000003', 'Regular client')`);
+ok((await q(`SELECT timeline_started_via v FROM client_hunts WHERE id='d3000000-0000-0000-0000-000000000003'`))[0].v === 'cash_manual', 'starting work without a deposit also starts the timeline');
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

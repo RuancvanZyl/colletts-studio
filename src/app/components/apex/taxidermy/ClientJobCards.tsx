@@ -16,7 +16,7 @@ import { printJobCards } from '../../../../lib/print';
 interface Row {
   id: string; huntId: string; huntRef: string; huntYear: string; title: string; species: string; mount: string; instructions: string;
   dept: string; status: string; assignedTo: string | null; priority: number; dueDate: string | null; priorityNote: string;
-  openedAt: string | null; startedAt: string | null; huntStatus: string;
+  openedAt: string | null; startedAt: string | null; huntStatus: string; held: boolean;
 }
 
 const ago = (iso: string | null) => {
@@ -46,6 +46,7 @@ export function ClientJobCards({ clientId }: { clientId: string }) {
       dept: d.current_department ?? 'receiving', status: d.status ?? 'in_progress',
       assignedTo: d.assigned_to ?? null, priority: d.priority ?? 3, dueDate: d.due_date ?? null, priorityNote: d.priority_note ?? '',
       openedAt: d.opened_at ?? null, startedAt: d.started_at ?? null, huntStatus: h.status,
+      held: !!(h as any).quote_required && !(h as any).work_authorised_at,
     }))), [hunts]);
 
   const finished = (r: Row) => r.status === 'completed' || r.status === 'complete' || r.dept === 'done';
@@ -58,6 +59,7 @@ export function ClientJobCards({ clientId }: { clientId: string }) {
 
   function nextAction(r: Row): { text: string; tone: 'todo' | 'ready' | 'wait' | 'done' } {
     if (finished(r)) return { text: 'Finished', tone: 'done' };
+    if (r.held && r.dept === 'receiving') return { text: 'On hold: the hunter has not accepted the quote and paid yet', tone: 'wait' };
     if (r.status === 'pending_payment') return { text: 'Waiting for payment before work starts', tone: 'wait' };
     if (r.status === 'awaiting_arrival') return { text: 'Waiting for the trophy to arrive', tone: 'wait' };
     if (r.mount === 'Pending Instructions') return { text: 'Get the client\'s instructions for this item', tone: 'wait' };

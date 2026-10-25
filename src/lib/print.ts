@@ -11,6 +11,8 @@ import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from './supabase';
 import { selectIn, fetchAllRows } from './supabaseHelpers';
 import { DEPT_LABELS, getPipeline } from './pipeline';
+import { listParts } from './received';
+import { sciName } from './species';
 
 // ── plumbing ────────────────────────────────────────────────────────────────
 
@@ -121,7 +123,7 @@ interface PrintJob {
   id: string; huntId: string;
   clientName: string; clientNumber: string; clientEmail: string;
   huntRef: string; huntYear: string; operator: string; country: string;
-  species: string; mount: string; quantity: number | string; tag: string; instructions: string;
+  species: string; mount: string; quantity: number | string; tag: string; instructions: string; received: string; condition: string;
   special: string[];
   dept: string; status: string; priority: number; dueDate: string | null; priorityNote: string; assignedTo: string;
   stageHistory: { dept: string; completedAt?: string; completedBy?: string }[];
@@ -157,6 +159,7 @@ async function hydrate(rows: any[]): Promise<{ jobs: PrintJob[]; items: { id: st
       huntRef: h.ref_number ?? '', huntYear: String(h.year ?? ''), operator: h.operator ?? '', country: h.country ?? '',
       species: fd.species ?? d.title ?? '', mount: fd.mount_type ?? '', quantity: fd.quantity ?? 1, tag: fd.tag_number ?? '',
       instructions: fd.instructions ?? '', special: special[d.hunt_id] ?? [],
+      received: (fd.received_parts ?? []).length ? listParts((fd.received_parts ?? []).map((p: any) => p.code), fd.received_other) : '', condition: fd.condition ?? '',
       dept: d.current_department ?? 'receiving', status: d.status ?? '', priority: d.priority ?? 3,
       dueDate: d.due_date ?? null, priorityNote: d.priority_note ?? '', assignedTo: d.assigned_to ? (staff[d.assigned_to] ?? '') : '',
       stageHistory: fd.stage_history ?? [],
@@ -190,9 +193,10 @@ function jobPage(j: PrintJob, items: { id: string; dept_key: string; label: stri
     <table>
       <tr><td class="k">Client</td><td><strong>${esc(j.clientName)}</strong></td><td class="k">Client no.</td><td>${esc(j.clientNumber)}</td></tr>
       <tr><td class="k">Hunt ref</td><td>${esc(j.huntRef)} (${esc(j.huntYear)})</td><td class="k">Outfitter</td><td>${esc(j.operator) || '—'}</td></tr>
-      <tr><td class="k">Species</td><td><strong style="font-size:14px">${esc(j.species)}</strong></td><td class="k">Mount type</td><td><strong>${esc(j.mount)}</strong></td></tr>
+      <tr><td class="k">Species</td><td><strong style="font-size:14px">${esc(j.species)}</strong>${sciName(j.species) ? `<div class="sub" style="font-style:italic">${esc(sciName(j.species))}</div>` : ''}</td><td class="k">Mount type</td><td><strong>${esc(j.mount)}</strong></td></tr>
       <tr><td class="k">Quantity</td><td>${esc(j.quantity)}</td><td class="k">Tag no.</td><td>${esc(j.tag) || '—'}</td></tr>
       <tr><td class="k">Due date</td><td>${esc(fmtDate(j.dueDate)) || '—'}</td><td class="k">Assigned to</td><td>${esc(j.assignedTo) || '—'}</td></tr>
+      ${j.received ? `<tr><td class="k">Received</td><td colspan="3">${esc(j.received)}${j.condition ? ` &middot; ${esc(j.condition)}` : ''}</td></tr>` : ''}
       <tr><td class="k">Now in</td><td colspan="3">${esc(j.dept === 'done' ? 'Finished' : (DEPT_LABELS[j.dept] ?? j.dept))}</td></tr>
     </table>
     ${j.priorityNote ? `<div class="box" style="min-height:0"><strong>Rush note:</strong> ${esc(j.priorityNote)}</div>` : ''}

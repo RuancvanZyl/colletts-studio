@@ -23,3 +23,9 @@
 - Xero link NOT built yet: needs a Xero developer app (client id/secret as Supabase function secrets), the org's sales account code, multi-currency enabled for USD, and an Edge Function (OAuth, create invoice on acceptance, payment webhook).
 - Fill in `PAYMENT_DETAILS` in src/lib/workshop.ts (bank details shown to hunters after they accept).
 - Run supabase/launch/release_048_quotes.sql.
+
+## 2026-10-25 — Management links (migration 049 + release flow)
+- Payment (or an admin start) now starts the existing order timeline (milestones + deadline) via `start_timeline_if_needed`, dated from the day the payment was received (needs 034/035).
+- Money → Quotes: once work is authorised, "Start the workshop flow" (also pops up right after a payment is recorded). `lib/releaseHunt.ts` turns the hunt's job cards into working cards: each animal leaves Receiving for its first department (pipelines added for Custom mount / combined / Replica), gets the order deadline as due date, a "received" stage-history entry, and the hunter is notified.
+- Job cards and printouts now show scientific name, parts received, condition. Client profile has a Money tab; Money → Payments is a ledger (received this month, still owed, recent); job cards show "On hold" while a quoted hunt is unpaid; Today and the Whiteboard count quotes awaiting payment.
+- Run supabase/launch/release_049_start_timeline.sql after 048.

@@ -17,6 +17,11 @@ export const PIPELINE_STAGES: Record<string, string[]> = {
   'Flat Skin':             ['receiving', 'skinning', 'salting', 'tannery', 'packing', 'administration'],
   'Rug Mount on Felt':     ['receiving', 'skinning', 'salting', 'tannery', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
   'Tan Only':              ['receiving', 'skinning', 'salting', 'tannery', 'packing', 'administration'],
+  // Hunter's own idea: takes the full route (the combined animals follow the main one)
+  'Custom mount':          ['receiving', 'skinning', 'salting', 'cleaning_bleach', 'tannery', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
+  'Custom mount (combined)': ['receiving', 'skinning', 'salting', 'cleaning_bleach', 'tannery', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
+  // A cast copy: no skin work
+  'Replica':               ['receiving', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
   // Client ships overseas to mount — we treat & pack
   'Dip & Pack':            ['receiving', 'skinning', 'salting', 'dip_pack', 'packing', 'administration'],
   // Pre-tan only — client mounts overseas, we just tan the skin

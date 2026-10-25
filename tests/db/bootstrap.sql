@@ -24,3 +24,4 @@ CREATE TABLE IF NOT EXISTS public.client_notifications (id uuid PRIMARY KEY DEFA
 ALTER TABLE public.client_hunts ADD COLUMN IF NOT EXISTS ref_number text;
 ALTER TABLE public.client_hunts ADD COLUMN IF NOT EXISTS deposit_amount numeric;
 ALTER TABLE public.client_hunts ADD COLUMN IF NOT EXISTS deposit_paid_at timestamptz;
+CREATE ROLE service_role;

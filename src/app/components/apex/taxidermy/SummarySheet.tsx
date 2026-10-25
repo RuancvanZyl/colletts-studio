@@ -16,6 +16,7 @@ import { useAwaitingInstruction } from '../../../../lib/hooks/useAwaitingInstruc
 import { DEPT_COLORS } from '../../../../lib/pipeline';
 import { ClientStatusBoard } from './ClientStatusBoard';
 import { DEPT_TO_VIEW } from '../../../../lib/stations';
+import { useQuotePipeline } from '../../../../lib/hooks/useQuotes';
 
 interface SummarySheetProps {
   onNavigate: (view: string, clientId?: string) => void;
@@ -39,6 +40,8 @@ export function SummarySheet({ onNavigate }: SummarySheetProps) {
   const { overdue: careOverdue, due: careDue } = useClientCare();
   const { overdue: deadlinesOverdue } = useDeadlineWatch();
   const { due: instructionsDue } = useAwaitingInstruction();
+  const { rows: quoteRows } = useQuotePipeline();
+  const quotesAwaitingPay = quoteRows.filter(r => r.stage === 'awaiting_deposit').length;
 
   const attentionCards = [
     { count: attention?.newHunterSubmissions ?? 0, label: 'new hunter submission',  plural: 'new hunter submissions',  action: 'Review in Job Tracker',    view: 'inventory',       color: '#8b5cf6' },
@@ -54,7 +57,7 @@ export function SummarySheet({ onNavigate }: SummarySheetProps) {
   const kpiCards = [
     { label: 'Active Job Cards',    value: stats?.totalActive        ?? 0, icon: TrendingUp,  color: '#0073ea' },
     { label: 'Completed This Month',value: stats?.completedThisMonth ?? 0, icon: CheckCircle2,color: '#10b981' },
-    { label: 'Awaiting Payment',    value: stats?.pendingPayment     ?? 0, icon: CreditCard,  color: '#f59e0b' },
+    { label: 'Awaiting Payment',    value: (stats?.pendingPayment ?? 0) + quotesAwaitingPay, icon: CreditCard,  color: '#f59e0b' },
     { label: 'Critically Stalled',  value: stats?.stalledRed         ?? 0, icon: AlertTriangle, color: stats?.stalledRed ? '#ef4444' : '#10b981' },
   ];
 

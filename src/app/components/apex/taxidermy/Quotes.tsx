@@ -9,6 +9,8 @@ import { supabase } from '../../../../lib/supabase';
 import { useAuth } from '../../../../lib/auth';
 import { mountsFor } from '../../../../lib/pricing';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
+import { planRelease, releaseHunt, type ReleasePreview } from '../../../../lib/releaseHunt';
+import { sciName } from '../../../../lib/species';
 import { useQuotePipeline, loadQuotes, money, STAGE_LABEL, type Quote, type QuoteLine, type PipelineRow } from '../../../../lib/hooks/useQuotes';
 
 const field = 'w-full rounded-lg border border-slate-600 bg-[#0f1a24] text-slate-100 px-3 min-h-11 text-base placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0073ea]';
@@ -18,9 +20,9 @@ const STAGE_COLOUR: Record<string, string> = {
   declined: 'bg-red-900/50 text-red-300', awaiting_deposit: 'bg-orange-900/50 text-orange-300', authorised: 'bg-emerald-900/50 text-emerald-300',
 };
 
-export function Quotes({ onChanged }: { onChanged?: () => void }) {
+export function Quotes({ onChanged, initialHuntId }: { onChanged?: () => void; initialHuntId?: string }) {
   const { rows, loading, refresh } = useQuotePipeline();
-  const [open, setOpen] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(initialHuntId ?? null);
 
   if (open) return <QuoteEditor huntId={open} onBack={() => { setOpen(null); refresh(); onChanged?.(); }} />;
 
@@ -84,7 +86,8 @@ function QuoteEditor({ huntId, onBack }: { huntId: string; onBack: () => void })
   const [percent, setPercent] = useState(50);
   const [note, setNote] = useState('');
   const [authorised, setAuthorised] = useState(false);
-  const [popup, setPopup] = useState<null | { kind: 'deposit' | 'full' | 'balance' | 'other' | 'accept' }>(null);
+  const [popup, setPopup] = useState<null | { kind: 'deposit' | 'full' | 'balance' | 'other' | 'accept' | 'release' }>(null);
+  const [plan, setPlan] = useState<ReleasePreview | null>(null);
 
   async function load() {
     setLoading(true);
@@ -94,6 +97,7 @@ function QuoteEditor({ huntId, onBack }: { huntId: string; onBack: () => void })
     setAuthorised(!!hunt?.work_authorised_at);
     const [q] = await loadQuotes({ huntId });
     setQuote(q ?? null);
+    setPlan(await planRelease(huntId).catch(() => null));
     if (q) {
       setLines(q.lines.map(l => ({ ...l }))); setCurrency(q.currency); setPercent(q.deposit_percent); setNote(q.note ?? '');
     } else {
@@ -138,7 +142,7 @@ function QuoteEditor({ huntId, onBack }: { huntId: string; onBack: () => void })
     const { error } = await (supabase as any).rpc('staff_record_payment', { p_quote: quote!.id, p_amount: amount, p_method: method, p_reference: reference || null, p_received: date ? `${date}T12:00:00` : null });
     setBusy(false);
     if (error) { toast.error(error.message); return false; }
-    toast.success('Payment recorded'); setPopup(null); load();
+    toast.success('Payment recorded'); setPopup(null); await load(); setPopup({ kind: 'release' });
     return true;
   }
 
@@ -174,7 +178,14 @@ function QuoteEditor({ huntId, onBack }: { huntId: string; onBack: () => void })
           <button className="min-h-11 px-4 rounded-xl border border-sky-400 text-sky-100 font-semibold" onClick={() => setPopup({ kind: 'accept' })}>The hunter agreed by phone, WhatsApp or in person</button>
         </div>
       )}
-      {authorised && <div className="rounded-xl border border-emerald-600 bg-emerald-950/30 p-4 text-emerald-200 flex items-center gap-2"><CheckCircle2 className="w-5 h-5 shrink-0" />Work can start for this hunt.</div>}
+      {authorised && (
+        <div className="rounded-xl border border-emerald-600 bg-emerald-950/30 p-4 text-emerald-200 space-y-2">
+          <p className="flex items-center gap-2"><CheckCircle2 className="w-5 h-5 shrink-0" />Work can start for this hunt.</p>
+          {plan && plan.plans.length > 0 && <button className="min-h-12 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-lg font-bold" onClick={() => setPopup({ kind: 'release' })}>Start the workshop flow ({plan.plans.length} animal{plan.plans.length > 1 ? 's' : ''})</button>}
+          {plan && plan.plans.length === 0 && plan.alreadyReleased > 0 && <p className="text-sm text-emerald-300">{plan.alreadyReleased} animal{plan.alreadyReleased > 1 ? 's are' : ' is'} already in the workshop.</p>}
+          {plan && (plan.notArrived > 0 || plan.noMount > 0) && <p className="text-sm text-amber-300">{plan.notArrived > 0 ? `${plan.notArrived} animal${plan.notArrived > 1 ? 's have' : ' has'} not arrived yet. ` : ''}{plan.noMount > 0 ? `${plan.noMount} still need${plan.noMount > 1 ? '' : 's'} a mount from the hunter.` : ''}</p>}
+        </div>
+      )}
 
       <section className="space-y-3">
         <h2 className="text-lg font-bold text-slate-100">Lines</h2>
@@ -231,11 +242,12 @@ function QuoteEditor({ huntId, onBack }: { huntId: string; onBack: () => void })
         </section>
       )}
 
-      {popup && quote && popup.kind !== 'accept' && (
+      {popup && quote && popup.kind !== 'accept' && popup.kind !== 'release' && (
         <PaymentPopup kind={popup.kind} who={who.name} currency={quote.currency} busy={busy}
           amount={popup.kind === 'deposit' ? Math.max(0, dueNow - paid) : popup.kind === 'other' ? 0 : Math.max(0, total - paid)}
           stillNeeded={status === 'accepted' ? Math.max(0, dueNow - paid) : 0} onClose={() => setPopup(null)} onConfirm={record} />
       )}
+      {popup?.kind === 'release' && plan && <ReleasePopup plan={plan} onClose={() => setPopup(null)} onDone={() => { setPopup(null); load(); }} staff={{ id: profile?.id ?? null, name: profile?.full_name ?? 'Staff' }} huntId={huntId} />}
       {popup?.kind === 'accept' && quote && <AcceptPopup currency={quote.currency} total={total} percent={percent} busy={busy} onClose={() => setPopup(null)} onConfirm={acceptForHunter} />}
 
       {editable && (
@@ -303,6 +315,44 @@ export function AcceptPopup({ currency, total, percent, busy, onClose, onConfirm
         <div className="flex gap-2 pt-1">
           <button className="min-h-12 px-5 rounded-xl border border-slate-500 text-slate-100 font-semibold" onClick={onClose}>Cancel</button>
           <button className="flex-1 min-h-12 rounded-xl bg-[#0073ea] hover:bg-[#0064cc] text-white text-lg font-bold disabled:opacity-60" disabled={busy} onClick={() => onConfirm(option, note)}>Record acceptance</button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
+function ReleasePopup({ plan, huntId, staff, onClose, onDone }: { plan: ReleasePreview; huntId: string; staff: { id: string | null; name: string }; onClose: () => void; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  async function go() {
+    setBusy(true);
+    try { await releaseHunt(huntId, plan, staff); toast.success(`${plan.plans.length} job card${plan.plans.length > 1 ? 's' : ''} sent into the workshop`); onDone(); }
+    catch (e: any) { toast.error(e.message ?? 'Could not start the flow'); }
+    finally { setBusy(false); }
+  }
+  return (
+    <Dialog open onOpenChange={(o: boolean) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader><DialogTitle className="text-2xl">Start the workshop flow?</DialogTitle></DialogHeader>
+        {plan.plans.length === 0 ? <p className="text-slate-300">There is nothing to send right now.{plan.notArrived ? ` ${plan.notArrived} animal(s) have not arrived yet.` : ''}{plan.noMount ? ` ${plan.noMount} still need a mount.` : ''}</p> : (
+          <>
+            <p className="text-base text-slate-300">These job cards move out of Receiving into the workshop{plan.deadline ? <> with the order deadline <strong>{new Date(plan.deadline).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' })}</strong></> : ''}. {plan.clientName.split(' ')[0] || 'The hunter'} is told that work has started.</p>
+            <div className="rounded-xl border border-slate-700 divide-y divide-slate-800">
+              {plan.plans.map(p => (
+                <div key={p.docId} className="px-3 py-3 space-y-0.5">
+                  <p className="font-semibold text-slate-100">{p.species} <span className="text-xs italic font-normal text-slate-500">{sciName(p.species)}</span></p>
+                  <p className="text-sm text-slate-300">{p.mount === 'Custom mount (combined)' ? 'Part of a custom mount' : p.mount} → starts in <strong>{p.toLabel}</strong></p>
+                  <p className="text-xs text-slate-400">Received: {p.received}</p>
+                  {p.instructions && <p className="text-xs text-amber-300">{p.instructions}</p>}
+                </div>
+              ))}
+            </div>
+            {(plan.notArrived > 0 || plan.noMount > 0) && <p className="text-sm text-amber-300">Left out: {plan.notArrived > 0 ? `${plan.notArrived} not arrived yet` : ''}{plan.notArrived > 0 && plan.noMount > 0 ? ', ' : ''}{plan.noMount > 0 ? `${plan.noMount} without a mount` : ''}.</p>}
+          </>
+        )}
+        <div className="flex gap-2 pt-1">
+          <button className="min-h-12 px-5 rounded-xl border border-slate-500 text-slate-100 font-semibold" onClick={onClose}>Not yet</button>
+          {plan.plans.length > 0 && <button className="flex-1 min-h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-lg font-bold disabled:opacity-60 flex items-center justify-center gap-2" disabled={busy} onClick={go}>{busy && <Loader2 className="w-5 h-5 animate-spin" />}Start the workshop flow</button>}
         </div>
       </DialogContent>
     </Dialog>
