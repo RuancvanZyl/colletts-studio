@@ -1,0 +1,155 @@
+import { e, type GuideEntry } from './types';
+
+/** Spiral-horned antelope, horse antelope, oryx, hartebeest and relatives. */
+export const ANTELOPE_1: Record<string, GuideEntry> = {
+  'Kudu': e(
+    "A tall, grey-brown antelope of woodland and thicket. Only the bulls carry the long, corkscrew horns that make the kudu one of Africa's most admired trophies.",
+    ["A kudu can clear a fence two metres high from a standing start.", "The horns grow in a spiral. A fully mature bull carries about two and a half turns."],
+    ["Bulls weigh roughly 190 to 270 kg. Cows are smaller and have no horns.", "Both sexes have thin white stripes down the flanks and a white chevron between the eyes."],
+    ["Kudu are most active early and late in the day and lie up in thick cover through the heat. Their big ears pick up the faintest sound.", "Mature bulls are often alone or in small bachelor groups. Length along the outside curve of the horn is the measurement that counts."],
+    "Long, narrow, pointed cloven hooves, bigger and more elongated than impala."),
+  'Kudu (Lesser)': e(
+    "A slimmer, more delicate cousin of the greater kudu from the dry thornbush of East Africa. The bulls have shorter, tightly twisted horns.",
+    ["Lesser kudu have no beard along the throat, unlike the greater kudu.", "They have up to a dozen or more thin white stripes on each flank."],
+    ["Found in Kenya, Tanzania, Ethiopia and Somalia, usually in dense dry bush.", "Much smaller than the greater kudu, bulls stand around a metre at the shoulder."],
+    ["Shy and fond of thick cover, so most are seen at dawn and dusk.", "Hunting is mostly in Tanzania. Good horn length and tight, full turns make a fine head."],
+    "Small, narrow cloven hooves, noticeably smaller than greater kudu."),
+  'Nyala': e(
+    "A shy antelope of dense thicket, with a striking difference between the sexes. Bulls are dark and shaggy with a long fringe, cows are chestnut with white stripes.",
+    ["Bulls can raise a crest of long white hair along the back to look larger when they display.", "A displaying bull raises the long white crest along his back and turns side-on to look as big as possible."],
+    ["Found in the thickets of north-eastern South Africa, Eswatini, Mozambique, Malawi and Zimbabwe.", "Only the bulls carry the lyre-shaped horns, which have a pale tip."],
+    ["Nyala stay close to cover and are most active in the early morning and late afternoon.", "A good bull has horns with a long, graceful curve and pale tips. Many animals in South Africa are on private game farms."],
+    "Cloven, slightly splayed hooves, a little larger than bushbuck."),
+  'Nyala (Mountain)': e(
+    "A rare, shaggy antelope found only in the highlands of Ethiopia. It lives high in the mountains in heather and juniper forest.",
+    ["It was not known to science until the early 1900s.", "It lives at altitudes that few antelope tolerate, often well above 3,000 metres."],
+    ["Found only in Ethiopia, mostly in the Bale and Arsi mountains.", "The coat is thick and grizzled to cope with the cold."],
+    ["A rare species taken only on strictly controlled permits in Ethiopia.", "Hunting is physically demanding because of the altitude and rough terrain."],
+    "Cloven hooves, larger than lowland nyala, in soft mountain ground."),
+  'Eland': e(
+    "The largest antelope in the world. Eland are calm, powerful animals that can jump high and walk great distances.",
+    ["Eland can jump a fence close to two metres high from standing.", "A clicking sound as an eland walks comes from the tendons in the legs."],
+    ["Both bulls and cows have straight horns with a slight twist. Old bulls turn grey-blue and grow a dark patch of hair on the forehead.", "Bulls can weigh up to about 900 kg."],
+    ["Eland are shy and walk fast, so they are often hard to approach in open country.", "Old bulls with thick horns and a heavy dewlap are the prized trophies."],
+    "Big, rounded cloven hooves. Heavy bulls often drag their toes."),
+  'Eland (Giant)': e(
+    "Also called the Lord Derby eland. It is the biggest of all the elands, with huge spiralled horns and a rich chestnut coat with bold white stripes.",
+    ["Bulls can be even larger than the common eland, and their horns are thicker and more heavily spiralled.", "The neck of a bull is dark and heavily maned."],
+    ["Found in the savannas of west and central Africa, such as Cameroon and the Central African Republic.", "Both sexes are horned."],
+    ["Hunted on safari in central Africa, usually on foot over long distances.", "Good trophies need patient tracking in remote country."],
+    "Large, rounded cloven hooves, bigger than common eland."),
+  'Bushbuck': e(
+    "A shy, solitary antelope of thick bush and river edges. Rams are dark and heavily built, with a white throat patch and spiral horns.",
+    ["Bushbuck have a reputation for fierceness and will turn on a threat when cornered.", "The white spots and stripes on the coat vary from place to place."],
+    ["Found across sub-Saharan Africa near water and thick cover.", "Only the rams carry horns, which are short, straight and slightly twisted."],
+    ["Bushbuck stay close to cover and come out to feed at dawn, dusk and often at night.", "Quiet, patient hunting along river edges gives the best chance of a mature ram."],
+    "Small, narrow, pointed cloven hooves, a little bigger than a duiker."),
+  'Sitatunga': e(
+    "A swamp antelope with long, splayed hooves that let it walk on floating papyrus. It lives in reed beds and swamp islands.",
+    ["A sitatunga can hide underwater with just its nostrils above the surface.", "The long, spread hooves work like snow shoes on soft ground."],
+    ["Found in the swamps of central and southern Africa, including the Okavango and Uganda.", "Rams are shaggy and dark. Females are chestnut with a few white stripes."],
+    ["Often hunted from a boat or dugout canoe in papyrus swamps.", "Patience is needed as the animal slips quietly away into thick reeds."],
+    "Very long, widely splayed hooves with a spread that can be seen in soft mud."),
+  'Bongo': e(
+    "A large, beautiful forest antelope with a rich chestnut coat and bold white stripes. The lowland bongo lives in the dense forests of central and west Africa.",
+    ["Bongo have very large ears and an excellent sense of hearing.", "Both sexes carry spiral horns, and the coat's colour lets it vanish into the forest."],
+    ["The mountain bongo of Kenya is critically endangered. The lowland bongo is found in forest in countries like Cameroon and the Central African Republic.", "Males can be around 220 to 400 kg."],
+    ["Hunting a lowland bongo is tightly regulated, in dense forest, with trackers.", "Check the permits and your country's import rules well before you hunt."],
+    "Large, rounded cloven hooves in forest mud, with a wide stride."),
+  'Sable': e(
+    "A dramatic antelope with long, backswept horns. The bulls turn glossy black with age while the cows stay chestnut.",
+    ["A sable can stand its ground against a lion and use the horns as weapons.", "Young bulls are brown and slowly darken until they are almost black."],
+    ["Found in the woodlands of southern and eastern Africa. Both sexes carry horns.", "Herds are led by a master bull."],
+    ["Sable herds feed in open woodland and drink in the morning. A long, thick, evenly curved horn makes the best trophy.", "Horn length along the outside curve is the key measurement."],
+    "Cloven hooves, broad and heavy, a little blunter than a roan."),
+  'Roan': e(
+    "A powerful antelope of woodland and grassland, with a pale face mask, long tufted ears and curved horns.",
+    ["Roan can be fierce and will fight off a predator.", "The tufted ears give the animal an unmistakable outline."],
+    ["One of the biggest antelope in Africa. Both sexes have horns.", "Found in thinly wooded savannas across southern, central and west Africa."],
+    ["Roan live at low densities and need lots of space, so they are often hard to find.", "A thick, long, evenly curved horn makes a prized trophy."],
+    "Cloven hooves, broad and rounded, larger than sable."),
+  'Gemsbok': e(
+    "A tough desert antelope with long, straight horns and bold black-and-white face markings.",
+    ["A gemsbok can survive for long periods without drinking, getting water from plants and roots.", "Its body can cool the blood going to the brain in the heat of the Kalahari."],
+    ["Both sexes carry long, straight horns. The cow's are often longer and thinner.", "Found in the dry country of southern Africa, especially the Kalahari and Namibia."],
+    ["Gemsbok are alert and move in open country, so approach needs care.", "Horn length and symmetry matter most. Long, thin horns are common on cows."],
+    "Round, large cloven hooves, almost circular."),
+  'Oryx (Beisa)': e(
+    "The oryx of the dry horn of Africa, with long, straight horns and a pale grey-tan coat.",
+    ["Beisa oryx live in some of the hottest places on earth.", "Both sexes carry straight, ringed horns."],
+    ["Found in Ethiopia, Somalia and northern Kenya.", "Sometimes grouped with the fringe-eared oryx."],
+    ["Hunted in dry bush country, usually in strictly controlled areas.", "Alert and wary in open ground."],
+    "Round cloven hooves, broad and rounded."),
+  'Oryx (Fringe-eared)': e(
+    "A slender oryx of East Africa, easily told from the beisa by the black tufts on the tips of its ears.",
+    ["The fringe of black hair on the ear tips gives this oryx its name.", "It is found in eastern Kenya and Tanzania."],
+    ["Both sexes have long, straight horns.", "They live in dry savanna and bush country."],
+    ["Often seen in small herds in dry bush country.", "Alert animals that rely on open ground to spot danger."],
+    "Round, broad cloven hooves."),
+  'Hartebeest': e(
+    "The red hartebeest of southern Africa has a long face, sloping back and a chestnut coat. It is a fast, alert grazer of open country.",
+    ["Herds post a sentinel, often on a termite mound, to watch for danger.", "They can run at speed for long distances."],
+    ["Both sexes have horns shaped like a lyre, with a ringed base.", "Found in the open plains of the Kalahari, the Karoo and surrounding country."],
+    ["Hartebeest are wary and alert. Open country makes the approach harder.", "Horn length and the width of the lyre are the main trophy points."],
+    "Narrow, pointed cloven hooves."),
+  'Hartebeest (Lichtenstein\'s)': e(
+    "A tall hartebeest of miombo woodland, paler than the red hartebeest, with chevron-shaped horns.",
+    ["Named after the German zoologist Martin Lichtenstein.", "Both sexes carry distinctive angled horns."],
+    ["Found in Zambia, Tanzania, Malawi and Mozambique.", "They live in open woodland and grassland."],
+    ["Often hunted in the miombo woodlands of Tanzania and Mozambique.", "They are shy and will bolt at the first sign of danger."],
+    "Cloven hooves, a little narrower than wildebeest."),
+  'Hartebeest (Coke\'s)': e(
+    "Also called the kongoni, a common hartebeest of the open plains of Kenya and Tanzania.",
+    ["Kongoni stand on termite mounds to watch for predators.", "They are among the most common antelope in the Serengeti-Mara."],
+    ["Both sexes carry thick ringed horns in a heart-shaped outline.", "The coat is a pale tan."],
+    ["Often hunted in the open country of Tanzania.", "Long, thick horns with a good width are the goal."],
+    "Cloven hooves, narrow and pointed."),
+  'Hartebeest (Jackson\'s)': e(
+    "A hartebeest of Uganda, Kenya and south Sudan, darker than Coke's, with horns that sweep up in a distinctive shape.",
+    ["It is named after the British explorer Frederick Jackson.", "Both sexes have strong, ringed horns."],
+    ["Found in the savannas of Uganda and western Kenya.", "The coat is rich chestnut with darker legs."],
+    ["Hunted in Uganda and South Sudan under controlled permits.", "Good horn length and a wide, strong boss on the horn make a fine head."],
+    "Narrow cloven hooves."),
+  'Hartebeest (Lelwel)': e(
+    "A hartebeest of the savannas north of Lake Victoria through to the Central African Republic and Sudan.",
+    ["Both sexes have horns."],
+    ["Found in Uganda, the Central African Republic and south Sudan.", "The coat is a warm tan with darker markings."],
+    ["Hunted in the savannas of central Africa.", "Distances can be long, with open country and quick animals."],
+    "Narrow cloven hooves."),
+  'Tsessebe': e(
+    "A glossy, dark antelope of open woodland with a purplish sheen. It is often named as one of Africa's fastest antelope.",
+    ["Tsessebe often stand on termite mounds to look out for danger.", "Their stamina over distance is remarkable."],
+    ["Both sexes carry lyre-shaped horns with rings.", "Found in the woodlands of southern Africa such as Botswana, Zimbabwe, Zambia and Namibia."],
+    ["Alert and fast, tsessebe are not easy to approach in open country.", "Mature males have thick horns with a good curve."],
+    "Narrow, pointed cloven hooves."),
+  'Topi': e(
+    "A glossy red-brown antelope of the East African plains, often seen standing on termite mounds.",
+    ["Topi stand on mounds not only as lookouts but to display to rivals.", "The coat has a purple shine in the sun."],
+    ["Found in the open grasslands of Kenya and Tanzania.", "Both sexes carry ringed, lyre-shaped horns."],
+    ["Often hunted in open plains, which demands careful stalking.", "Strong, evenly shaped horns are the goal."],
+    "Narrow cloven hooves."),
+  'Blesbok': e(
+    "A chocolate-brown antelope with a bold white face blaze, found on the open grasslands of the South African Highveld.",
+    ["The white blaze on the face gives the animal its name; \"bles\" means blaze in Afrikaans.", "Blesbok live in herds and run in single file when alarmed."],
+    ["Both sexes carry ringed, lyre-shaped horns.", "Found on the Highveld grasslands of South Africa."],
+    ["Herds are wary, so a careful stalk is needed on open ground.", "A mature ram with thick, long horns is a fine trophy."],
+    "Narrow cloven hooves, similar to springbok but a little bigger."),
+  'Bontebok': e(
+    "A striking, rich-brown antelope with a white face and a bold white patch on the rump. Found naturally only in the Western Cape coastal belt.",
+    ["Bontebok were saved from near extinction in the 1800s by a few farmers who protected them.", "The white rump patch is clear and distinctive."],
+    ["Both sexes have ringed, lyre-shaped horns.", "Found in the coastal fynbos and renosterveld of the Western Cape and on game farms."],
+    ["Mostly hunted on private game farms.", "Check the trophy and permit rules for your area."],
+    "Narrow cloven hooves, slightly smaller than blesbok."),
+  'Wildebeest (Blue)': e(
+    "The famous gnu of the Serengeti migration. A big, shaggy, grey animal with a dark mane and a sloping back.",
+    ["In the Serengeti-Mara more than a million wildebeest follow the rains in a great annual migration.", "A calf can stand and run within minutes of birth."],
+    ["Both sexes carry curved horns. Bulls develop a heavy boss at the base.", "Found in southern and eastern Africa in open savanna."],
+    ["Wildebeest are alert and travel in herds, so careful stalking is needed in open country.", "A wide, heavy horn spread with a thick boss makes the best trophy."],
+    "Large, rounded-pointed cloven hooves, similar to cattle."),
+  'Wildebeest (Black)': e(
+    "The white-tailed gnu of the South African Highveld. Dark brown to black with a cream tail, a bold white mane and horns that hook forward.",
+    ["Black wildebeest were hunted to the edge of extinction in the early 1900s and have since recovered.", "Bulls perform bold displays, prancing and snorting, to show their strength."],
+    ["Both sexes carry horns. They are found in the open grasslands of South Africa, Lesotho and Eswatini.", "The tail is long and white like a horse's."],
+    ["Alert and curious, black wildebeest often stop and stare, which can help a hunter.", "Look for heavy horn bosses with a strong forward curve."],
+    "Broad, rounded cloven hooves."),
+}

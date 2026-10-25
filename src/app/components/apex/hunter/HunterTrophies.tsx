@@ -13,6 +13,8 @@ import { printDropOffPapers } from '../../../../lib/print';
 import { PhotoGallery } from '../shared/TrophyPhotos';
 import { ChooseMounts } from './ChooseMounts';
 import { AddAnimalsFlow } from './AddAnimalsFlow';
+import { QuoteCard } from './QuoteCard';
+import { useHunterQuotes } from '../../../../lib/hooks/useQuotes';
 
 function statusOf(a: HunterAnimal): { text: string; tone: 'todo' | 'wait' | 'work' | 'done'; pct: number } {
   if (a.finished) return { text: 'Finished — ready for you', tone: 'done', pct: 100 };
@@ -25,6 +27,7 @@ function statusOf(a: HunterAnimal): { text: string; tone: 'todo' | 'wait' | 'wor
 
 export function HunterTrophies({ onRegisterHunt, onChanged, startAdding = false }: { onRegisterHunt?: () => void; onChanged?: () => void; startAdding?: boolean }) {
   const { client, animals, loading, refresh } = useHunterAnimals();
+  const { quotes, refresh: refreshQuotes } = useHunterQuotes(client?.id);
   const [choosing, setChoosing] = useState<string[] | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [adding, setAdding] = useState(startAdding);
@@ -54,6 +57,10 @@ export function HunterTrophies({ onRegisterHunt, onChanged, startAdding = false 
       <button onClick={() => setAdding(true)} className="w-full min-h-14 rounded-2xl border-2 border-green-700 text-green-800 dark:text-green-300 font-bold text-lg flex items-center justify-center gap-2 bg-white dark:bg-slate-900">
         <span className="text-2xl">🎯</span>Add my animals<span className="text-xs font-normal text-slate-500 hidden sm:inline">after your hunt</span>
       </button>
+
+      {quotes.filter(q => q.status !== 'draft' && q.status !== 'paid' || q.payments.length).map(q => (
+        <QuoteCard key={q.id} quote={q} ref_={animals.find(a => a.huntId === q.hunt_id)?.huntRef} onChanged={() => { refreshQuotes(); onChanged?.(); }} />
+      ))}
 
       {waiting.length > 0 && (
         <div className="rounded-2xl border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/30 p-4 space-y-3">

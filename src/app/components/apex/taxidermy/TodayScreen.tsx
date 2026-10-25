@@ -11,6 +11,7 @@ import { useDeadlineWatch } from '../../../../lib/hooks/useDeadlineWatch';
 import { useAwaitingInstruction } from '../../../../lib/hooks/useAwaitingInstruction';
 import { DEPT_COLORS } from '../../../../lib/pipeline';
 import { DEPT_TO_VIEW } from '../../../../lib/stations';
+import { useQuotePipeline } from '../../../../lib/hooks/useQuotes';
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -21,6 +22,10 @@ export function TodayScreen({ onNavigate }: { onNavigate: (view: string, clientI
   const { overdue: careOverdue } = useClientCare();
   const { overdue: deadlinesOverdue } = useDeadlineWatch();
   const { hunts: waitingForMounts } = useAwaitingInstruction();
+  const { rows: quoteRows } = useQuotePipeline();
+  const toQuote = quoteRows.filter(r => r.stage === 'to_quote').length;
+  const changes = quoteRows.filter(r => r.stage === 'declined').length;
+  const awaitingPay = quoteRows.filter(r => r.stage === 'awaiting_deposit').length;
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
@@ -28,6 +33,9 @@ export function TodayScreen({ onNavigate }: { onNavigate: (view: string, clientI
 
   // Most urgent first. Each one is a sentence a person can act on.
   const needs = [
+    { n: toQuote, text: plural(toQuote, 'hunter has chosen their mounts and needs a quote', 'hunters have chosen their mounts and need a quote'), go: 'quotes', tone: 'amber' },
+    { n: changes, text: plural(changes, 'hunter asked for changes to their quote', 'hunters asked for changes to their quote'), go: 'quotes', tone: 'red' },
+    { n: awaitingPay, text: plural(awaitingPay, 'accepted quote is waiting for payment', 'accepted quotes are waiting for payment'), go: 'quotes', tone: 'amber' },
     { n: deadlinesOverdue.length, text: plural(deadlinesOverdue.length, 'hunt is past its deadline', 'hunts are past their deadline'), go: 'deadline-watch', tone: 'red' },
     { n: attention?.stalledRed ?? 0, text: plural(attention?.stalledRed ?? 0, 'animal has been stuck for far too long', 'animals have been stuck for far too long'), go: 'daily-todo', tone: 'red' },
     { n: attention?.unreadMessages ?? 0, text: plural(attention?.unreadMessages ?? 0, 'unread message from a hunter', 'unread messages from hunters'), go: 'client-inbox', tone: 'amber' },

@@ -43,6 +43,7 @@ import { Messages } from './taxidermy/Messages';
 import { WorkshopSetup } from './taxidermy/WorkshopSetup';
 import { TodayScreen } from './taxidermy/TodayScreen';
 import { AnimalGuideEditor } from './taxidermy/AnimalGuideEditor';
+import { Quotes } from './taxidermy/Quotes';
 import { StationsHome } from './taxidermy/StationsHome';
 import { ClientStatusBoard } from './taxidermy/ClientStatusBoard';
 import { SectionTabs } from './shared/SectionTabs';
@@ -102,7 +103,8 @@ type TaxidermyView =
   | 'stations'
   | 'status-board'
   | 'whiteboard'
-  | 'animal-guide';
+  | 'animal-guide'
+  | 'quotes';
 
 interface NavItem {
   view: TaxidermyView;
@@ -304,7 +306,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     // department managers also handle client conversations
     if (isManager && view === 'client-inbox') return true;
     if (isBookkeeper) {
-      return ['summary', 'whiteboard', 'dashboard', 'client-inbox', 'payment-confirmation', 'invoices', 'inventory', 'clients', 'hunt-archive', 'client-care', 'deadline-watch', 'awaiting-instruction', 'status-board'].includes(view);
+      return ['summary', 'whiteboard', 'dashboard', 'client-inbox', 'payment-confirmation', 'invoices', 'inventory', 'clients', 'hunt-archive', 'client-care', 'deadline-watch', 'awaiting-instruction', 'status-board', 'quotes'].includes(view);
     }
     // Department staff / ground staff: only stations in their departments
     const deptsNeeded = VIEW_DEPT[view];
@@ -352,6 +354,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       { view: 'client-inbox', label: 'Hunters' },
     ] },
     { key: 'money', label: 'Money', icon: CreditCard, tabs: [
+      { view: 'quotes',               label: 'Quotes' },
       { view: 'payment-confirmation', label: 'Payments' },
       { view: 'invoices',             label: 'Invoices' },
     ] },
@@ -384,6 +387,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'summary':         return <TodayScreen onNavigate={navigate} />;
       case 'whiteboard':      return <SummarySheet onNavigate={navigate} />;
       case 'animal-guide':    return <AnimalGuideEditor />;
+      case 'quotes':          return <Quotes />;
       case 'stations':        return <StationsHome stations={STATIONS.filter(st => canSeeView(st.view as TaxidermyView))} onOpen={navigate} />;
       case 'status-board':    return <ClientStatusBoard onNavigate={navigate} />;
       case 'dashboard':       return <WorkshopDashboard onNavigate={navigate} />;

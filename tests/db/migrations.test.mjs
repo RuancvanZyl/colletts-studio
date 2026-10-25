@@ -13,6 +13,7 @@ const fails = async (sql, params) => { try { await db.query(sql, params); return
 await db.exec(fs.readFileSync(HERE + 'bootstrap.sql', 'utf8'));
 await db.exec(`
  ALTER TABLE client_hunts ADD COLUMN IF NOT EXISTS year text; ALTER TABLE client_hunts ADD COLUMN IF NOT EXISTS status text; ALTER TABLE client_hunts ADD COLUMN IF NOT EXISTS client_type text; ALTER TABLE client_hunts ADD COLUMN IF NOT EXISTS operator text; ALTER TABLE client_hunts ADD COLUMN IF NOT EXISTS start_date date; ALTER TABLE client_hunts ADD COLUMN IF NOT EXISTS end_date date;
+ ALTER TABLE clients ADD COLUMN IF NOT EXISTS client_number text;
  ALTER TABLE clients ADD COLUMN IF NOT EXISTS email text;
  ALTER TABLE clients ADD COLUMN IF NOT EXISTS phone text;
  ALTER TABLE clients ADD COLUMN IF NOT EXISTS client_type text;
@@ -24,7 +25,7 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql']) {
+for (const f of ['041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
@@ -300,5 +301,93 @@ await as(HUN2);
 ok((await q(`SELECT species FROM species_guide`)).length === 1, 'a hunter can read the guide');
 ok((await fails(`UPDATE species_guide SET summary = 'hacked'`)) === null && (await q(`SELECT summary FROM species_guide`))[0].summary === 'Tall spiral-horned antelope', 'a hunter cannot change the guide');
 ok((await fails(`INSERT INTO species_photos (species, kind, storage_path) VALUES ('Kudu','animal','x.jpg')`)) !== null, 'or add photos to it');
+
+console.log('\nQuotes, payment and go-ahead');
+const HUN4 = 'b1000000-0000-0000-0000-000000000004';
+await as(null);
+await db.exec(`
+ INSERT INTO clients (id, full_name, auth_user_id) VALUES ('c3000000-0000-0000-0000-000000000001','Quote Hunter','${HUN4}') ON CONFLICT DO NOTHING;
+ INSERT INTO client_hunts (id, client_id, status) VALUES ('d3000000-0000-0000-0000-000000000001','c3000000-0000-0000-0000-000000000001','active');
+ INSERT INTO hunt_documents (id, hunt_id, doc_type, title, status, current_department, form_data) VALUES
+  ('e3000000-0000-0000-0000-000000000001','d3000000-0000-0000-0000-000000000001','job_card','Kudu','in_progress','receiving','{"species":"Kudu","mount_type":"Shoulder Mount","mount_chosen_by":"client"}'),
+  ('e3000000-0000-0000-0000-000000000002','d3000000-0000-0000-0000-000000000001','job_card','Impala','in_progress','receiving','{"species":"Impala","mount_type":"Custom mount","mount_chosen_by":"client"}');
+`);
+await as(ids.admin);
+ok((await q(`SELECT stage FROM v_quote_pipeline WHERE hunt_id='d3000000-0000-0000-0000-000000000001'`))[0].stage === 'to_quote', 'a hunt where the hunter chose mounts shows up as waiting for a quote');
+const lines = JSON.stringify([{ hunt_doc_id: 'e3000000-0000-0000-0000-000000000001', description: 'Kudu - Shoulder Mount', amount: 1040 }, { description: 'Impala - Custom mount', amount: null }]);
+ok((await fails(`SELECT public.staff_save_quote('d3000000-0000-0000-0000-000000000001','USD',$1::jsonb,50,'',true)`, [lines]))?.includes('needs an amount'), 'a quote cannot be sent while a line has no price');
+const qid = (await q(`SELECT public.staff_save_quote('d3000000-0000-0000-0000-000000000001','USD',$1::jsonb,50,'Custom needs a visit',false) id`, [JSON.stringify([{ description: 'Kudu - Shoulder Mount', amount: 1040 }, { description: 'Impala - Custom mount', amount: 2000 }])]))[0].id;
+await db.query(`SELECT public.staff_save_quote('d3000000-0000-0000-0000-000000000001','USD',$1::jsonb,50,'Custom needs a visit',true)`, [JSON.stringify([{ description: 'Kudu - Shoulder Mount', amount: 1040 }, { description: 'Impala - Custom mount', amount: 2000 }])]);
+ok((await q(`SELECT status FROM quotes WHERE id=$1`, [qid]))[0].status === 'sent', 'the manager can send the quote');
+ok((await q(`SELECT quote_required r FROM client_hunts WHERE id='d3000000-0000-0000-0000-000000000001'`))[0].r === true, 'sending a quote puts the hunt on the quote track');
+await as(ids.worker);
+ok((await fails(`SELECT public.staff_save_quote('d3000000-0000-0000-0000-000000000001','USD','[{"description":"x","amount":1}]'::jsonb,50,'',false)`))?.includes('Only managers'), 'a worker cannot prepare a quote');
+await as(ids.admin);
+ok((await fails(`UPDATE hunt_documents SET current_department='skinning' WHERE id='e3000000-0000-0000-0000-000000000001'`))?.includes('Work cannot start yet'), 'the animals cannot leave Receiving before the quote is accepted and paid');
+await as(HUN4);
+ok((await q(`SELECT count(*)::int n FROM quotes`))[0].n === 1 && (await q(`SELECT count(*)::int n FROM quote_lines`))[0].n === 2, 'the hunter sees their sent quote and its lines');
+ok((await fails(`SELECT public.hunter_respond_quote($1, true, '', 'sometime')`, [qid]))?.includes('deposit or pay in full'), 'the hunter must choose deposit or full payment');
+await db.query(`SELECT public.hunter_respond_quote($1, true, 'Thank you', 'deposit')`, [qid]);
+let qq = (await q(`SELECT status, payment_option, amount_due_now::float a FROM quotes WHERE id=$1`, [qid]))[0];
+ok(qq.status === 'accepted' && qq.payment_option === 'deposit' && qq.a === 1520, 'accepting with a 50% deposit makes the deposit exactly half of the total');
+await as(ids.admin);
+await db.query(`SELECT public.staff_record_payment($1, 1000, 'EFT', 'REF1')`, [qid]);
+ok((await q(`SELECT status FROM quotes WHERE id=$1`, [qid]))[0].status === 'accepted', 'a part-payment below the deposit does not start work');
+ok((await fails(`UPDATE hunt_documents SET current_department='skinning' WHERE id='e3000000-0000-0000-0000-000000000001'`)) !== null, '...the animals are still held');
+await db.query(`SELECT public.staff_record_payment($1, 520, 'EFT', 'REF2')`, [qid]);
+ok((await q(`SELECT status FROM quotes WHERE id=$1`, [qid]))[0].status === 'deposit_paid', 'once the deposit is covered the quote is deposit paid');
+await db.query(`UPDATE hunt_documents SET current_department='skinning' WHERE id='e3000000-0000-0000-0000-000000000001'`);
+ok((await q(`SELECT current_department d FROM hunt_documents WHERE id='e3000000-0000-0000-0000-000000000001'`))[0].d === 'skinning', 'work can now start');
+await db.query(`SELECT public.staff_record_payment($1, 1520, 'EFT', 'REF3')`, [qid]);
+ok((await q(`SELECT status FROM quotes WHERE id=$1`, [qid]))[0].status === 'paid', 'paying the balance marks the quote paid in full');
+ok((await fails(`SELECT public.staff_record_payment($1, 10, 'EFT', '')`, [qid]))?.includes('not waiting for a payment'), 'nothing more can be added to a settled quote');
+// pay in full
+await as(null);
+await db.exec(`
+ INSERT INTO client_hunts (id, client_id, status) VALUES ('d3000000-0000-0000-0000-000000000002','c3000000-0000-0000-0000-000000000001','active');
+ INSERT INTO hunt_documents (id, hunt_id, doc_type, title, status, current_department, form_data) VALUES ('e3000000-0000-0000-0000-000000000003','d3000000-0000-0000-0000-000000000002','job_card','Eland','in_progress','receiving','{"species":"Eland","mount_type":"Euro Skull","mount_chosen_by":"client"}');
+`);
+await as(ids.admin);
+const q2 = (await q(`SELECT public.staff_save_quote('d3000000-0000-0000-0000-000000000002','ZAR','[{"description":"Eland - Euro Skull","amount":2498}]'::jsonb,50,'',true) id`))[0].id;
+await as(HUN4);
+await db.query(`SELECT public.hunter_respond_quote($1, true, NULL, 'full')`, [q2]);
+ok((await q(`SELECT amount_due_now::float a FROM quotes WHERE id=$1`, [q2]))[0].a === 2498, 'choosing to pay in full makes the full total due now');
+await as(ids.admin);
+await db.query(`SELECT public.staff_record_payment($1, 2498, 'Card', 'INV1')`, [q2]);
+ok((await q(`SELECT status FROM quotes WHERE id=$1`, [q2]))[0].status === 'paid', 'a full payment settles it and starts work in one step');
+await db.query(`UPDATE hunt_documents SET current_department='skinning' WHERE id='e3000000-0000-0000-0000-000000000003'`);
+// declining
+await as(null);
+await db.exec(`INSERT INTO client_hunts (id, client_id, status) VALUES ('d3000000-0000-0000-0000-000000000003','c3000000-0000-0000-0000-000000000001','active');`);
+await as(ids.admin);
+const q3 = (await q(`SELECT public.staff_save_quote('d3000000-0000-0000-0000-000000000003','USD','[{"description":"Zebra","amount":1100}]'::jsonb,50,'',true) id`))[0].id;
+await as(HUN4);
+ok((await fails(`SELECT public.hunter_respond_quote($1, false, '')`, [q3]))?.includes('what you would like changed'), 'asking for changes needs a comment');
+await db.query(`SELECT public.hunter_respond_quote($1, false, 'Please make it cheaper')`, [q3]);
+ok((await q(`SELECT status, hunter_comment c FROM quotes WHERE id=$1`, [q3]))[0].c === 'Please make it cheaper', 'the hunter\'s request for changes is kept for the manager');
+ok((await fails(`INSERT INTO quotes (hunt_id, client_id) VALUES ('d3000000-0000-0000-0000-000000000003','c3000000-0000-0000-0000-000000000001')`)) !== null, 'a hunter cannot write quotes directly');
+await as(ids.admin);
+await db.query(`SELECT public.staff_authorise_work('d3000000-0000-0000-0000-000000000001', 'Regular client')`).catch(() => {});
+ok((await fails(`SELECT public.staff_authorise_work('d3000000-0000-0000-0000-000000000003', '')`))?.includes('say why'), 'starting work without payment always needs a reason');
+
+console.log('\nRecording by hand (no Xero)');
+await as(null);
+await db.exec(`
+ INSERT INTO client_hunts (id, client_id, status) VALUES ('d3000000-0000-0000-0000-000000000004','c3000000-0000-0000-0000-000000000001','active');
+ INSERT INTO hunt_documents (id, hunt_id, doc_type, title, status, current_department, form_data) VALUES ('e3000000-0000-0000-0000-000000000004','d3000000-0000-0000-0000-000000000004','job_card','Zebra','in_progress','receiving','{"species":"Zebra","mount_type":"Shoulder Mount","mount_chosen_by":"client"}');
+`);
+await as(ids.admin);
+const q4 = (await q(`SELECT public.staff_save_quote('d3000000-0000-0000-0000-000000000004','USD','[{"description":"Zebra","amount":1000}]'::jsonb,30,'',true) id`))[0].id;
+await as(ids.worker);
+ok((await fails(`SELECT public.staff_accept_quote($1,'deposit','')`, [q4]))?.includes('Only managers'), 'a worker cannot accept a quote for a hunter');
+await as(ids.admin);
+ok((await fails(`SELECT public.staff_record_payment($1, 300, 'Cash', '')`, [q4]))?.includes('not waiting for a payment'), 'a payment needs the quote to be accepted first');
+await db.query(`SELECT public.staff_accept_quote($1,'deposit','Agreed on WhatsApp')`, [q4]);
+let r4 = (await q(`SELECT status, amount_due_now::float a, hunter_comment c FROM quotes WHERE id=$1`, [q4]))[0];
+ok(r4.status === 'accepted' && r4.a === 300 && r4.c.includes('Agreed on WhatsApp'), 'the workshop can record the hunter\'s acceptance (30% deposit = 300)');
+await db.query(`SELECT public.staff_record_payment($1, 300, 'Cash', 'Receipt 12', '2026-10-20T10:00:00Z')`, [q4]);
+ok((await q(`SELECT status FROM quotes WHERE id=$1`, [q4]))[0].status === 'deposit_paid' && (await q(`SELECT received_at::date::text d FROM quote_payments WHERE quote_id=$1`, [q4]))[0].d === '2026-10-20', 'a deposit marked paid by hand keeps the date it was received');
+await db.query(`SELECT public.staff_record_payment($1, 700, 'Cash', 'Receipt 13')`, [q4]);
+ok((await q(`SELECT status FROM quotes WHERE id=$1`, [q4]))[0].status === 'paid', 'the balance marked paid by hand settles the quote');
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

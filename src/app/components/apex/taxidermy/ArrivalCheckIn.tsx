@@ -150,7 +150,7 @@ export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
         if (existing) { huntId = existing.id; huntRef = existing.ref_number ?? ''; }
         else {
           const { data, error } = await (supabase as any).from('client_hunts')
-            .insert({ client_id: c.id, year: String(year), status: 'active', client_type: c.client_type ?? 'export' }).select('id, ref_number').single();
+            .insert({ client_id: c.id, year: String(year), status: 'active', client_type: c.client_type ?? 'export', quote_required: true }).select('id, ref_number').single();
           if (error) throw new Error(error.message);
           huntId = data.id; huntRef = data.ref_number ?? '';
         }

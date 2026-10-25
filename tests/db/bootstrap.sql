@@ -20,3 +20,7 @@ CREATE TABLE IF NOT EXISTS storage.objects (id uuid PRIMARY KEY DEFAULT gen_rand
 ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
 CREATE OR REPLACE FUNCTION storage.foldername(name text) RETURNS text[] LANGUAGE sql IMMUTABLE AS $$ SELECT (string_to_array(name, '/'))[1:greatest(array_length(string_to_array(name, '/'), 1) - 1, 0)] $$;
 CREATE TABLE IF NOT EXISTS storage.buckets (id text PRIMARY KEY, name text, public boolean, file_size_limit int, allowed_mime_types text[]);
+CREATE TABLE IF NOT EXISTS public.client_notifications (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), client_id uuid, hunt_doc_id uuid, hunt_id uuid, type text, stage text, title text, body text, read boolean DEFAULT false, created_at timestamptz DEFAULT now());
+ALTER TABLE public.client_hunts ADD COLUMN IF NOT EXISTS ref_number text;
+ALTER TABLE public.client_hunts ADD COLUMN IF NOT EXISTS deposit_amount numeric;
+ALTER TABLE public.client_hunts ADD COLUMN IF NOT EXISTS deposit_paid_at timestamptz;

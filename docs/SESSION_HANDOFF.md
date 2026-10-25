@@ -16,3 +16,10 @@
 - Hunters get a field-guide page for every animal (real photos, tracks, Roland Ward record, facts, hunting notes) from the "i" on picker cards, My collection cards, the mount chooser and a daily fact on My collection.
 - Staff fill it in at Setup → Animal guide (admins only). Photos go to the public `species-guide` bucket; add the photographer in Credit. No content is pre-filled — Roland Ward figures must be copied exactly from the record book.
 - Release script (044–047 combined, all run): supabase/launch/release_044_to_047_all.sql
+
+## 2026-10-25 — Quote, payment and go-ahead (migration 048)
+- Flow: hunter chooses mounts → Today shows "needs a quote" → manager prepares/sends the quote (Money → Quotes) → hunter accepts and chooses to pay a deposit or in full (or the workshop records their acceptance by phone/WhatsApp) → manager taps "Deposit paid" / "Fully paid" (pop-up confirms amount, method, date, reference) → work is authorised. A DB trigger holds animals of a quoted hunt in Receiving until then. Existing hunts are not affected (only hunts with a quote / hunter-registered animals / new check-ins).
+- Money is recorded by hand today (works for companies without Xero). `quotes` and `quote_payments` already carry Xero fields (invoice id/number/url, xero_payment_id; `clients.xero_contact_id`); `apply_quote_payment` is the single place a payment lands, so a Xero webhook can call it later.
+- Xero link NOT built yet: needs a Xero developer app (client id/secret as Supabase function secrets), the org's sales account code, multi-currency enabled for USD, and an Edge Function (OAuth, create invoice on acceptance, payment webhook).
+- Fill in `PAYMENT_DETAILS` in src/lib/workshop.ts (bank details shown to hunters after they accept).
+- Run supabase/launch/release_048_quotes.sql.
