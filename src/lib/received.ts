@@ -10,11 +10,14 @@ export const RECEIVED_PARTS: ReceivedPart[] = [
   { code: 'SKULL',    label: 'Skull',     hint: 'skull (with horns if it has them)' },
   { code: 'CAPE',     label: 'Cape',      hint: 'head and neck skin' },
   { code: 'BSKIN',    label: 'Back skin', hint: 'back skin' },
-  { code: 'FLATSKIN', label: 'Flat skin', hint: 'whole skin laid flat' },
-  { code: 'FSKIN',    label: 'Full skin', hint: 'whole skin with legs for a full mount' },
+  { code: 'FLATSKIN', label: 'Flat skin', hint: 'whole skin laid flat (F/Skin)' },
+  { code: 'FSKIN',    label: 'Full skin', hint: 'whole skin with legs for a full mount (FMT/Skin)' },
   { code: 'FEET',     label: 'Feet',      hint: 'feet / hooves' },
+  { code: 'LEGBONES', label: 'Leg bones', hint: 'leg bones' },
+  { code: 'SCROTUM',  label: 'Scrotum',   hint: 'scrotum' },
   { code: 'TAIL',     label: 'Tail',      hint: 'tail' },
   { code: 'TUSKS',    label: 'Tusks',     hint: 'tusks' },
+  { code: 'PANEL',    label: 'Panel',     hint: 'panel' },
   { code: 'OTHER',    label: 'Other',     hint: 'anything else — describe it' },
 ];
 

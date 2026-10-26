@@ -7,14 +7,21 @@ import { STATUS_LABEL, STATUS_TONE, RESPONSIBLE_LABEL, uploadHuntFiles, waiting 
 
 interface Item { id: string; name: string; responsible: string; status: string; reason: string | null; needs_signature: boolean; needs_stamp: boolean; requested_at: string; files: number }
 interface H { hunt_id: string; ref: string | null; hunter: string; items: Item[] }
+interface Problem { key: string; level: string; where: string; message: string; overridden: boolean }
 
 export function OutfitterDocuments({ onAsk }: { onAsk: (huntId: string) => void }) {
   const [hunts, setHunts] = useState<H[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [problems, setProblems] = useState<Record<string, Problem[]>>({});
   const fileRef = useRef<HTMLInputElement>(null);
   const target = useRef<{ hunt: string; req: string } | null>(null);
 
-  const load = async () => { const { data } = await (supabase as any).rpc('outfitter_documents_overview'); setHunts(data ?? []); };
+  const load = async () => {
+    const { data } = await (supabase as any).rpc('outfitter_documents_overview'); setHunts(data ?? []);
+    const pr: Record<string, Problem[]> = {};
+    await Promise.all((data ?? []).map(async (h: H) => { const { data: f } = await (supabase as any).rpc('check_hunt_register', { p_hunt: h.hunt_id }); pr[h.hunt_id] = (f ?? []).filter((x: Problem) => x.level === 'error' && !x.overridden && x.key !== 'register:missing'); }));
+    setProblems(pr);
+  };
   useEffect(() => { load(); }, []);
 
   async function upload(files: FileList | null) {
@@ -47,6 +54,13 @@ export function OutfitterDocuments({ onAsk }: { onAsk: (huntId: string) => void 
               <div className="flex-1 min-w-0"><p className="text-lg font-bold text-slate-900 dark:text-slate-100">{h.hunter}</p><p className={`text-sm font-semibold ${todo ? 'text-amber-700 dark:text-amber-300' : 'text-green-700 dark:text-green-300'}`}>{todo ? `${todo} document${todo > 1 ? 's' : ''} needed from you` : 'Nothing needed from you'}</p></div>
               <button className="min-h-11 px-3 rounded-xl border border-slate-300 dark:border-slate-600 text-sm font-semibold flex items-center gap-1.5 text-slate-800 dark:text-slate-100" onClick={() => onAsk(h.hunt_id)}><MessageSquare className="w-4 h-4" />Ask a question</button>
             </div>
+            {(problems[h.hunt_id] ?? []).length > 0 && (
+              <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-red-50 dark:bg-red-950/20 space-y-1.5">
+                <p className="font-bold text-red-800 dark:text-red-300">The workshop found {problems[h.hunt_id].length} problem{problems[h.hunt_id].length > 1 ? 's' : ''} on the hunt register</p>
+                <ul className="text-sm text-red-900 dark:text-red-200 list-disc pl-5 space-y-1">{problems[h.hunt_id].map(p => <li key={p.key}><strong>{p.where}:</strong> {p.message}</li>)}</ul>
+                <p className="text-xs text-red-800 dark:text-red-300">Please send a corrected register, or ask a question.</p>
+              </div>
+            )}
             <ul className="divide-y divide-slate-100 dark:divide-slate-800">
               {h.items.map(i => (
                 <li key={i.id} className="p-4 space-y-2">

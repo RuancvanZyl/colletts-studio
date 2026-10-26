@@ -25,12 +25,12 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql']) {
+for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
 const seeded = (await db.query(`SELECT name, provinces FROM document_types ORDER BY sort_order`)).rows;
-if (seeded.length === 10 && seeded[0].provinces.length === 0 && seeded.find(x => x.name === 'Hunting permit (sable)').provinces.join() === 'Free State' && seeded.find(x => x.name === 'Game farm permit').provinces.join() === 'Northern Cape') console.log('  ok  the workshop list is loaded per province'); else { console.log('  FAIL the workshop list is loaded per province'); process.exit(1); }
+if (seeded.length === 11 && seeded[0].provinces.length === 0 && seeded.find(x => x.name === 'Hunting permit (sable)').provinces.join() === 'Free State' && seeded.find(x => x.name === 'Game farm permit').provinces.join() === 'Northern Cape') console.log('  ok  the workshop list is loaded per province'); else { console.log('  FAIL the workshop list is loaded per province'); process.exit(1); }
 await db.exec(`DELETE FROM document_types`);
 await db.exec(`GRANT USAGE ON SCHEMA public, auth, storage TO authenticated; GRANT SELECT ON storage.objects TO authenticated; GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated; GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO authenticated;`);
 
@@ -532,6 +532,71 @@ await db.query(`SELECT public.submit_requirement((SELECT id FROM hunt_requiremen
 await db.query(`SELECT public.set_hunt_province($1, 'Gauteng')`, [ph]);
 ok((await q(`SELECT count(*)::int n FROM hunt_requirements WHERE hunt_id=$1 AND name='Limpopo doc'`, [ph]))[0].n === 1, 'a document that already has a file is never thrown away by a province change');
 ok((await q(`SELECT province FROM v_hunt_documents WHERE hunt_id=$1`, [ph]))[0].province === 'Gauteng', 'the board shows the province');
+
+console.log('\nThe hunt register and its cross-checks');
+await as(ids.admin);
+await db.query(`INSERT INTO registered_numbers (kind, holder_name, year, number) VALUES ('ph_permit','Test PH',2026,'PH-100'),('ho_permit','Jimmy Safaris',2026,'HO-1')`);
+await as(OUT1);
+const rh = (await q(`SELECT public.outfitter_register_hunt('{"name":"Reg Hunter","email":"reg@example.com","client_type":"export"}'::jsonb, '2026-09-15', '2026-10-01', '', '[{"species":"Kudu"},{"species":"Impala"}]'::jsonb) id`))[0].id;
+await as(ids.admin);
+const fnd = async () => (await q(`SELECT public.check_hunt_register($1) j`, [rh]))[0].j;
+const has = (f, key, level) => f.some(x => x.key === key && (!level || x.level === level));
+ok(has(await fnd(), 'register:missing', 'error'), 'a hunt with no register captured is flagged');
+const header = { register_no: '5869', province: 'Eastern Cape', commenced: '2026-09-15', terminated: '2026-10-01', ph_name: 'Test PH', ph_permit_no: 'PH-999', ph_signed: true,
+                 client_name: 'Reg Hunter', client_passport_no: 'P1', client_signed: true, ho_name: 'Jimmy Safaris', ho_permit_no: 'HO-1', ho_signed: true };
+const regLines = [
+  { farm_name: 'Buffalo Kloof', district: 'Makana', landowner: 'W Kippen', permit_no: '037974', date_killed: '2026-09-16', species: 'Cape Kudu', quantity: 1, sex: 'M', parts: ['SKULL', 'CAPE', 'BSKIN'] },
+  { farm_name: 'Buffalo Kloof', district: 'Makana', landowner: 'W Kippen', permit_no: '037999', date_killed: '2026-10-05', species: 'Impala', quantity: 1, sex: 'F', parts: ['SKULL'] },
+];
+await db.query(`SELECT public.staff_save_register($1, $2::jsonb, $3::jsonb)`, [rh, JSON.stringify(header), JSON.stringify(regLines)]);
+const reqId = (await q(`SELECT public.staff_add_requirement($1, 'Hunting permit', 'outfitter', true, true) id`, [rh]))[0].id;
+await db.query(`SELECT public.staff_set_reference_numbers($1, ARRAY['037974'])`, [reqId]);
+await as(null);
+await db.exec(`UPDATE hunt_documents SET status='in_progress', form_data = form_data || '{"received_parts":[{"code":"SKULL"},{"code":"CAPE"},{"code":"TAIL"}]}'::jsonb WHERE hunt_id='${rh}' AND form_data->>'species'='Kudu'`);
+await as(ids.admin);
+let f = await fnd();
+ok(has(f, 'header:ph_permit_no', 'error') && f.find(x => x.key === 'header:ph_permit_no').message.includes('PH-100'), 'the PH permit number is checked against the number on file for that year');
+ok(!has(f, 'header:ho_permit_no'), 'a correct outfitter permit number raises nothing');
+ok(has(f, 'line:2:date_killed', 'error'), 'a kill date outside the hunt is flagged on its line');
+ok(has(f, 'line:2:permit_no', 'error'), 'a permit number that is on no permit document is flagged');
+ok(!has(f, 'line:1:permit_no'), 'a permit number that matches a permit document is fine');
+ok(!f.some(x => x.key.startsWith('recv:missing') || x.key.startsWith('recv:count')), '"Cape Kudu" on the register matches "Kudu" on the receiving sheet');
+ok(has(f, 'recv:part_missing:kudu:BSKIN', 'error'), 'a part listed on the register but not received is flagged');
+ok(has(f, 'recv:part_extra:kudu:TAIL', 'error'), 'a part received but not on the register is flagged (it cannot be exported)');
+ok(has(f, 'recv:pending:impala', 'warn'), 'animals that have not arrived yet only warn');
+await as(OUT1);
+ok((await q(`SELECT public.check_hunt_register($1) j`, [rh]))[0].j.length > 0, 'the outfitter can see the problems on their register');
+await as(OUT2);
+ok((await fails(`SELECT public.check_hunt_register($1)`, [rh]))?.includes('cannot see'), 'another outfitter cannot');
+await as(ids.worker);
+ok((await fails(`SELECT public.staff_save_register($1, '{}'::jsonb, '[]'::jsonb)`, [rh]))?.includes('Only managers'), 'a worker cannot capture a register');
+await as(ids.admin);
+await db.query(`SELECT public.set_hunt_province($1, 'Gauteng')`, [rh]);
+ok(has(await fnd(), 'header:province', 'error'), 'a province that differs from the hunt is flagged');
+await db.query(`SELECT public.staff_add_requirement($1, 'PH Register', 'outfitter', true, true)`, [rh]);
+await as(null);
+await db.exec(`UPDATE hunt_requirements SET check_kind='register' WHERE hunt_id='${rh}' AND name='PH Register'`);
+await as(ids.admin);
+const regReq = (await q(`SELECT id FROM hunt_requirements WHERE hunt_id=$1 AND name='PH Register'`, [rh]))[0].id;
+await db.query(`SELECT public.submit_requirement($1, ARRAY['hunt/register.jpg'])`, [regReq]);
+const apErr = await fails(`SELECT public.staff_review_requirement($1, true, true, true, true, true)`, [regReq]); if (!apErr?.includes('open problem')) console.log('   got:', apErr);
+ok(apErr?.includes('open problem'), 'the register cannot be approved while problems are open');
+for (const x of (await fnd()).filter(x => x.level === 'error')) await db.query(`SELECT public.staff_override_check($1, $2, 'Accepted by the manager')`, [rh, x.key]);
+ok((await fails(`SELECT public.staff_override_check($1, 'x', '')`, [rh]))?.includes('Say why'), 'setting a problem aside needs a reason');
+ok((await fnd()).filter(x => x.level === 'error').every(x => x.overridden && x.override_reason), 'set-aside problems show their recorded reason');
+await as(null);
+await db.exec(`UPDATE hunt_requirements SET must_show = ARRAY['PH permit number','Hunter name'] WHERE id='${regReq}'`);
+await as(ids.admin);
+ok((await fails(`SELECT public.staff_review_requirement($1, true, true, true, true, true)`, [regReq]))?.includes('Tick everything'), 'a document cannot be approved until everything that must be on it is ticked');
+await db.query(`SELECT public.staff_set_reference_numbers($1, ARRAY['037974'], 'PH-777', 'HO-1')`, [reqId]);
+ok(has(await fnd(), 'doc:ph:' + reqId, 'error'), 'a document showing a different PH permit number from the register is flagged');
+ok(!has(await fnd(), 'doc:ho:' + reqId), 'a document showing the same outfitter permit number as the register is fine');
+await db.query(`SELECT public.staff_set_reference_numbers($1, ARRAY['037974'], 'PH-999', 'HO-1')`, [reqId]);
+ok(!has(await fnd(), 'doc:ph:' + reqId), 'once the number agrees with the register the problem goes away');
+await db.query(`SELECT public.staff_review_requirement($1, true, true, true, true, true, NULL, ARRAY['PH permit number','Hunter name'])`, [regReq]);
+ok((await q(`SELECT status FROM hunt_requirements WHERE id=$1`, [regReq]))[0].status === 'approved', 'once every problem is fixed or set aside with a reason, the register can be approved');
+await db.query(`SELECT public.staff_clear_override($1, 'header:province')`, [rh]);
+ok(((await q(`SELECT public._register_unresolved($1) n`, [rh]))[0].n) === 1, 'taking a reason away reopens the problem');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

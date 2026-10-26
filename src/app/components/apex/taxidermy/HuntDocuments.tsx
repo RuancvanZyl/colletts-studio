@@ -10,10 +10,11 @@ import { supabase } from '../../../../lib/supabase';
 import { useAuth } from '../../../../lib/auth';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
 import { OutfitterThread } from '../shared/OutfitterThread';
+import { HuntRegister } from './HuntRegister';
 import { PROVINCES, RESPONSIBLE_LABEL, STATUS_LABEL, STATUS_TONE, uploadHuntFiles, openHuntFile, waiting } from '../../../../lib/docs';
 
 interface BoardRow { hunt_id: string; ref_number: string | null; client_name: string; outfitter_name: string | null; required: number; approved: number; waiting_outfitter: number; waiting_hunter: number; waiting_other: number; to_check: number; rejected: number; oldest_wait: string | null; complete: boolean; province: string | null }
-interface Req { id: string; name: string; responsible: string; status: string; needs_signature: boolean; needs_stamp: boolean; file_paths: string[]; note: string | null; requested_at: string; received_at: string | null; received_by_name: string | null; rejection_reason: string | null; checked_signed: boolean; checked_stamped: boolean }
+interface Req { id: string; name: string; responsible: string; status: string; needs_signature: boolean; needs_stamp: boolean; file_paths: string[]; note: string | null; requested_at: string; received_at: string | null; received_by_name: string | null; rejection_reason: string | null; checked_signed: boolean; checked_stamped: boolean; reference_numbers: string[]; check_kind: string | null; must_show: string[]; shown_ok: string[]; ph_permit_seen: string | null; ho_permit_seen: string | null }
 
 const field = 'w-full rounded-lg border border-slate-600 bg-[#0f1a24] text-slate-100 px-3 min-h-11 text-base placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0073ea]';
 const lab = 'block text-sm font-semibold text-slate-300 mb-1';
@@ -22,6 +23,7 @@ export function HuntDocuments({ initialHuntId }: { initialHuntId?: string }) {
   const [rows, setRows] = useState<BoardRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState<string | null>(initialHuntId ?? null);
+  const [search, setSearch] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -40,12 +42,13 @@ export function HuntDocuments({ initialHuntId }: { initialHuntId?: string }) {
       { key: 'other', title: 'With the workshop or authorities', hint: '', items: [] },
       { key: 'done', title: 'Complete', hint: 'Ready to ship from a paperwork point of view', items: [] },
     ];
-    for (const r of rows) {
+    const term = search.trim().toLowerCase();
+    for (const r of rows.filter(x => !term || `${x.client_name} ${x.outfitter_name ?? ''} ${x.ref_number ?? ''} ${x.province ?? ''}`.toLowerCase().includes(term))) {
       const k = r.to_check > 0 ? 'check' : r.rejected > 0 ? 'rejected' : r.waiting_outfitter > 0 ? 'outfitter' : r.waiting_hunter > 0 ? 'hunter' : r.waiting_other > 0 ? 'other' : 'done';
       g.find(x => x.key === k)!.items.push(r);
     }
     return g.filter(x => x.items.length);
-  }, [rows]);
+  }, [rows, search]);
 
   if (open) return <Checklist huntId={open} onBack={() => { setOpen(null); load(); }} />;
 
@@ -55,6 +58,7 @@ export function HuntDocuments({ initialHuntId }: { initialHuntId?: string }) {
         <h1 className="text-3xl font-bold text-slate-100">Documents</h1>
         <p className="text-base text-slate-400 mt-1">Trophies can only be exported when every document is correct, complete, signed and stamped. This shows what is outstanding and who it is waiting on.</p>
       </div>
+      <input className={field} placeholder="Search by hunter, outfitter, reference or province" value={search} onChange={e => setSearch(e.target.value)} />
       {loading && <div className="flex items-center gap-2 text-slate-400"><Loader2 className="w-5 h-5 animate-spin" />Loading…</div>}
       {!loading && rows.length === 0 && <p className="rounded-2xl border border-dashed border-slate-600 p-8 text-center text-slate-400">No hunts have a document checklist yet. Set up the list of required documents under Setup, and new hunts get it automatically.</p>}
       {groups.map(g => (
@@ -87,6 +91,8 @@ function Checklist({ huntId, onBack }: { huntId: string; onBack: () => void }) {
   const { profile } = useAuth();
   const isManager = ['admin', 'studio_manager', 'bookkeeper'].includes(profile?.role ?? '');
   const [info, setInfo] = useState<{ client: string; ref: string; outfitter: string | null; outfitterId: string | null; province: string | null } | null>(null);
+  const [showRegister, setShowRegister] = useState(false);
+  const [numbersFor, setNumbersFor] = useState<Req | null>(null);
   const [reqs, setReqs] = useState<Req[] | null>(null);
   const [review, setReview] = useState<Req | null>(null);
   const [chat, setChat] = useState<{ text: string; req: string | null } | null>(null);
@@ -159,6 +165,9 @@ function Checklist({ huntId, onBack }: { huntId: string; onBack: () => void }) {
             {r.rejection_reason && r.status === 'rejected' && <p className="rounded-lg bg-red-950/40 border border-red-800 text-red-200 text-sm p-2.5">Sent back: {r.rejection_reason}</p>}
             {r.note && r.status === 'not_needed' && <p className="text-sm text-slate-400">Not needed: {r.note}</p>}
             {r.file_paths.length > 0 && <div className="flex flex-wrap gap-2">{r.file_paths.map((p, i) => <button key={p} onClick={() => openHuntFile(p).catch(e => toast.error(e.message))} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-600 text-slate-200 text-sm px-3 min-h-10"><Eye className="w-4 h-4" />File {i + 1}</button>)}{r.received_at && <span className="text-xs text-slate-500 self-center">received {new Date(r.received_at).toLocaleDateString('en-ZA')}{r.received_by_name ? ` from ${r.received_by_name}` : ''}</span>}</div>}
+            {r.file_paths.length > 0 && isManager && (
+              <p className="text-sm text-slate-400">Numbers on it: {(r.reference_numbers ?? []).length ? <span className="font-mono text-slate-200">{r.reference_numbers.join(', ')}</span> : 'none entered'} <button className="text-sky-300 underline ml-1 min-h-9" onClick={() => setNumbersFor(r)}>{(r.reference_numbers ?? []).length || r.ph_permit_seen || r.ho_permit_seen ? 'Change' : 'Enter them'}</button>{r.ph_permit_seen ? <span className="block">Shows PH permit no. <span className="font-mono text-slate-200">{r.ph_permit_seen}</span></span> : null}{r.ho_permit_seen ? <span className="block">Shows outfitter permit no. <span className="font-mono text-slate-200">{r.ho_permit_seen}</span></span> : null}</p>
+            )}
             <div className="flex flex-wrap gap-2 pt-1">
               {['received', 'rejected', 'approved'].includes(r.status) && r.file_paths.length > 0 && isManager && <button className="min-h-10 px-4 rounded-lg bg-[#0073ea] text-white font-semibold flex items-center gap-1.5" onClick={() => setReview(r)}><CheckCircle2 className="w-4 h-4" />{r.status === 'approved' ? 'Check again' : 'Check it'}</button>}
               {!['approved', 'not_needed'].includes(r.status) && <button disabled={busy === r.id} className="min-h-10 px-4 rounded-lg border border-slate-500 text-slate-100 font-semibold flex items-center gap-1.5 disabled:opacity-50" onClick={() => { setUploadFor(r.id); setTimeout(() => fileRef.current?.click(), 0); }}>{busy === r.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}Add a file</button>}
@@ -168,6 +177,11 @@ function Checklist({ huntId, onBack }: { huntId: string; onBack: () => void }) {
           </div>
         ))}
       </div>
+
+      <section className="space-y-3">
+        <button className="w-full min-h-14 rounded-2xl border-2 border-sky-500 text-sky-200 font-bold text-lg" onClick={() => setShowRegister(v => !v)}>{showRegister ? 'Hide the hunt register' : 'Type in and check the hunt register'}</button>
+        {showRegister && <HuntRegister huntId={huntId} canEdit={isManager} defaults={{ province: info.province, outfitter: info.outfitter, client: info.client }} onChanged={load} />}
+      </section>
 
       {isManager && <button className="inline-flex items-center gap-2 rounded-xl border-2 border-dashed border-slate-600 text-slate-200 font-semibold px-4 min-h-12" onClick={() => setAdding(true)}><Plus className="w-5 h-5" />Add another document to this hunt</button>}
 
@@ -179,6 +193,7 @@ function Checklist({ huntId, onBack }: { huntId: string; onBack: () => void }) {
         </section>
       )}
 
+      {numbersFor && <NumbersPopup req={numbersFor} onClose={() => setNumbersFor(null)} onDone={() => { setNumbersFor(null); load(); }} />}
       {review && <ReviewPopup req={review} onClose={() => setReview(null)} onDone={() => { setReview(null); load(); }} />}
       {adding && <AddDocPopup huntId={huntId} onClose={() => setAdding(false)} onDone={() => { setAdding(false); load(); }} />}
     </div>
@@ -187,14 +202,15 @@ function Checklist({ huntId, onBack }: { huntId: string; onBack: () => void }) {
 
 function ReviewPopup({ req, onClose, onDone }: { req: Req; onClose: () => void; onDone: () => void }) {
   const [c, setC] = useState({ correct: false, complete: false, signed: false, stamped: false });
+  const [shown, setShown] = useState<string[]>(req.shown_ok ?? []);
   const [reason, setReason] = useState('');
   const [sendBack, setSendBack] = useState(false);
   const [busy, setBusy] = useState(false);
-  const ready = c.correct && c.complete && (!req.needs_signature || c.signed) && (!req.needs_stamp || c.stamped);
+  const ready = c.correct && c.complete && (!req.needs_signature || c.signed) && (!req.needs_stamp || c.stamped) && (req.must_show ?? []).every(x => shown.includes(x));
 
   async function go(approve: boolean) {
     setBusy(true);
-    const { error } = await (supabase as any).rpc('staff_review_requirement', { p_req: req.id, p_approve: approve, p_correct: c.correct, p_complete: c.complete, p_signed: c.signed, p_stamped: c.stamped, p_reason: reason || null });
+    const { error } = await (supabase as any).rpc('staff_review_requirement', { p_req: req.id, p_approve: approve, p_correct: c.correct, p_complete: c.complete, p_signed: c.signed, p_stamped: c.stamped, p_reason: reason || null, p_shown: shown });
     setBusy(false);
     if (error) { toast.error(error.message); return; }
     toast.success(approve ? 'Approved' : 'Sent back'); onDone();
@@ -211,6 +227,11 @@ function ReviewPopup({ req, onClose, onDone }: { req: Req; onClose: () => void; 
         <p className="text-sm text-slate-300">Look at the document, then tick what is true. It only counts as approved when everything that is required is ticked.</p>
         <div className="space-y-2">
           <Box k="correct" label="It is correct" /><Box k="complete" label="It is complete (every page)" />
+          {(req.must_show ?? []).map(x => { const on = shown.includes(x); return (
+            <button key={x} type="button" aria-pressed={on} onClick={() => setShown(p => on ? p.filter(y => y !== x) : [...p, x])} className={`w-full text-left flex items-center gap-3 rounded-xl border-2 px-3 min-h-14 ${on ? 'border-green-500 bg-green-950/30 text-white' : 'border-slate-600 text-slate-200'}`}>
+              <span className={`w-6 h-6 rounded-md border-2 flex items-center justify-center text-sm ${on ? 'border-green-500 bg-green-500 text-white' : 'border-slate-500'}`}>{on ? '✓' : ''}</span><span className="text-base font-semibold">It shows: {x}</span>
+            </button>
+          ); })}
           {req.needs_signature && <Box k="signed" label="It is signed" />}{req.needs_stamp && <Box k="stamped" label="It is stamped" />}
         </div>
         {sendBack && <div><label className={lab}>What is wrong? The {req.responsible === 'hunter' ? 'hunter' : 'outfitter'} will see this.</label><textarea rows={3} className={field} value={reason} onChange={e => setReason(e.target.value)} autoFocus /></div>}
@@ -250,6 +271,31 @@ function AddDocPopup({ huntId, onClose, onDone }: { huntId: string; onClose: () 
         <label className="flex items-center gap-3 text-base text-slate-200 min-h-11"><input type="checkbox" className="w-5 h-5" checked={f.sig} onChange={e => setF(p => ({ ...p, sig: e.target.checked }))} />It must be signed</label>
         <label className="flex items-center gap-3 text-base text-slate-200 min-h-11"><input type="checkbox" className="w-5 h-5" checked={f.stamp} onChange={e => setF(p => ({ ...p, stamp: e.target.checked }))} />It must be stamped</label>
         <div className="flex gap-2"><button className="min-h-12 px-5 rounded-xl border border-slate-500 text-slate-100 font-semibold" onClick={onClose}>Cancel</button><button className="flex-1 min-h-12 rounded-xl bg-[#0073ea] text-white text-lg font-bold disabled:opacity-50" disabled={busy || !f.name.trim()} onClick={go}>Add it</button></div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function NumbersPopup({ req, onClose, onDone }: { req: Req; onClose: () => void; onDone: () => void }) {
+  const [nums, setNums] = useState((req.reference_numbers ?? []).join(', '));
+  const [ph, setPh] = useState(req.ph_permit_seen ?? '');
+  const [ho, setHo] = useState(req.ho_permit_seen ?? '');
+  const [busy, setBusy] = useState(false);
+  async function go() {
+    setBusy(true);
+    const { error } = await (supabase as any).rpc('staff_set_reference_numbers', { p_req: req.id, p_numbers: nums.split(',').map(x => x.trim()).filter(Boolean), p_ph: ph || null, p_ho: ho || null });
+    setBusy(false);
+    if (error) toast.error(error.message); else onDone();
+  }
+  return (
+    <Dialog open onOpenChange={(o: boolean) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle className="text-2xl">Numbers on this document</DialogTitle></DialogHeader>
+        <p className="text-sm text-slate-300">Type in what the document shows. The hunt register is checked against it, and any difference is highlighted.</p>
+        <div><label className={lab}>Permit numbers on it <span className="font-normal text-slate-500">(separate with commas)</span></label><input className={field} value={nums} onChange={e => setNums(e.target.value)} /></div>
+        <div><label className={lab}>PH permit number it shows <span className="font-normal text-slate-500">(if any)</span></label><input className={field} value={ph} onChange={e => setPh(e.target.value)} /></div>
+        <div><label className={lab}>Outfitter permit number it shows <span className="font-normal text-slate-500">(if any)</span></label><input className={field} value={ho} onChange={e => setHo(e.target.value)} /></div>
+        <div className="flex gap-2"><button className="min-h-12 px-5 rounded-xl border border-slate-500 text-slate-100 font-semibold" onClick={onClose}>Cancel</button><button className="flex-1 min-h-12 rounded-xl bg-green-600 hover:bg-green-700 text-white text-lg font-bold disabled:opacity-50" disabled={busy} onClick={go}>Save</button></div>
       </DialogContent>
     </Dialog>
   );

@@ -46,6 +46,7 @@ import { AnimalGuideEditor } from './taxidermy/AnimalGuideEditor';
 import { HuntDocuments } from './taxidermy/HuntDocuments';
 import { DocumentTypesEditor } from './taxidermy/DocumentTypesEditor';
 import { OutfitterInbox } from './taxidermy/OutfitterInbox';
+import { PermitNumbers } from './taxidermy/PermitNumbers';
 import { Quotes } from './taxidermy/Quotes';
 import { Outfitters } from './taxidermy/Outfitters';
 import { PaymentsLedger } from './taxidermy/PaymentsLedger';
@@ -113,7 +114,8 @@ type TaxidermyView =
   | 'outfitters'
   | 'documents'
   | 'outfitter-chat'
-  | 'document-types';
+  | 'document-types'
+  | 'permit-numbers';
 
 interface NavItem {
   view: TaxidermyView;
@@ -374,6 +376,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       { view: 'staff-management', label: 'Staff' },
       { view: 'workshop-setup',   label: 'Checklists' },
       { view: 'document-types',   label: 'Required documents' },
+      { view: 'permit-numbers',   label: 'Permit numbers' },
       { view: 'animal-guide',     label: 'Animal guide' },
       { view: 'admin',            label: 'Settings' },
       { view: 'dropbox-import',   label: 'Dropbox import' },
@@ -403,6 +406,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'outfitters':      return <Outfitters onOpenQuote={(id) => navigate('quotes', id)} />;
       case 'documents':       return <HuntDocuments key={navClientId ?? 'all'} initialHuntId={navClientId} />;
       case 'document-types':  return <DocumentTypesEditor />;
+      case 'permit-numbers':  return <PermitNumbers />;
       case 'outfitter-chat':  return <OutfitterInbox key={navClientId ?? 'all'} initialHuntId={navClientId} onOpenDocs={(id) => navigate('documents', id)} />;
       case 'quotes':          return <Quotes key={navClientId ?? 'all'} initialHuntId={navClientId} />;
       case 'stations':        return <StationsHome stations={STATIONS.filter(st => canSeeView(st.view as TaxidermyView))} onOpen={navigate} />;

@@ -6,7 +6,7 @@ import { supabase } from '../../../../lib/supabase';
 import { PROVINCES, RESPONSIBLE_LABEL } from '../../../../lib/docs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
 
-interface T { id: string; name: string; description: string | null; responsible: string; applies_to: string; provinces: string[]; needs_signature: boolean; needs_stamp: boolean; sort_order: number; is_active: boolean }
+interface T { id: string; name: string; description: string | null; responsible: string; applies_to: string; provinces: string[]; must_show: string[]; needs_signature: boolean; needs_stamp: boolean; sort_order: number; is_active: boolean }
 const field = 'w-full rounded-lg border border-slate-600 bg-[#0f1a24] text-slate-100 px-3 min-h-11 text-base placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0073ea]';
 const lab = 'block text-sm font-semibold text-slate-300 mb-1';
 const APPLIES: Record<string, string> = { all: 'Overseas and local hunters', export: 'Overseas (export) hunters only', local: 'Local hunters only' };
@@ -19,7 +19,7 @@ export function DocumentTypesEditor() {
 
   async function save() {
     if (!edit?.name?.trim()) return;
-    const row = { provinces: edit.provinces ?? [], name: edit.name.trim(), description: edit.description?.trim() || null, responsible: edit.responsible ?? 'outfitter', applies_to: edit.applies_to ?? 'export', needs_signature: edit.needs_signature ?? true, needs_stamp: edit.needs_stamp ?? true, is_active: edit.is_active ?? true, sort_order: edit.sort_order ?? (list?.length ?? 0) * 10 };
+    const row = { provinces: edit.provinces ?? [], must_show: (edit.must_show ?? []).map(x => x.trim()).filter(Boolean), name: edit.name.trim(), description: edit.description?.trim() || null, responsible: edit.responsible ?? 'outfitter', applies_to: edit.applies_to ?? 'export', needs_signature: edit.needs_signature ?? true, needs_stamp: edit.needs_stamp ?? true, is_active: edit.is_active ?? true, sort_order: edit.sort_order ?? (list?.length ?? 0) * 10 };
     const r = edit.id ? await (supabase as any).from('document_types').update(row).eq('id', edit.id) : await (supabase as any).from('document_types').insert(row);
     if (r.error) { toast.error(r.error.message.includes('row-level') ? 'Only admins can change this list' : r.error.message); return; }
     setEdit(null); load();
@@ -59,6 +59,11 @@ export function DocumentTypesEditor() {
                     className={`min-h-11 rounded-lg border-2 text-sm font-semibold px-2 ${on ? 'border-green-500 bg-green-950/30 text-white' : 'border-slate-600 text-slate-300'}`}>{pv}</button>
                 ); })}
               </div>
+            </div>
+            <div>
+              <label className={lab}>Information that must be on it <span className="font-normal text-slate-500">(one per line)</span></label>
+              <textarea rows={4} className={field} placeholder={'Hunter name\nPH permit number\nDates of the hunt'} value={(edit.must_show ?? []).join('\n')} onChange={e => setEdit(p => ({ ...p, must_show: e.target.value.split('\n') }))} />
+              <p className="text-xs text-slate-500 mt-1">When staff check this document they tick each one. It cannot be approved until they are all ticked.</p>
             </div>
             <label className="flex items-center gap-3 text-base text-slate-200 min-h-11"><input type="checkbox" className="w-5 h-5" checked={edit.needs_signature ?? true} onChange={e => setEdit(p => ({ ...p, needs_signature: e.target.checked }))} />It must be signed</label>
             <label className="flex items-center gap-3 text-base text-slate-200 min-h-11"><input type="checkbox" className="w-5 h-5" checked={edit.needs_stamp ?? true} onChange={e => setEdit(p => ({ ...p, needs_stamp: e.target.checked }))} />It must be stamped</label>
