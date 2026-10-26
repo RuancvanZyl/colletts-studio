@@ -149,6 +149,7 @@ export function HuntRegister({ huntId, defaults, canEdit, onChanged }: { huntId:
                 <div className="flex flex-wrap gap-2">
                   {PARTS.map(p => { const on = l.parts.includes(p.code); return <button key={p.code} type="button" disabled={!canEdit} aria-pressed={on} onClick={() => setLine(i, 'parts', on ? l.parts.filter(x => x !== p.code) : [...l.parts, p.code])} className={`min-h-10 px-3 rounded-lg border-2 text-sm font-semibold ${on ? 'border-green-500 bg-green-950/30 text-white' : 'border-slate-600 text-slate-300'}`}>{p.label}</button>; })}
                 </div>
+                <p className="text-xs text-slate-500 mt-1.5">Horns count as Skull. Hooves are Feet. Back skin is B/Skin. Flat skin is F/Skin. A full mount skin is Full skin.</p>
                 {msg(E('parts'))}
               </div>
             </div>
