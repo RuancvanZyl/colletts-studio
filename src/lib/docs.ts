@@ -11,6 +11,15 @@ export const RESPONSIBLE_LABEL: Record<string, string> = { outfitter: 'The outfi
 export const STATUS_LABEL: Record<string, string> = { awaiting: 'Not received yet', received: 'Received, to be checked', approved: 'Approved', rejected: 'Sent back to be corrected', not_needed: 'Not needed' };
 export const STATUS_TONE: Record<string, string> = { awaiting: 'bg-amber-100 text-amber-900', received: 'bg-sky-100 text-sky-900', approved: 'bg-green-100 text-green-900', rejected: 'bg-red-100 text-red-900', not_needed: 'bg-slate-100 text-slate-700' };
 
+/** The one-word state of a hunt's paperwork: what the "Documents received / outstanding" button says. */
+export function docsSummary(counts: { outstanding: number; toCheck: number; approved: number }) {
+  const total = counts.outstanding + counts.toCheck + counts.approved;
+  if (total === 0) return { state: 'none' as const, label: 'No documents listed', tone: 'bg-slate-100 text-slate-700' };
+  if (counts.outstanding > 0) return { state: 'outstanding' as const, label: `Documents outstanding (${counts.outstanding})`, tone: 'bg-amber-100 text-amber-900' };
+  if (counts.toCheck > 0) return { state: 'received' as const, label: 'Documents received, to be checked', tone: 'bg-sky-100 text-sky-900' };
+  return { state: 'complete' as const, label: 'Documents received and approved', tone: 'bg-green-100 text-green-900' };
+}
+
 /** Days since a date, as a short phrase. */
 export const waiting = (iso: string | null | undefined) => {
   if (!iso) return '';

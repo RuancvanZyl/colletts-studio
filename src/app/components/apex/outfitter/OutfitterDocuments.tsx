@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Camera, Loader2, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../../../lib/supabase';
-import { STATUS_LABEL, STATUS_TONE, RESPONSIBLE_LABEL, uploadHuntFiles, waiting } from '../../../../lib/docs';
+import { docsSummary, STATUS_LABEL, STATUS_TONE, RESPONSIBLE_LABEL, uploadHuntFiles, waiting } from '../../../../lib/docs';
 
 interface Item { id: string; name: string; responsible: string; status: string; reason: string | null; needs_signature: boolean; needs_stamp: boolean; requested_at: string; files: number }
 interface H { hunt_id: string; ref: string | null; hunter: string; items: Item[] }
@@ -51,7 +51,8 @@ export function OutfitterDocuments({ onAsk }: { onAsk: (huntId: string) => void 
         return (
           <section key={h.hunt_id} className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden">
             <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-start gap-3">
-              <div className="flex-1 min-w-0"><p className="text-lg font-bold text-slate-900 dark:text-slate-100">{h.hunter}</p><p className={`text-sm font-semibold ${todo ? 'text-amber-700 dark:text-amber-300' : 'text-green-700 dark:text-green-300'}`}>{todo ? `${todo} document${todo > 1 ? 's' : ''} needed from you` : 'Nothing needed from you'}</p></div>
+              <div className="flex-1 min-w-0"><p className="text-lg font-bold text-slate-900 dark:text-slate-100">{h.hunter}</p>{(() => { const sm = docsSummary({ outstanding: h.items.filter(i => ['awaiting', 'rejected'].includes(i.status)).length, toCheck: h.items.filter(i => i.status === 'received').length, approved: h.items.filter(i => i.status === 'approved').length });
+                  return <><span className={`inline-block rounded-full px-3 py-1 text-sm font-bold ${sm.tone}`}>{sm.label}</span><p className={`text-sm font-semibold mt-1 ${todo ? 'text-amber-700 dark:text-amber-300' : 'text-green-700 dark:text-green-300'}`}>{todo ? `${todo} document${todo > 1 ? 's' : ''} needed from you` : 'Nothing needed from you'}</p></>; })()}</div>
               <button className="min-h-11 px-3 rounded-xl border border-slate-300 dark:border-slate-600 text-sm font-semibold flex items-center gap-1.5 text-slate-800 dark:text-slate-100" onClick={() => onAsk(h.hunt_id)}><MessageSquare className="w-4 h-4" />Ask a question</button>
             </div>
             {(problems[h.hunt_id] ?? []).length > 0 && (

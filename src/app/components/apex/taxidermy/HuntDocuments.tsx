@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialo
 import { OutfitterThread } from '../shared/OutfitterThread';
 import { HuntRegister } from './HuntRegister';
 import { readDocument, type AiRegister, type AiDocument } from '../../../../lib/aiReader';
-import { PROVINCES, RESPONSIBLE_LABEL, STATUS_LABEL, STATUS_TONE, uploadHuntFiles, openHuntFile, waiting } from '../../../../lib/docs';
+import { docsSummary, PROVINCES, RESPONSIBLE_LABEL, STATUS_LABEL, STATUS_TONE, uploadHuntFiles, openHuntFile, waiting } from '../../../../lib/docs';
 
 interface BoardRow { hunt_id: string; ref_number: string | null; client_name: string; outfitter_name: string | null; required: number; approved: number; waiting_outfitter: number; waiting_hunter: number; waiting_other: number; to_check: number; rejected: number; oldest_wait: string | null; complete: boolean; province: string | null }
 interface Req { id: string; name: string; responsible: string; status: string; needs_signature: boolean; needs_stamp: boolean; file_paths: string[]; note: string | null; requested_at: string; received_at: string | null; received_by_name: string | null; rejection_reason: string | null; checked_signed: boolean; checked_stamped: boolean; reference_numbers: string[]; check_kind: string | null; must_show: string[]; shown_ok: string[]; ph_permit_seen: string | null; ho_permit_seen: string | null; ai_extracted: { flags?: string[] } | null; ai_read_at: string | null }
@@ -73,6 +73,7 @@ export function HuntDocuments({ initialHuntId }: { initialHuntId?: string }) {
                   <span className="block text-sm text-slate-400">{r.outfitter_name ? `via ${r.outfitter_name} · ` : ''}{r.province ? `${r.province} · ` : ''}{r.approved} of {r.required} approved{r.oldest_wait && !r.complete ? ` · oldest waiting ${waiting(r.oldest_wait)}` : ''}</span>
                 </span>
                 <span className="flex flex-col items-end gap-1 text-xs font-semibold">
+                  {(() => { const sm = docsSummary({ outstanding: r.waiting_outfitter + r.waiting_hunter + r.waiting_other + r.rejected, toCheck: r.to_check, approved: r.approved }); return sm.state === 'none' ? null : <span className={`rounded-full px-2.5 py-0.5 ${sm.state === 'outstanding' ? 'bg-amber-900/60 text-amber-200' : sm.state === 'received' ? 'bg-sky-900/60 text-sky-200' : 'bg-green-900/60 text-green-200'}`}>{sm.label}</span>; })()}
                   {!r.province && <span className="rounded-full bg-orange-900/50 text-orange-300 px-2.5 py-0.5">Province needed</span>}
                   {r.to_check > 0 && <span className="rounded-full bg-sky-900/50 text-sky-300 px-2.5 py-0.5">{r.to_check} to check</span>}
                   {r.rejected > 0 && <span className="rounded-full bg-red-900/50 text-red-300 px-2.5 py-0.5">{r.rejected} sent back</span>}
@@ -93,6 +94,7 @@ function Checklist({ huntId, onBack }: { huntId: string; onBack: () => void }) {
   const isManager = ['admin', 'studio_manager', 'bookkeeper'].includes(profile?.role ?? '');
   const [info, setInfo] = useState<{ client: string; ref: string; outfitter: string | null; outfitterId: string | null; province: string | null } | null>(null);
   const [showRegister, setShowRegister] = useState(false);
+  const [checkOpen, setCheckOpen] = useState(false);
   const [numbersFor, setNumbersFor] = useState<{ req: Req; ai: AiDocument | null } | null>(null);
   const [aiRegister, setAiRegister] = useState<{ data: AiRegister; nonce: number } | null>(null);
   const [reading, setReading] = useState<string | null>(null);
@@ -162,9 +164,15 @@ function Checklist({ huntId, onBack }: { huntId: string; onBack: () => void }) {
           {PROVINCES.map(p => <option key={p} value={p}>{p}</option>)}
         </select>
       </div>
-      <div className={`rounded-xl border p-4 text-lg font-semibold ${open === 0 && reqs.length > 0 ? 'border-emerald-600 bg-emerald-950/30 text-emerald-200' : 'border-amber-600 bg-amber-950/20 text-amber-200'}`}>
-        {reqs.length === 0 ? 'No checklist on this hunt yet.' : open === 0 ? 'All documents approved. The paperwork is complete.' : `${open} document${open > 1 ? 's' : ''} still to be approved. Final dispatch is blocked until they are.`}
-      </div>
+      {reqs.length === 0 ? <div className="rounded-xl border border-amber-600 bg-amber-950/20 text-amber-200 p-4 text-lg font-semibold">No checklist on this hunt yet.</div> : (() => {
+        const sm = docsSummary({ outstanding: reqs.filter(r => ['awaiting', 'rejected'].includes(r.status)).length, toCheck: reqs.filter(r => r.status === 'received').length, approved: reqs.filter(r => r.status === 'approved').length });
+        return (
+          <button onClick={() => setCheckOpen(true)} className={`w-full min-h-16 rounded-2xl border-2 px-4 text-left flex items-center gap-3 ${sm.state === 'outstanding' ? 'border-amber-500 bg-amber-950/20 text-amber-100' : sm.state === 'received' ? 'border-sky-500 bg-sky-950/20 text-sky-100' : 'border-emerald-500 bg-emerald-950/30 text-emerald-100'}`}>
+            <span className="flex-1"><span className="block text-xl font-bold">{sm.label}</span><span className="block text-sm opacity-80">{sm.state === 'outstanding' ? 'Tap to see what is missing and who must send it. Final dispatch is blocked until every document is approved.' : sm.state === 'received' ? 'Everything has been handed in. Check each document and approve it.' : 'The paperwork is complete.'}</span></span>
+            <span className="text-sm font-semibold underline">Check</span>
+          </button>
+        );
+      })()}
       {reqs.length === 0 && <button className="min-h-12 px-5 rounded-xl bg-[#0073ea] text-white font-bold" onClick={create}>Create the checklist</button>}
 
       <div className="space-y-3">
@@ -213,6 +221,7 @@ function Checklist({ huntId, onBack }: { huntId: string; onBack: () => void }) {
         </section>
       )}
 
+      {checkOpen && <CheckPopup huntId={huntId} client={info.client} outfitter={info.outfitter} outfitterId={info.outfitterId} reqs={reqs} onClose={() => setCheckOpen(false)} />}
       {numbersFor && <NumbersPopup req={numbersFor.req} ai={numbersFor.ai} onClose={() => setNumbersFor(null)} onDone={() => { setNumbersFor(null); load(); }} />}
       {review && <ReviewPopup req={review} onClose={() => setReview(null)} onDone={() => { setReview(null); load(); }} />}
       {adding && <AddDocPopup huntId={huntId} onClose={() => setAdding(false)} onDone={() => { setAdding(false); load(); }} />}
@@ -326,6 +335,41 @@ function NumbersPopup({ req, ai, onClose, onDone }: { req: Req; ai: AiDocument |
         <div><label className={lab}>PH permit number it shows <span className="font-normal text-slate-500">(if any)</span></label><input className={field} value={ph} onChange={e => setPh(e.target.value)} /></div>
         <div><label className={lab}>Outfitter permit number it shows <span className="font-normal text-slate-500">(if any)</span></label><input className={field} value={ho} onChange={e => setHo(e.target.value)} /></div>
         <div className="flex gap-2"><button className="min-h-12 px-5 rounded-xl border border-slate-500 text-slate-100 font-semibold" onClick={onClose}>Cancel</button><button className="flex-1 min-h-12 rounded-xl bg-green-600 hover:bg-green-700 text-white text-lg font-bold disabled:opacity-50" disabled={busy} onClick={go}>Save</button></div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CheckPopup({ huntId, client, outfitter, outfitterId, reqs, onClose }: { huntId: string; client: string; outfitter: string | null; outfitterId: string | null; reqs: Req[]; onClose: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const outstanding = reqs.filter(r => ['awaiting', 'rejected'].includes(r.status));
+  const toCheck = reqs.filter(r => r.status === 'received');
+  const approved = reqs.filter(r => r.status === 'approved');
+  const fromOutfitter = outstanding.filter(r => r.responsible === 'outfitter');
+  async function remind() {
+    setBusy(true);
+    const lines = fromOutfitter.map(r => `- ${r.name}${r.status === 'rejected' && r.rejection_reason ? ` (sent back: ${r.rejection_reason})` : ''}`).join('\n');
+    const { error } = await (supabase as any).rpc('send_outfitter_message', { p_hunt: huntId, p_body: `About ${client}: we are still waiting for these documents before the trophies can be exported:\n${lines}\nPlease send them as soon as you can.` });
+    setBusy(false);
+    if (error) toast.error(error.message); else { toast.success('Reminder sent'); onClose(); }
+  }
+  const List = ({ title, items, tone }: { title: string; items: Req[]; tone: string }) => items.length === 0 ? null : (
+    <div><p className={`text-sm font-bold uppercase tracking-wider mb-1 ${tone}`}>{title} · {items.length}</p>
+      <ul className="rounded-xl border border-slate-700 divide-y divide-slate-800">{items.map(r => (
+        <li key={r.id} className="px-3 py-2"><p className="font-semibold text-slate-100">{r.name}</p>
+          <p className="text-sm text-slate-400">{r.status === 'rejected' ? `Sent back${r.rejection_reason ? `: ${r.rejection_reason}` : ''} · ` : ''}{['awaiting', 'rejected'].includes(r.status) ? `${RESPONSIBLE_LABEL[r.responsible]} must send it · waiting ${waiting(r.requested_at)}` : r.status === 'received' ? `Received ${r.received_at ? new Date(r.received_at).toLocaleDateString('en-ZA') : ''}${r.received_by_name ? ` from ${r.received_by_name}` : ''}` : 'Approved'}</p></li>
+      ))}</ul></div>
+  );
+  return (
+    <Dialog open onOpenChange={(o: boolean) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogHeader><DialogTitle className="text-2xl">{outstanding.length ? `Documents outstanding (${outstanding.length})` : toCheck.length ? 'Documents received' : 'Documents complete'}</DialogTitle></DialogHeader>
+        <p className="text-sm text-slate-300">{client}{outfitter ? ` · via ${outfitter}` : ''}. {approved.length} of {reqs.filter(r => r.status !== 'not_needed').length} approved.</p>
+        <List title="Outstanding" items={outstanding} tone="text-amber-300" />
+        <List title="Received, to be checked" items={toCheck} tone="text-sky-300" />
+        <List title="Approved" items={approved} tone="text-green-300" />
+        {fromOutfitter.length > 0 && outfitterId && <button disabled={busy} className="w-full min-h-12 rounded-xl bg-[#0073ea] text-white font-bold disabled:opacity-50 flex items-center justify-center gap-2" onClick={remind}>{busy && <Loader2 className="w-5 h-5 animate-spin" />}Remind {outfitter ?? 'the outfitter'} of the {fromOutfitter.length} missing</button>}
+        <button className="w-full min-h-12 rounded-xl border border-slate-500 text-slate-100 font-semibold" onClick={onClose}>Close</button>
       </DialogContent>
     </Dialog>
   );
