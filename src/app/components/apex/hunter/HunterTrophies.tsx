@@ -14,6 +14,7 @@ import { PhotoGallery } from '../shared/TrophyPhotos';
 import { ChooseMounts } from './ChooseMounts';
 import { AddAnimalsFlow } from './AddAnimalsFlow';
 import { QuoteCard } from './QuoteCard';
+import { HunterDocuments } from './HunterDocuments';
 import { useHunterQuotes } from '../../../../lib/hooks/useQuotes';
 
 function statusOf(a: HunterAnimal): { text: string; tone: 'todo' | 'wait' | 'work' | 'done'; pct: number } {
@@ -61,6 +62,8 @@ export function HunterTrophies({ onRegisterHunt, onChanged, startAdding = false 
       {quotes.filter(q => q.status !== 'draft' && q.status !== 'paid' || q.payments.length).map(q => (
         <QuoteCard key={q.id} quote={q} ref_={animals.find(a => a.huntId === q.hunt_id)?.huntRef} onChanged={() => { refreshQuotes(); onChanged?.(); }} />
       ))}
+
+      <HunterDocuments />
 
       {waiting.length > 0 && (
         <div className="rounded-2xl border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/30 p-4 space-y-3">

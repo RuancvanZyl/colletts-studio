@@ -2,6 +2,8 @@
  * TodayScreen — the manager's morning view, in plain sentences:
  *   what needs you, what is in the workshop, how the month is going.
  */
+import { useEffect, useState } from 'react';
+import { supabase } from '../../../../lib/supabase';
 import { ArrowRight, CheckCircle2, ClipboardCheck, RefreshCw, Search, Loader2 } from 'lucide-react';
 import { useAuth } from '../../../../lib/auth';
 import { useWorkshopStats } from '../../../../lib/hooks/useWorkshopStats';
@@ -27,6 +29,16 @@ export function TodayScreen({ onNavigate }: { onNavigate: (view: string, clientI
   const changes = quoteRows.filter(r => r.stage === 'declined').length;
   const awaitingPay = quoteRows.filter(r => r.stage === 'awaiting_deposit').length;
 
+  const [docs, setDocs] = useState({ toCheck: 0, fromOutfitter: 0, unreadChat: 0 });
+  useEffect(() => {
+    (async () => {
+      const db = supabase as any;
+      const { data: v } = await db.from('v_hunt_documents').select('to_check, waiting_outfitter');
+      const { count } = await db.from('outfitter_messages').select('id', { count: 'exact', head: true }).eq('sender', 'outfitter').is('read_at', null);
+      setDocs({ toCheck: (v ?? []).reduce((n: number, r: any) => n + +r.to_check, 0), fromOutfitter: (v ?? []).filter((r: any) => +r.waiting_outfitter > 0).length, unreadChat: count ?? 0 });
+    })().catch(() => {});
+  }, []);
+
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const first = profile?.full_name?.split(' ')[0] ?? '';
@@ -36,6 +48,9 @@ export function TodayScreen({ onNavigate }: { onNavigate: (view: string, clientI
     { n: toQuote, text: plural(toQuote, 'hunter has chosen their mounts and needs a quote', 'hunters have chosen their mounts and need a quote'), go: 'quotes', tone: 'amber' },
     { n: changes, text: plural(changes, 'hunter asked for changes to their quote', 'hunters asked for changes to their quote'), go: 'quotes', tone: 'red' },
     { n: awaitingPay, text: plural(awaitingPay, 'accepted quote is waiting for payment', 'accepted quotes are waiting for payment'), go: 'quotes', tone: 'amber' },
+    { n: docs.toCheck, text: plural(docs.toCheck, 'document has arrived and needs checking', 'documents have arrived and need checking'), go: 'documents', tone: 'amber' },
+    { n: docs.unreadChat, text: plural(docs.unreadChat, 'unread message from an outfitter', 'unread messages from outfitters'), go: 'outfitter-chat', tone: 'amber' },
+    { n: docs.fromOutfitter, text: plural(docs.fromOutfitter, 'hunt is waiting on documents from the outfitter', 'hunts are waiting on documents from outfitters'), go: 'documents', tone: 'blue' },
     { n: deadlinesOverdue.length, text: plural(deadlinesOverdue.length, 'hunt is past its deadline', 'hunts are past their deadline'), go: 'deadline-watch', tone: 'red' },
     { n: attention?.stalledRed ?? 0, text: plural(attention?.stalledRed ?? 0, 'animal has been stuck for far too long', 'animals have been stuck for far too long'), go: 'daily-todo', tone: 'red' },
     { n: attention?.unreadMessages ?? 0, text: plural(attention?.unreadMessages ?? 0, 'unread message from a hunter', 'unread messages from hunters'), go: 'client-inbox', tone: 'amber' },

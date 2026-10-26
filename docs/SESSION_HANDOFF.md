@@ -36,3 +36,11 @@
 - Registered animals arrive as "expected" job cards (awaiting_arrival, tag numbers kept) → Arrival Check-In "It arrived"; the hunter profile is created for them and invited when trophies arrive. Payments record who paid (hunter / outfitter / someone else); outfitter sees total, paid, outstanding and what they paid themselves.
 - The `outfitters` table is now readable only by staff and the outfitter themselves.
 - Run supabase/launch/release_050_outfitter_link.sql after 049 (and 049 after 048).
+
+## 2026-10-26 — Documents and outfitter chat (migration 051)
+- Every hunt gets a checklist of required documents (Setup → Required documents: name, who supplies it, export/local, signed/stamped). New hunts get it automatically via trigger; existing hunts use "Create the checklist" on Hunters → Documents. The list of real documents is still to be supplied by the workshop and loaded.
+- A document only counts when staff tick correct, complete, signed (if needed) and stamped. Rejections carry a reason the outfitter/hunter sees. `guard_dispatch` blocks completing/dispatching a job card while required documents are not approved (hunts without a checklist are unaffected).
+- Transparency: hunter portal shows "Documents for export" per hunt with wording naming the outfitter ("Waiting for X to send this"), and that the workshop is waiting too. Ready to ship shows "Cannot ship yet: N documents..." and Today lists documents to check, outfitter chat unread, hunts waiting on outfitters.
+- Outfitter portal: Documents (upload per document, see rejections) and Messages (one thread per hunter, `outfitter_messages`). Staff side: Messages → Outfitters and a chat on each hunt's Documents page. This is the only chat besides the existing team/hunter ones; hunter-to-outfitter chat is deliberately not built.
+- Files go to the private `hunt-documents` bucket (folder = hunt id), opened via signed links.
+- Run supabase/launch/release_051_documents_chat.sql after 050.

@@ -25,7 +25,7 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql']) {
+for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
@@ -437,5 +437,75 @@ ok((await q(`SELECT count(*)::int n FROM outfitters`))[0].n === 0, 'a hunter can
 await as(OUT1);
 ok((await q(`SELECT count(*)::int n FROM outfitters`))[0].n === 1, 'an outfitter can read only their own record');
 ok((await q(`SELECT paid_by p FROM quote_payments WHERE reference='Receipt 12'`)).length >= 0, 'payments remember who paid');
+
+console.log('\nDocuments and the outfitter chat');
+const HUN5 = 'b1000000-0000-0000-0000-000000000005';
+await as(ids.admin);
+await db.query(`INSERT INTO document_types (name, responsible, applies_to, needs_signature, needs_stamp) VALUES ('Export permit','outfitter','export',true,true),('Veterinary certificate','outfitter','export',true,true),('Hunter ID copy','hunter','all',false,false),('Local transport note','outfitter','local',true,false)`);
+ok((await q(`SELECT count(*)::int n FROM document_types`))[0].n === 4, 'an admin defines the list of required documents');
+await as(ids.worker);
+ok((await fails(`INSERT INTO document_types (name) VALUES ('Nope')`)) !== null, 'a worker cannot change the list');
+await as(OUT1);
+const dh = (await q(`SELECT public.outfitter_register_hunt('{"name":"Doc Hunter","email":"doc@example.com","client_type":"export"}'::jsonb, NULL, '2026-10-01', '', '[{"species":"Kudu"}]'::jsonb) id`))[0].id;
+await as(null);
+await db.exec(`UPDATE clients SET auth_user_id = '${HUN5}' WHERE lower(email) = 'doc@example.com'`);
+const reqs = await q(`SELECT id, name, responsible, status FROM hunt_requirements WHERE hunt_id=$1 ORDER BY name`, [dh]);
+ok(reqs.length === 3 && !reqs.some(r => r.name === 'Local transport note'), 'a new export hunt gets the export checklist automatically (and not the local one)');
+const permit = reqs.find(r => r.name === 'Export permit').id, idcopy = reqs.find(r => r.name === 'Hunter ID copy').id, vet = reqs.find(r => r.name === 'Veterinary certificate').id;
+await as(HUN5);
+const ho = (await q(`SELECT public.hunter_documents_overview() j`))[0].j;
+ok(ho.length === 1 && ho[0].outfitter === 'Jimmy Safaris' && ho[0].items.length === 3 && ho[0].items.find(i => i.name === 'Export permit').responsible === 'outfitter', 'the hunter sees every document, who is responsible and which outfitter it is');
+await as(OUT2);
+ok((await fails(`SELECT public.submit_requirement($1, ARRAY['x/y.pdf'])`, [permit]))?.includes('cannot hand in'), 'another outfitter cannot hand in their documents');
+await as(OUT1);
+ok((await fails(`SELECT public.submit_requirement($1, ARRAY[]::text[])`, [permit]))?.includes('photo or scan'), 'a document needs a file');
+await db.query(`SELECT public.submit_requirement($1, ARRAY['hunt/permit.pdf'])`, [permit]);
+ok((await q(`SELECT status FROM hunt_requirements WHERE id=$1`, [permit]))[0].status === 'received', 'the outfitter hands in a document: it is received, not yet approved');
+ok((await q(`SELECT jsonb_array_length(public.outfitter_documents_overview()) n`))[0].n === 1, 'the outfitter sees their documents list');
+await as(HUN5);
+await db.query(`SELECT public.submit_requirement($1, ARRAY['hunt/id.jpg'])`, [idcopy]);
+ok((await q(`SELECT status FROM hunt_requirements WHERE id=$1`, [idcopy]))[0].status === 'received', 'a hunter can hand in the documents that are theirs');
+await as(ids.worker);
+ok((await fails(`SELECT public.staff_review_requirement($1, true, true, true, true, true)`, [permit]))?.includes('Only managers'), 'a worker cannot check documents');
+await as(ids.admin);
+ok((await fails(`SELECT public.staff_review_requirement($1, true, true, true, false, true)`, [permit]))?.includes('must be signed'), 'a document that needs a signature cannot be approved unsigned');
+ok((await fails(`SELECT public.staff_review_requirement($1, true, true, true, true, false)`, [permit]))?.includes('must be stamped'), 'nor without a stamp');
+ok((await fails(`SELECT public.staff_review_requirement($1, false, true, false, true, true, '')`, [permit]))?.includes('what is wrong'), 'sending a document back needs a reason');
+await db.query(`SELECT public.staff_review_requirement($1, false, true, false, true, true, 'Page 2 is missing')`, [permit]);
+let rj = (await q(`SELECT status, rejection_reason r FROM hunt_requirements WHERE id=$1`, [permit]))[0];
+ok(rj.status === 'rejected' && rj.r === 'Page 2 is missing', 'a rejected document keeps the reason');
+await as(HUN5);
+ok((await q(`SELECT public.hunter_documents_overview()->0->'items' it`))[0].it.find(i => i.name === 'Export permit').reason === 'Page 2 is missing', 'the hunter can see why it is held up');
+await as(OUT1);
+await db.query(`SELECT public.submit_requirement($1, ARRAY['hunt/permit-full.pdf'])`, [permit]);
+ok((await q(`SELECT status, file_paths f FROM hunt_requirements WHERE id=$1`, [permit]))[0].f.join() === 'hunt/permit-full.pdf', 'handing it in again replaces the rejected file');
+await as(ids.admin);
+await db.query(`SELECT public.staff_review_requirement($1, true, true, true, true, true)`, [permit]);
+await db.query(`SELECT public.staff_review_requirement($1, true, true, true, false, false)`, [idcopy]);
+ok((await q(`SELECT count(*)::int n FROM hunt_requirements WHERE hunt_id=$1 AND status='approved'`, [dh]))[0].n === 2, 'approved documents are counted');
+ok((await q(`SELECT public.hunt_documents_complete($1) c`, [dh]))[0].c === false, 'the paperwork is not complete while one is outstanding');
+const vd = (await q(`SELECT waiting_outfitter w, to_check c, approved a, required r, outfitter_name o FROM v_hunt_documents WHERE hunt_id=$1`, [dh]))[0];
+ok(vd.w === 1 && vd.a === 2 && vd.r === 3 && vd.o === 'Jimmy Safaris', 'the manager sees how many documents are waiting on the outfitter');
+const jc = (await q(`SELECT id FROM hunt_documents WHERE hunt_id=$1 AND doc_type='job_card'`, [dh]))[0].id;
+ok((await fails(`UPDATE hunt_documents SET status='completed' WHERE id=$1`, [jc]))?.includes('Cannot dispatch yet'), 'dispatch is blocked while a required document is not approved');
+ok((await fails(`SELECT public.staff_set_requirement($1, 'not_needed', '')`, [vet]))?.includes('Say why'), 'marking a document not needed needs a reason');
+await db.query(`SELECT public.staff_set_requirement($1, 'not_needed', 'Exempt for this species')`, [vet]);
+await db.query(`UPDATE hunt_documents SET status='completed' WHERE id=$1`, [jc]);
+ok((await q(`SELECT status FROM hunt_documents WHERE id=$1`, [jc]))[0].status === 'completed', 'once everything is approved or not needed, dispatch is allowed');
+// chat
+await as(OUT1);
+await db.query(`SELECT public.send_outfitter_message($1, 'Permit is on its way by courier')`, [dh]);
+await as(ids.admin);
+ok((await q(`SELECT count(*)::int n FROM outfitter_messages WHERE hunt_id=$1`, [dh]))[0].n === 1, 'the workshop sees the outfitter\'s message in that hunt\'s thread');
+await db.query(`SELECT public.send_outfitter_message($1, 'Thanks, we will watch for it', $2)`, [dh, permit]);
+await db.query(`SELECT public.mark_outfitter_thread_read($1)`, [dh]);
+ok((await q(`SELECT count(*)::int n FROM outfitter_messages WHERE hunt_id=$1 AND sender='outfitter' AND read_at IS NOT NULL`, [dh]))[0].n === 1, 'reading a thread marks the outfitter\'s messages as read');
+await as(OUT2);
+ok((await q(`SELECT count(*)::int n FROM outfitter_messages`))[0].n === 0, 'another outfitter sees nothing of this thread');
+ok((await fails(`SELECT public.send_outfitter_message($1, 'hello')`, [dh]))?.includes('Only managers'), 'and cannot write in it');
+await as(ids.worker);
+ok((await fails(`SELECT public.send_outfitter_message($1, 'hello')`, [dh]))?.includes('Only managers'), 'a worker cannot message outfitters');
+await as(OUT1);
+ok((await q(`SELECT count(*)::int n FROM outfitter_messages WHERE hunt_id=$1`, [dh]))[0].n === 2, 'the outfitter sees the whole thread');
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -43,6 +43,9 @@ import { Messages } from './taxidermy/Messages';
 import { WorkshopSetup } from './taxidermy/WorkshopSetup';
 import { TodayScreen } from './taxidermy/TodayScreen';
 import { AnimalGuideEditor } from './taxidermy/AnimalGuideEditor';
+import { HuntDocuments } from './taxidermy/HuntDocuments';
+import { DocumentTypesEditor } from './taxidermy/DocumentTypesEditor';
+import { OutfitterInbox } from './taxidermy/OutfitterInbox';
 import { Quotes } from './taxidermy/Quotes';
 import { Outfitters } from './taxidermy/Outfitters';
 import { PaymentsLedger } from './taxidermy/PaymentsLedger';
@@ -107,7 +110,10 @@ type TaxidermyView =
   | 'whiteboard'
   | 'animal-guide'
   | 'quotes'
-  | 'outfitters';
+  | 'outfitters'
+  | 'documents'
+  | 'outfitter-chat'
+  | 'document-types';
 
 interface NavItem {
   view: TaxidermyView;
@@ -309,7 +315,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     // department managers also handle client conversations
     if (isManager && view === 'client-inbox') return true;
     if (isBookkeeper) {
-      return ['summary', 'whiteboard', 'dashboard', 'client-inbox', 'payment-confirmation', 'invoices', 'inventory', 'clients', 'hunt-archive', 'client-care', 'deadline-watch', 'awaiting-instruction', 'status-board', 'quotes'].includes(view);
+      return ['summary', 'whiteboard', 'dashboard', 'client-inbox', 'payment-confirmation', 'invoices', 'inventory', 'clients', 'hunt-archive', 'client-care', 'deadline-watch', 'awaiting-instruction', 'status-board', 'quotes', 'documents', 'outfitter-chat'].includes(view);
     }
     // Department staff / ground staff: only stations in their departments
     const deptsNeeded = VIEW_DEPT[view];
@@ -336,6 +342,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       { view: 'clients',              label: 'All hunters' },
       { view: 'client-care',          label: 'Need contact' },
       { view: 'awaiting-instruction', label: 'Waiting for mounts' },
+      { view: 'documents',            label: 'Documents' },
       { view: 'deadline-watch',       label: 'Past deadline' },
       { view: 'outfitters',           label: 'Outfitters' },
       { view: 'status-board',         label: 'Status board' },
@@ -356,6 +363,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     { key: 'messages', label: 'Messages', icon: MessageCircle, tabs: [
       { view: 'messages',     label: 'Team', badge: unreadMessages },
       { view: 'client-inbox', label: 'Hunters' },
+      { view: 'outfitter-chat', label: 'Outfitters' },
     ] },
     { key: 'money', label: 'Money', icon: CreditCard, tabs: [
       { view: 'quotes',               label: 'Quotes' },
@@ -365,6 +373,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     { key: 'setup', label: 'Setup', icon: Settings, tabs: [
       { view: 'staff-management', label: 'Staff' },
       { view: 'workshop-setup',   label: 'Checklists' },
+      { view: 'document-types',   label: 'Required documents' },
       { view: 'animal-guide',     label: 'Animal guide' },
       { view: 'admin',            label: 'Settings' },
       { view: 'dropbox-import',   label: 'Dropbox import' },
@@ -392,6 +401,9 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'whiteboard':      return <SummarySheet onNavigate={navigate} />;
       case 'animal-guide':    return <AnimalGuideEditor />;
       case 'outfitters':      return <Outfitters onOpenQuote={(id) => navigate('quotes', id)} />;
+      case 'documents':       return <HuntDocuments key={navClientId ?? 'all'} initialHuntId={navClientId} />;
+      case 'document-types':  return <DocumentTypesEditor />;
+      case 'outfitter-chat':  return <OutfitterInbox key={navClientId ?? 'all'} initialHuntId={navClientId} onOpenDocs={(id) => navigate('documents', id)} />;
       case 'quotes':          return <Quotes key={navClientId ?? 'all'} initialHuntId={navClientId} />;
       case 'stations':        return <StationsHome stations={STATIONS.filter(st => canSeeView(st.view as TaxidermyView))} onOpen={navigate} />;
       case 'status-board':    return <ClientStatusBoard onNavigate={navigate} />;
@@ -414,7 +426,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'workshop-brief':         return <WorkshopInstructions />;
       case 'packing':                return <PackingStation />;
       case 'photos-admin':           return <PackingShipping />;
-      case 'ready-to-ship':          return <ReadyToShip onOpenClient={(id) => navigate('clients', id)} />;
+      case 'ready-to-ship':          return <ReadyToShip onOpenClient={(id) => navigate('clients', id)} onOpenDocs={(id) => navigate('documents', id)} />;
       case 'client-inbox':           return <ClientInbox />;
       case 'payment-confirmation':   return <PaymentsLedger onOpenQuote={(id) => navigate('quotes', id)} />;
       case 'inventory':              return <JobTracker />;

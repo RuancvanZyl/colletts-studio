@@ -26,7 +26,8 @@ interface PackingTarget {
   clientNumber: string;
 }
 
-export function ReadyToShip({ onOpenClient }: { onOpenClient?: (clientId: string) => void } = {}) {
+export function ReadyToShip({ onOpenClient, onOpenDocs }: { onOpenClient?: (clientId: string) => void; onOpenDocs?: (huntId: string) => void } = {}) {
+  const [paper, setPaper] = useState<Record<string, { required: number; approved: number; waiting_outfitter: number; waiting_hunter: number; outfitter_name: string | null }>>({});
   const [hunts, setHunts]           = useState<ShipHunt[]>([]);
   const [loading, setLoading]       = useState(true);
   const [packingTarget, setPackingTarget] = useState<PackingTarget | null>(null);
@@ -93,6 +94,11 @@ export function ReadyToShip({ onOpenClient }: { onOpenClient?: (clientId: string
       };
     });
 
+    const { data: pv } = await (supabase as any).from('v_hunt_documents').select('hunt_id, required, approved, waiting_outfitter, waiting_hunter, outfitter_name').in('hunt_id', completedHuntIds);
+    const pm: typeof paper = {};
+    for (const r of pv ?? []) pm[r.hunt_id] = { required: +r.required, approved: +r.approved, waiting_outfitter: +r.waiting_outfitter, waiting_hunter: +r.waiting_hunter, outfitter_name: r.outfitter_name };
+    setPaper(pm);
+
     setHunts(result);
     setLoading(false);
   }
@@ -150,6 +156,14 @@ export function ReadyToShip({ onOpenClient }: { onOpenClient?: (clientId: string
                   <p className="text-sm text-slate-500 mt-1">
                     {hunt.huntYear} hunt{hunt.operator ? ` · ${hunt.operator}` : ''}
                   </p>
+                  {paper[hunt.huntId] && paper[hunt.huntId].required > 0 && (() => {
+                    const d = paper[hunt.huntId]; const open = d.required - d.approved;
+                    return (
+                      <button onClick={() => onOpenDocs?.(hunt.huntId)} className={`mt-2 text-left text-sm font-semibold rounded-lg px-3 py-2 min-h-10 ${open === 0 ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300' : 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200'}`}>
+                        {open === 0 ? 'Documents complete. Ready to dispatch.' : `Cannot ship yet: ${open} document${open > 1 ? 's' : ''} not approved${d.waiting_outfitter ? `, ${d.waiting_outfitter} waiting on ${d.outfitter_name ?? 'the outfitter'}` : ''}${d.waiting_hunter ? `, ${d.waiting_hunter} waiting on the hunter` : ''}`}
+                      </button>
+                    );
+                  })()}
                   <div className="flex flex-wrap gap-1.5 mt-2">
                     {hunt.species.map(sp => (
                       <Badge key={sp} variant="outline" className="text-xs">{sp}</Badge>

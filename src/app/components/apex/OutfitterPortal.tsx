@@ -3,31 +3,38 @@
  * the hunter chooses those), follow every animal, and see the money side of each hunt.
  */
 import { useState } from 'react';
-import { Compass, Home, LogOut, Moon, Plus, Sun, User } from 'lucide-react';
+import { Compass, FileText, Home, LogOut, MessageSquare, Moon, Plus, Sun, User } from 'lucide-react';
 import { Button } from '../ui/button';
 import { OutfitterHunts } from './outfitter/OutfitterHunts';
 import { RegisterHunt } from './outfitter/RegisterHunt';
+import { OutfitterDocuments } from './outfitter/OutfitterDocuments';
+import { OutfitterMessages } from './outfitter/OutfitterMessages';
 import { useOutfitter } from '../../../lib/hooks/useOutfitter';
 import { useTheme } from './ThemeProvider';
 import { usePortalTheme } from './PortalThemeProvider';
 
 interface OutfitterPortalProps { onLogout: () => void }
-type OutfitterView = 'hunts' | 'register' | 'account';
+type OutfitterView = 'hunts' | 'documents' | 'messages' | 'register' | 'account';
 
 export function OutfitterPortal({ onLogout }: OutfitterPortalProps) {
   const [view, setView] = useState<OutfitterView>('hunts');
   const [tick, setTick] = useState(0);
+  const [thread, setThread] = useState<string | null>(null);
   const { theme, toggleTheme } = useTheme();
   const { theme: portalTheme } = usePortalTheme();
   const { data } = useOutfitter();
 
   const items: { v: OutfitterView; icon: React.ComponentType<{ className?: string }>; label: string }[] = [
     { v: 'hunts', icon: Home, label: 'My hunts' },
-    { v: 'register', icon: Plus, label: 'Register a hunt' },
+    { v: 'documents', icon: FileText, label: 'Documents' },
+    { v: 'messages', icon: MessageSquare, label: 'Messages' },
+    { v: 'register', icon: Plus, label: 'Register' },
     { v: 'account', icon: User, label: 'Account' },
   ];
 
   const body = () => {
+    if (view === 'documents') return <OutfitterDocuments onAsk={(id) => { setThread(id); setView('messages'); }} />;
+    if (view === 'messages') return <OutfitterMessages key={thread ?? 'all'} initialHuntId={thread} />;
     if (view === 'register') return <RegisterHunt onClose={() => setView('hunts')} onDone={() => setTick(t => t + 1)} />;
     if (view === 'account') {
       return (
@@ -59,17 +66,17 @@ export function OutfitterPortal({ onLogout }: OutfitterPortalProps) {
       <main className="md:ml-64 px-4 py-6 pb-28 md:pb-6 min-w-0 overflow-x-hidden">{body()}</main>
 
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-stone-900/90 backdrop-blur-lg border-t border-green-200 dark:border-green-900 z-50">
-        <div className="grid grid-cols-3 gap-1 p-2">
+        <div className="grid grid-cols-5 gap-1 p-2">
           {items.map(i => (
-            <Button key={i.v} variant={view === i.v ? 'default' : 'ghost'} className="flex flex-col items-center gap-1 h-auto min-h-14 py-2" onClick={() => setView(i.v)}>
-              <i.icon className="w-5 h-5" /><span className="text-xs">{i.label}</span>
+            <Button key={i.v} variant={view === i.v ? 'default' : 'ghost'} className="flex flex-col items-center gap-1 h-auto min-h-14 py-2" onClick={() => { setThread(null); setView(i.v); }}>
+              <i.icon className="w-5 h-5" /><span className="text-[11px]">{i.label}</span>
             </Button>
           ))}
         </div>
       </nav>
       <nav className="hidden md:block fixed left-0 top-16 bottom-0 w-64 bg-white/90 dark:bg-stone-900/90 backdrop-blur-lg border-r border-green-200 dark:border-green-900 p-4 space-y-2">
         {items.map(i => (
-          <Button key={i.v} variant={view === i.v ? 'default' : 'ghost'} className="w-full justify-start min-h-11" onClick={() => setView(i.v)}><i.icon className="w-5 h-5 mr-3" />{i.label}</Button>
+          <Button key={i.v} variant={view === i.v ? 'default' : 'ghost'} className="w-full justify-start min-h-11" onClick={() => { setThread(null); setView(i.v); }}><i.icon className="w-5 h-5 mr-3" />{i.label}</Button>
         ))}
       </nav>
     </div>
