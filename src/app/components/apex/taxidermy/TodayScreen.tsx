@@ -29,13 +29,14 @@ export function TodayScreen({ onNavigate }: { onNavigate: (view: string, clientI
   const changes = quoteRows.filter(r => r.stage === 'declined').length;
   const awaitingPay = quoteRows.filter(r => r.stage === 'awaiting_deposit').length;
 
-  const [docs, setDocs] = useState({ toCheck: 0, fromOutfitter: 0, unreadChat: 0 });
+  const [docs, setDocs] = useState({ toCheck: 0, fromOutfitter: 0, unreadChat: 0, unverified: 0 });
   useEffect(() => {
     (async () => {
       const db = supabase as any;
       const { data: v } = await db.from('v_hunt_documents').select('to_check, waiting_outfitter');
       const { count } = await db.from('outfitter_messages').select('id', { count: 'exact', head: true }).eq('sender', 'outfitter').is('read_at', null);
-      setDocs({ toCheck: (v ?? []).reduce((n: number, r: any) => n + +r.to_check, 0), fromOutfitter: (v ?? []).filter((r: any) => +r.waiting_outfitter > 0).length, unreadChat: count ?? 0 });
+      const { count: unv } = await db.from('registered_numbers').select('id', { count: 'exact', head: true }).is('verified_at', null);
+      setDocs({ unverified: unv ?? 0, toCheck: (v ?? []).reduce((n: number, r: any) => n + +r.to_check, 0), fromOutfitter: (v ?? []).filter((r: any) => +r.waiting_outfitter > 0).length, unreadChat: count ?? 0 });
     })().catch(() => {});
   }, []);
 
@@ -49,6 +50,7 @@ export function TodayScreen({ onNavigate }: { onNavigate: (view: string, clientI
     { n: changes, text: plural(changes, 'hunter asked for changes to their quote', 'hunters asked for changes to their quote'), go: 'quotes', tone: 'red' },
     { n: awaitingPay, text: plural(awaitingPay, 'accepted quote is waiting for payment', 'accepted quotes are waiting for payment'), go: 'quotes', tone: 'amber' },
     { n: docs.toCheck, text: plural(docs.toCheck, 'document has arrived and needs checking', 'documents have arrived and need checking'), go: 'documents', tone: 'amber' },
+    { n: docs.unverified, text: plural(docs.unverified, 'permit number from an outfitter needs verifying', 'permit numbers from outfitters need verifying'), go: 'permit-numbers', tone: 'amber' },
     { n: docs.unreadChat, text: plural(docs.unreadChat, 'unread message from an outfitter', 'unread messages from outfitters'), go: 'outfitter-chat', tone: 'amber' },
     { n: docs.fromOutfitter, text: plural(docs.fromOutfitter, 'hunt is waiting on documents from the outfitter', 'hunts are waiting on documents from outfitters'), go: 'documents', tone: 'blue' },
     { n: deadlinesOverdue.length, text: plural(deadlinesOverdue.length, 'hunt is past its deadline', 'hunts are past their deadline'), go: 'deadline-watch', tone: 'red' },

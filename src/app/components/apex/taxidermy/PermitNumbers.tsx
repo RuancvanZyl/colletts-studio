@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { supabase } from '../../../../lib/supabase';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
 
-interface N { id?: string; kind: string; holder_name: string; year: number; number: string }
+interface N { id?: string; kind: string; holder_name: string; year: number; number: string; verified_at?: string | null; updated_by_name?: string | null; outfitter_id?: string | null; outfitters?: { name: string } | null }
 const KIND: Record<string, string> = { ph_permit: 'Professional hunter permit', ho_permit: 'Outfitter permit' };
 const field = 'w-full rounded-lg border border-slate-600 bg-[#0f1a24] text-slate-100 px-3 min-h-11 text-base placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0073ea]';
 const lab = 'block text-sm font-semibold text-slate-300 mb-1';
@@ -13,7 +13,7 @@ const lab = 'block text-sm font-semibold text-slate-300 mb-1';
 export function PermitNumbers() {
   const [list, setList] = useState<N[] | null>(null);
   const [edit, setEdit] = useState<N | null>(null);
-  const load = async () => { const { data } = await (supabase as any).from('registered_numbers').select('*').order('year', { ascending: false }).order('holder_name'); setList(data ?? []); };
+  const load = async () => { const { data } = await (supabase as any).from('registered_numbers').select('*, outfitters(name)').order('year', { ascending: false }).order('holder_name'); setList(data ?? []); };
   useEffect(() => { load(); }, []);
 
   async function save() {
@@ -22,6 +22,11 @@ export function PermitNumbers() {
     const r = edit.id ? await (supabase as any).from('registered_numbers').update(row).eq('id', edit.id) : await (supabase as any).from('registered_numbers').insert(row);
     if (r.error) { toast.error(r.error.message.includes('row-level') ? 'Only admins can change this list' : r.error.message.includes('duplicate') ? 'That person already has a number for that year' : r.error.message); return; }
     setEdit(null); load();
+  }
+  async function verify() {
+    if (!edit?.id) return;
+    const { error } = await (supabase as any).rpc('staff_verify_number', { p_id: edit.id });
+    if (error) toast.error(error.message); else { toast.success('Verified'); setEdit(null); load(); }
   }
   async function remove() {
     if (!edit?.id || !window.confirm('Remove this number?')) return;
@@ -41,8 +46,8 @@ export function PermitNumbers() {
         <div className="rounded-2xl border border-slate-700 bg-[#111c26] divide-y divide-slate-800 overflow-hidden">
           {list.map(n => (
             <button key={n.id} onClick={() => setEdit(n)} className="w-full text-left px-4 py-3 flex items-center gap-3 min-h-16 hover:bg-[#162330]">
-              <span className="flex-1 min-w-0"><span className="block text-lg font-semibold text-slate-100">{n.holder_name}</span><span className="block text-sm text-slate-400">{KIND[n.kind]} · {n.year}</span></span>
-              <span className="font-mono text-slate-200">{n.number}</span>
+              <span className="flex-1 min-w-0"><span className="block text-lg font-semibold text-slate-100">{n.holder_name}</span><span className="block text-sm text-slate-400">{KIND[n.kind]} · {n.year}{n.outfitters?.name ? ` · added by ${n.outfitters.name}` : ''}</span></span>
+              <span className="text-right"><span className="block font-mono text-slate-200">{n.number}</span>{n.verified_at ? <span className="text-xs text-green-300">Verified</span> : <span className="text-xs font-semibold text-amber-300">Not verified</span>}</span>
             </button>
           ))}
         </div>
@@ -57,6 +62,12 @@ export function PermitNumbers() {
               <div><label className={lab}>Year</label><input type="number" className={field} value={edit.year} onChange={e => setEdit({ ...edit, year: +e.target.value })} /></div>
               <div><label className={lab}>Permit number</label><input className={field} value={edit.number} onChange={e => setEdit({ ...edit, number: e.target.value })} /></div>
             </div>
+            {edit.id && !edit.verified_at && (
+              <div className="rounded-lg border border-amber-600 bg-amber-950/30 p-3 space-y-2">
+                <p className="text-sm text-amber-200">This number was entered by {edit.outfitters?.name ?? 'the outfitter'}{edit.updated_by_name ? ` (${edit.updated_by_name})` : ''}. Look at the permit itself, and if the number is right, verify it. Registers that use it cannot be approved until you do.</p>
+                <button className="w-full min-h-12 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold" onClick={verify}>It matches the permit. Verify it.</button>
+              </div>
+            )}
             <div className="flex gap-2">
               {edit.id && <button className="min-h-12 px-4 rounded-xl border border-red-500 text-red-300 font-semibold" onClick={remove}>Remove</button>}
               <button className="min-h-12 px-5 rounded-xl border border-slate-500 text-slate-100 font-semibold" onClick={() => setEdit(null)}>Cancel</button>

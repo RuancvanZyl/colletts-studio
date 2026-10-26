@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { supabase } from '../../../../lib/supabase';
 import { PROVINCES } from '../../../../lib/docs';
 import { RECEIVED_PARTS } from '../../../../lib/received';
+import type { AiRegister } from '../../../../lib/aiReader';
 
 export interface Finding { key: string; level: 'error' | 'warn'; where: string; field: string | null; message: string; overridden: boolean; override_reason: string | null }
 interface Line { farm_name: string; farm_reg_no: string; district: string; landowner: string; permit_no: string; date_killed: string; species: string; quantity: string; sex: string; parts: string[] }
@@ -56,12 +57,13 @@ export function FindingsList({ findings, hunt, canEdit, onChanged }: { findings:
   );
 }
 
-export function HuntRegister({ huntId, defaults, canEdit, onChanged }: { huntId: string; defaults: { province: string | null; outfitter: string | null; client: string }; canEdit: boolean; onChanged?: () => void }) {
+export function HuntRegister({ huntId, defaults, canEdit, onChanged, prefill }: { huntId: string; defaults: { province: string | null; outfitter: string | null; client: string }; canEdit: boolean; onChanged?: () => void; prefill?: { data: AiRegister; nonce: number } | null }) {
   const [head, setHead] = useState<Head | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
   const [findings, setFindings] = useState<Finding[]>([]);
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [ai, setAi] = useState<{ unsure: string[]; flags: string[] } | null>(null);
 
   const check = async () => { const { data } = await (supabase as any).rpc('check_hunt_register', { p_hunt: huntId }); setFindings(data ?? []); };
   const load = async () => {
@@ -78,6 +80,20 @@ export function HuntRegister({ huntId, defaults, canEdit, onChanged }: { huntId:
     await check();
   };
   useEffect(() => { load(); }, [huntId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!prefill) return;
+    const d = prefill.data; const t = (x: unknown) => (typeof x === 'string' ? x : '');
+    setHead(h => ({
+      register_no: t(d.header.register_no), province: PROVINCES.includes(t(d.header.province)) ? t(d.header.province) : '', commenced: t(d.header.commenced), terminated: t(d.header.terminated),
+      ph_name: t(d.header.ph_name), ph_permit_no: t(d.header.ph_permit_no), ph_signed: !!d.header.ph_signed,
+      client_name: t(d.header.client_name) || h?.client_name || '', client_passport_no: t(d.header.client_passport_no), client_signed: !!d.header.client_signed,
+      ho_name: t(d.header.ho_name) || h?.ho_name || '', ho_permit_no: t(d.header.ho_permit_no), ho_signed: !!d.header.ho_signed,
+    }));
+    const valid = new Set(RECEIVED_PARTS.map(p => p.code));
+    setLines(d.lines.length ? d.lines.map(l => ({ farm_name: l.farm_name ?? '', farm_reg_no: l.farm_reg_no ?? '', district: l.district ?? '', landowner: l.landowner ?? '', permit_no: l.permit_no ?? '', date_killed: l.date_killed ?? '', species: l.species ?? '', quantity: l.quantity != null ? String(l.quantity) : '', sex: l.sex ?? '', parts: (l.parts ?? []).filter(c => valid.has(c)) })) : [blankLine()]);
+    setAi({ unsure: d.unsure ?? [], flags: d.flags ?? [] });
+    setDirty(true);
+  }, [prefill?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!head) return <div className="flex items-center gap-2 text-slate-400"><Loader2 className="w-5 h-5 animate-spin" />Loading…</div>;
 
@@ -85,8 +101,9 @@ export function HuntRegister({ huntId, defaults, canEdit, onChanged }: { huntId:
   const setLine = (i: number, k: keyof Line, v: string | string[]) => { setLines(ls => ls.map((l, j) => j === i ? { ...l, [k]: v } : l)); setDirty(true); };
   const errOf = (key: string) => findings.find(f => f.key === key && !f.overridden);
   const headErr = (fieldName: string) => findings.find(f => f.key.startsWith('header:') && f.field === fieldName && !f.overridden);
-  const border = (e?: Finding) => !e ? 'border-slate-600' : e.level === 'error' ? 'border-red-500 bg-red-950/30' : 'border-amber-500';
-  const msg = (e?: Finding) => e && <p className={`text-xs mt-1 ${e.level === 'error' ? 'text-red-300' : 'text-amber-300'}`}>{e.message}</p>;
+  const border = (e?: Finding, unsure = false) => !e ? (unsure ? 'border-amber-400 bg-amber-950/20' : 'border-slate-600') : e.level === 'error' ? 'border-red-500 bg-red-950/30' : 'border-amber-500';
+  const msg = (e?: Finding, unsure = false) => e ? <p className={`text-xs mt-1 ${e.level === 'error' ? 'text-red-300' : 'text-amber-300'}`}>{e.message}</p> : unsure ? <p className="text-xs mt-1 text-amber-300">The AI reader was not sure about this one. Check it against the paper.</p> : null;
+  const uns = (k: string) => !!ai?.unsure.includes(k);
 
   async function save() {
     setBusy(true);
@@ -97,7 +114,7 @@ export function HuntRegister({ huntId, defaults, canEdit, onChanged }: { huntId:
   }
 
   const H = ({ k, label, type = 'text', ph }: { k: keyof Head; label: string; type?: string; ph?: string }) => (
-    <div><label className={lab}>{label}</label><input type={type} disabled={!canEdit} className={`${field} ${border(headErr(k))}`} value={head[k] as string} placeholder={ph} onChange={e => set(k, e.target.value)} />{msg(headErr(k))}</div>
+    <div><label className={lab}>{label}</label><input type={type} disabled={!canEdit} className={`${field} ${border(headErr(k), uns(k))}`} value={head[k] as string} placeholder={ph} onChange={e => set(k, e.target.value)} />{msg(headErr(k), uns(k))}</div>
   );
   const Sig = ({ k, label }: { k: 'ph_signed' | 'client_signed' | 'ho_signed'; label: string }) => (
     <div><button type="button" disabled={!canEdit} aria-pressed={head[k]} onClick={() => set(k, !head[k])} className={`w-full min-h-11 rounded-lg border-2 text-sm font-semibold ${head[k] ? 'border-green-500 bg-green-950/30 text-white' : headErr(k) ? 'border-red-500 text-red-200' : 'border-slate-600 text-slate-300'}`}>{head[k] ? '✓ ' : ''}{label}</button>{msg(headErr(k))}</div>
@@ -109,6 +126,14 @@ export function HuntRegister({ huntId, defaults, canEdit, onChanged }: { huntId:
       <div className={`rounded-xl border p-3 text-base font-semibold ${errors === 0 && findings.length >= 0 && !findings.some(f => f.key === 'register:missing') ? 'border-emerald-600 bg-emerald-950/30 text-emerald-200' : 'border-red-600 bg-red-950/20 text-red-200'}`}>
         {findings.some(f => f.key === 'register:missing') ? 'Type in the register below, then save to check it.' : errors === 0 ? 'No open problems on the register.' : `${errors} open problem${errors > 1 ? 's' : ''}. The register cannot be approved until each is fixed or set aside with a reason.`}
       </div>
+
+      {ai && (
+        <div className="rounded-xl border border-sky-500 bg-sky-950/30 p-3 space-y-1.5">
+          <p className="font-bold text-sky-200">Filled in by the AI reader from the scan</p>
+          <p className="text-sm text-sky-100">Check every field against the paper before you save. Fields it was not sure about are outlined in amber.</p>
+          {ai.flags.length > 0 && <ul className="text-sm text-amber-200 list-disc pl-5 space-y-0.5">{ai.flags.map((f, i) => <li key={i}>{f}</li>)}</ul>}
+        </div>
+      )}
 
       {findings.length > 0 && !findings.some(f => f.key === 'register:missing') && <FindingsList findings={findings} hunt={huntId} canEdit={canEdit} onChanged={check} />}
 
@@ -132,7 +157,7 @@ export function HuntRegister({ huntId, defaults, canEdit, onChanged }: { huntId:
         {lines.map((l, i) => {
           const E = (f: string) => errOf(`line:${i + 1}:${f}`);
           const F = ({ k, label, type = 'text' }: { k: keyof Line; label: string; type?: string }) => (
-            <div><label className={lab}>{label}</label><input type={type} disabled={!canEdit} className={`${field} ${border(E(k === 'farm_name' ? 'farm' : String(k)))}`} value={l[k] as string} onChange={e => setLine(i, k, e.target.value)} />{msg(E(k === 'farm_name' ? 'farm' : String(k)))}</div>
+            <div><label className={lab}>{label}</label><input type={type} disabled={!canEdit} className={`${field} ${border(E(k === 'farm_name' ? 'farm' : String(k)), uns(`line:${i + 1}:${String(k)}`))}`} value={l[k] as string} onChange={e => setLine(i, k, e.target.value)} />{msg(E(k === 'farm_name' ? 'farm' : String(k)), uns(`line:${i + 1}:${String(k)}`))}</div>
           );
           return (
             <div key={i} className="rounded-2xl border border-slate-700 bg-[#111c26] p-4 space-y-3">

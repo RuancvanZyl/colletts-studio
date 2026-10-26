@@ -4,17 +4,18 @@
  * Final dispatch is blocked until every required document is approved.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Camera, CheckCircle2, Eye, FileText, Loader2, MessageSquare, Plus } from 'lucide-react';
+import { ArrowLeft, Camera, CheckCircle2, Eye, FileText, Loader2, MessageSquare, Plus, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../../../lib/supabase';
 import { useAuth } from '../../../../lib/auth';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
 import { OutfitterThread } from '../shared/OutfitterThread';
 import { HuntRegister } from './HuntRegister';
+import { readDocument, type AiRegister, type AiDocument } from '../../../../lib/aiReader';
 import { PROVINCES, RESPONSIBLE_LABEL, STATUS_LABEL, STATUS_TONE, uploadHuntFiles, openHuntFile, waiting } from '../../../../lib/docs';
 
 interface BoardRow { hunt_id: string; ref_number: string | null; client_name: string; outfitter_name: string | null; required: number; approved: number; waiting_outfitter: number; waiting_hunter: number; waiting_other: number; to_check: number; rejected: number; oldest_wait: string | null; complete: boolean; province: string | null }
-interface Req { id: string; name: string; responsible: string; status: string; needs_signature: boolean; needs_stamp: boolean; file_paths: string[]; note: string | null; requested_at: string; received_at: string | null; received_by_name: string | null; rejection_reason: string | null; checked_signed: boolean; checked_stamped: boolean; reference_numbers: string[]; check_kind: string | null; must_show: string[]; shown_ok: string[]; ph_permit_seen: string | null; ho_permit_seen: string | null }
+interface Req { id: string; name: string; responsible: string; status: string; needs_signature: boolean; needs_stamp: boolean; file_paths: string[]; note: string | null; requested_at: string; received_at: string | null; received_by_name: string | null; rejection_reason: string | null; checked_signed: boolean; checked_stamped: boolean; reference_numbers: string[]; check_kind: string | null; must_show: string[]; shown_ok: string[]; ph_permit_seen: string | null; ho_permit_seen: string | null; ai_extracted: { flags?: string[] } | null; ai_read_at: string | null }
 
 const field = 'w-full rounded-lg border border-slate-600 bg-[#0f1a24] text-slate-100 px-3 min-h-11 text-base placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0073ea]';
 const lab = 'block text-sm font-semibold text-slate-300 mb-1';
@@ -92,7 +93,9 @@ function Checklist({ huntId, onBack }: { huntId: string; onBack: () => void }) {
   const isManager = ['admin', 'studio_manager', 'bookkeeper'].includes(profile?.role ?? '');
   const [info, setInfo] = useState<{ client: string; ref: string; outfitter: string | null; outfitterId: string | null; province: string | null } | null>(null);
   const [showRegister, setShowRegister] = useState(false);
-  const [numbersFor, setNumbersFor] = useState<Req | null>(null);
+  const [numbersFor, setNumbersFor] = useState<{ req: Req; ai: AiDocument | null } | null>(null);
+  const [aiRegister, setAiRegister] = useState<{ data: AiRegister; nonce: number } | null>(null);
+  const [reading, setReading] = useState<string | null>(null);
   const [reqs, setReqs] = useState<Req[] | null>(null);
   const [review, setReview] = useState<Req | null>(null);
   const [chat, setChat] = useState<{ text: string; req: string | null } | null>(null);
@@ -123,6 +126,19 @@ function Checklist({ huntId, onBack }: { huntId: string; onBack: () => void }) {
       if (error) throw new Error(error.message);
       toast.success('Document added'); load();
     } catch (e: any) { toast.error(e.message); } finally { setBusy(null); }
+  }
+  async function readWithAi(r: Req) {
+    const isRegister = r.check_kind === 'register';
+    if (isRegister && aiRegister === null && !window.confirm('The AI reader will fill in the register from the scan. Whatever is typed in on the register now will be replaced. Continue?')) return;
+    setReading(r.id);
+    try {
+      const res = await readDocument(huntId, r.id, isRegister ? 'register' : 'other');
+      const { error } = await (supabase as any).rpc('staff_save_ai_reading', { p_req: r.id, p_data: res.data });
+      if (error) throw new Error(error.message);
+      if (res.kind === 'register') { setAiRegister({ data: res.data, nonce: Date.now() }); setShowRegister(true); toast.success('Read. Please check it against the paper.'); }
+      else setNumbersFor({ req: r, ai: res.data });
+      load();
+    } catch (e: any) { toast.error(e.message); } finally { setReading(null); }
   }
   async function notNeeded(r: Req) {
     const why = window.prompt(`Why is "${r.name}" not needed for this hunt? (this is recorded)`);
@@ -162,16 +178,20 @@ function Checklist({ huntId, onBack }: { huntId: string; onBack: () => void }) {
               </div>
               <span className={`text-xs font-semibold rounded-full px-2.5 py-1 whitespace-nowrap ${STATUS_TONE[r.status]}`}>{STATUS_LABEL[r.status]}</span>
             </div>
+            {(r.ai_extracted?.flags ?? []).length > 0 && isManager && (
+              <div className="rounded-lg border border-amber-700 bg-amber-950/30 p-2.5 text-sm text-amber-200"><p className="font-semibold">The AI reader noticed:</p><ul className="list-disc pl-5">{r.ai_extracted!.flags!.map((f, i) => <li key={i}>{f}</li>)}</ul></div>
+            )}
             {r.rejection_reason && r.status === 'rejected' && <p className="rounded-lg bg-red-950/40 border border-red-800 text-red-200 text-sm p-2.5">Sent back: {r.rejection_reason}</p>}
             {r.note && r.status === 'not_needed' && <p className="text-sm text-slate-400">Not needed: {r.note}</p>}
             {r.file_paths.length > 0 && <div className="flex flex-wrap gap-2">{r.file_paths.map((p, i) => <button key={p} onClick={() => openHuntFile(p).catch(e => toast.error(e.message))} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-600 text-slate-200 text-sm px-3 min-h-10"><Eye className="w-4 h-4" />File {i + 1}</button>)}{r.received_at && <span className="text-xs text-slate-500 self-center">received {new Date(r.received_at).toLocaleDateString('en-ZA')}{r.received_by_name ? ` from ${r.received_by_name}` : ''}</span>}</div>}
             {r.file_paths.length > 0 && isManager && (
-              <p className="text-sm text-slate-400">Numbers on it: {(r.reference_numbers ?? []).length ? <span className="font-mono text-slate-200">{r.reference_numbers.join(', ')}</span> : 'none entered'} <button className="text-sky-300 underline ml-1 min-h-9" onClick={() => setNumbersFor(r)}>{(r.reference_numbers ?? []).length || r.ph_permit_seen || r.ho_permit_seen ? 'Change' : 'Enter them'}</button>{r.ph_permit_seen ? <span className="block">Shows PH permit no. <span className="font-mono text-slate-200">{r.ph_permit_seen}</span></span> : null}{r.ho_permit_seen ? <span className="block">Shows outfitter permit no. <span className="font-mono text-slate-200">{r.ho_permit_seen}</span></span> : null}</p>
+              <p className="text-sm text-slate-400">Numbers on it: {(r.reference_numbers ?? []).length ? <span className="font-mono text-slate-200">{r.reference_numbers.join(', ')}</span> : 'none entered'} <button className="text-sky-300 underline ml-1 min-h-9" onClick={() => setNumbersFor({ req: r, ai: null })}>{(r.reference_numbers ?? []).length || r.ph_permit_seen || r.ho_permit_seen ? 'Change' : 'Enter them'}</button>{r.ph_permit_seen ? <span className="block">Shows PH permit no. <span className="font-mono text-slate-200">{r.ph_permit_seen}</span></span> : null}{r.ho_permit_seen ? <span className="block">Shows outfitter permit no. <span className="font-mono text-slate-200">{r.ho_permit_seen}</span></span> : null}</p>
             )}
             <div className="flex flex-wrap gap-2 pt-1">
               {['received', 'rejected', 'approved'].includes(r.status) && r.file_paths.length > 0 && isManager && <button className="min-h-10 px-4 rounded-lg bg-[#0073ea] text-white font-semibold flex items-center gap-1.5" onClick={() => setReview(r)}><CheckCircle2 className="w-4 h-4" />{r.status === 'approved' ? 'Check again' : 'Check it'}</button>}
               {!['approved', 'not_needed'].includes(r.status) && <button disabled={busy === r.id} className="min-h-10 px-4 rounded-lg border border-slate-500 text-slate-100 font-semibold flex items-center gap-1.5 disabled:opacity-50" onClick={() => { setUploadFor(r.id); setTimeout(() => fileRef.current?.click(), 0); }}>{busy === r.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}Add a file</button>}
               {['awaiting', 'rejected'].includes(r.status) && info.outfitterId && r.responsible === 'outfitter' && <button className="min-h-10 px-4 rounded-lg border border-amber-500 text-amber-200 font-semibold flex items-center gap-1.5" onClick={() => setChat({ text: r.status === 'rejected' ? `About ${info.client}: please send a corrected "${r.name}". ${r.rejection_reason ?? ''}`.trim() : `About ${info.client}: we are still waiting for the "${r.name}". Please send it as soon as you can.`, req: r.id })}><MessageSquare className="w-4 h-4" />Ask the outfitter</button>}
+              {r.file_paths.length > 0 && !['approved', 'not_needed'].includes(r.status) && isManager && <button disabled={reading === r.id} className="min-h-10 px-4 rounded-lg border border-sky-500 text-sky-200 font-semibold flex items-center gap-1.5 disabled:opacity-50" onClick={() => readWithAi(r)}>{reading === r.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}Read with AI</button>}
               {r.status === 'awaiting' && isManager && <button className="min-h-10 px-4 rounded-lg text-slate-400 underline" onClick={() => notNeeded(r)}>Not needed</button>}
             </div>
           </div>
@@ -180,7 +200,7 @@ function Checklist({ huntId, onBack }: { huntId: string; onBack: () => void }) {
 
       <section className="space-y-3">
         <button className="w-full min-h-14 rounded-2xl border-2 border-sky-500 text-sky-200 font-bold text-lg" onClick={() => setShowRegister(v => !v)}>{showRegister ? 'Hide the hunt register' : 'Type in and check the hunt register'}</button>
-        {showRegister && <HuntRegister huntId={huntId} canEdit={isManager} defaults={{ province: info.province, outfitter: info.outfitter, client: info.client }} onChanged={load} />}
+        {showRegister && <HuntRegister huntId={huntId} prefill={aiRegister} canEdit={isManager} defaults={{ province: info.province, outfitter: info.outfitter, client: info.client }} onChanged={load} />}
       </section>
 
       {isManager && <button className="inline-flex items-center gap-2 rounded-xl border-2 border-dashed border-slate-600 text-slate-200 font-semibold px-4 min-h-12" onClick={() => setAdding(true)}><Plus className="w-5 h-5" />Add another document to this hunt</button>}
@@ -193,7 +213,7 @@ function Checklist({ huntId, onBack }: { huntId: string; onBack: () => void }) {
         </section>
       )}
 
-      {numbersFor && <NumbersPopup req={numbersFor} onClose={() => setNumbersFor(null)} onDone={() => { setNumbersFor(null); load(); }} />}
+      {numbersFor && <NumbersPopup req={numbersFor.req} ai={numbersFor.ai} onClose={() => setNumbersFor(null)} onDone={() => { setNumbersFor(null); load(); }} />}
       {review && <ReviewPopup req={review} onClose={() => setReview(null)} onDone={() => { setReview(null); load(); }} />}
       {adding && <AddDocPopup huntId={huntId} onClose={() => setAdding(false)} onDone={() => { setAdding(false); load(); }} />}
     </div>
@@ -276,10 +296,10 @@ function AddDocPopup({ huntId, onClose, onDone }: { huntId: string; onClose: () 
   );
 }
 
-function NumbersPopup({ req, onClose, onDone }: { req: Req; onClose: () => void; onDone: () => void }) {
-  const [nums, setNums] = useState((req.reference_numbers ?? []).join(', '));
-  const [ph, setPh] = useState(req.ph_permit_seen ?? '');
-  const [ho, setHo] = useState(req.ho_permit_seen ?? '');
+function NumbersPopup({ req, ai, onClose, onDone }: { req: Req; ai: AiDocument | null; onClose: () => void; onDone: () => void }) {
+  const [nums, setNums] = useState((ai ? ai.permit_numbers : req.reference_numbers ?? []).join(', '));
+  const [ph, setPh] = useState((ai ? ai.ph_permit_no : req.ph_permit_seen) ?? '');
+  const [ho, setHo] = useState((ai ? ai.ho_permit_no : req.ho_permit_seen) ?? '');
   const [busy, setBusy] = useState(false);
   async function go() {
     setBusy(true);
@@ -291,7 +311,17 @@ function NumbersPopup({ req, onClose, onDone }: { req: Req; onClose: () => void;
     <Dialog open onOpenChange={(o: boolean) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-md">
         <DialogHeader><DialogTitle className="text-2xl">Numbers on this document</DialogTitle></DialogHeader>
-        <p className="text-sm text-slate-300">Type in what the document shows. The hunt register is checked against it, and any difference is highlighted.</p>
+        <p className="text-sm text-slate-300">{ai ? 'The AI reader filled these in from the scan. Check them against the paper, then save.' : 'Type in what the document shows.'} The hunt register is checked against them, and any difference is highlighted.</p>
+        {ai && (ai.flags.length > 0 || ai.unsure.length > 0 || !ai.has_signature || !ai.has_stamp) && (
+          <div className="rounded-lg border border-amber-700 bg-amber-950/30 p-2.5 text-sm text-amber-200 space-y-1">
+            <p className="font-semibold">The AI reader noticed:</p>
+            <ul className="list-disc pl-5">
+              {!ai.has_signature && <li>It could not see a signature.</li>}{!ai.has_stamp && <li>It could not see a stamp.</li>}
+              {ai.unsure.length > 0 && <li>It was not sure about: {ai.unsure.join(', ')}.</li>}
+              {ai.flags.map((f, i) => <li key={i}>{f}</li>)}
+            </ul>
+          </div>
+        )}
         <div><label className={lab}>Permit numbers on it <span className="font-normal text-slate-500">(separate with commas)</span></label><input className={field} value={nums} onChange={e => setNums(e.target.value)} /></div>
         <div><label className={lab}>PH permit number it shows <span className="font-normal text-slate-500">(if any)</span></label><input className={field} value={ph} onChange={e => setPh(e.target.value)} /></div>
         <div><label className={lab}>Outfitter permit number it shows <span className="font-normal text-slate-500">(if any)</span></label><input className={field} value={ho} onChange={e => setHo(e.target.value)} /></div>

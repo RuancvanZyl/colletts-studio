@@ -9,6 +9,7 @@ import { OutfitterHunts } from './outfitter/OutfitterHunts';
 import { RegisterHunt } from './outfitter/RegisterHunt';
 import { OutfitterDocuments } from './outfitter/OutfitterDocuments';
 import { OutfitterMessages } from './outfitter/OutfitterMessages';
+import { MyPermitNumbers } from './outfitter/MyPermitNumbers';
 import { useOutfitter } from '../../../lib/hooks/useOutfitter';
 import { useTheme } from './ThemeProvider';
 import { usePortalTheme } from './PortalThemeProvider';
@@ -38,12 +39,13 @@ export function OutfitterPortal({ onLogout }: OutfitterPortalProps) {
     if (view === 'register') return <RegisterHunt onClose={() => setView('hunts')} onDone={() => setTick(t => t + 1)} />;
     if (view === 'account') {
       return (
-        <div className="max-w-md mx-auto space-y-4">
+        <div className="max-w-xl mx-auto space-y-5">
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Account</h1>
           <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
             <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{data?.outfitter.name ?? 'Outfitter'}</p>
             <p className="text-sm text-slate-500">{data?.outfitter.status === 'active' ? 'Active' : 'Waiting for the workshop to activate this account'}</p>
           </div>
+          {data && <MyPermitNumbers outfitterId={data.outfitter.id} outfitterName={data.outfitter.name} />}
           <Button variant="outline" className="w-full min-h-12" onClick={onLogout}><LogOut className="w-4 h-4 mr-2" />Sign out</Button>
         </div>
       );

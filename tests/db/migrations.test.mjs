@@ -25,7 +25,7 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql']) {
+for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
@@ -597,6 +597,40 @@ await db.query(`SELECT public.staff_review_requirement($1, true, true, true, tru
 ok((await q(`SELECT status FROM hunt_requirements WHERE id=$1`, [regReq]))[0].status === 'approved', 'once every problem is fixed or set aside with a reason, the register can be approved');
 await db.query(`SELECT public.staff_clear_override($1, 'header:province')`, [rh]);
 ok(((await q(`SELECT public._register_unresolved($1) n`, [rh]))[0].n) === 1, 'taking a reason away reopens the problem');
+
+console.log('\nPermit numbers owned by outfitters, and the AI reader');
+await as(null);
+const o1id = (await q(`SELECT id FROM outfitters WHERE auth_user_id = $1`, [OUT1]))[0].id;
+const o2id = (await q(`SELECT id FROM outfitters WHERE auth_user_id = $1`, [OUT2]))[0].id;
+await db.exec(`UPDATE registered_numbers SET outfitter_id='${o1id}' WHERE kind='ho_permit'`);
+await as(OUT1);
+ok((await q(`SELECT count(*)::int n FROM registered_numbers`))[0].n === 1, 'an outfitter sees only their own numbers');
+ok((await fails(`INSERT INTO registered_numbers (kind, holder_name, year, number, outfitter_id) VALUES ('ph_permit','X PH',2026,'N1','${o2id}')`)) !== null, 'an outfitter cannot add numbers for another outfitter');
+ok((await fails(`INSERT INTO registered_numbers (kind, holder_name, year, number, outfitter_id) VALUES ('ho_permit','Someone Else',2026,'N2','${o1id}')`)) !== null, 'an outfitter can only set their own permit number under their own name');
+await db.query(`INSERT INTO registered_numbers (kind, holder_name, year, number, outfitter_id) VALUES ('ph_permit','My PH',2026,'MYPH-1',$1)`, [o1id]);
+ok((await q(`SELECT verified_at FROM registered_numbers WHERE holder_name='My PH'`))[0].verified_at === null, 'a number an outfitter adds starts as not verified');
+await as(OUT2);
+ok((await q(`SELECT count(*)::int n FROM registered_numbers`))[0].n === 0, 'another outfitter cannot see them');
+await as(OUT1);
+await db.query(`UPDATE registered_numbers SET number='HO-1' WHERE kind='ho_permit'`);
+ok((await q(`SELECT verified_at FROM registered_numbers WHERE kind='ho_permit'`))[0].verified_at !== null, 'saving the same number again does not undo the verification');
+await db.query(`UPDATE registered_numbers SET number='HO-2' WHERE kind='ho_permit'`);
+await db.query(`UPDATE registered_numbers SET number='HO-1' WHERE kind='ho_permit'`);
+ok((await q(`SELECT verified_at FROM registered_numbers WHERE kind='ho_permit'`))[0].verified_at === null, 'changing a number sets it back to not verified');
+await as(ids.admin);
+ok((await q(`SELECT count(*)::int n FROM registered_number_history WHERE old_number='HO-1' AND new_number='HO-2'`))[0].n === 1, 'every change of a number is logged');
+let f2 = await fnd();
+ok(f2.some(x => x.key === 'header:ho_permit_no' && !x.overridden && x.level === 'error' && x.message.includes('verified')), 'a register using an unverified number cannot pass');
+await db.query(`SELECT public.staff_verify_number((SELECT id FROM registered_numbers WHERE kind='ho_permit'))`);
+f2 = await fnd();
+ok(!f2.some(x => x.key === 'header:ho_permit_no' && x.level === 'error'), 'once the workshop verifies the number it passes');
+await as(OUT1);
+ok((await fails(`SELECT public.staff_verify_number((SELECT id FROM registered_numbers WHERE kind='ho_permit'))`))?.includes('Only managers'), 'an outfitter cannot verify their own number');
+await as(ids.admin);
+await db.query(`SELECT public.staff_save_ai_reading($1, '{"flags":["The stamp is very faint"],"permit_numbers":["037974"]}'::jsonb)`, [reqId]);
+ok((await fnd()).some(x => x.key.startsWith('ai:') && x.level === 'warn' && x.message.includes('stamp is very faint')), 'what the AI reader noticed shows up as a note');
+await as(ids.worker);
+ok((await fails(`SELECT public.staff_save_ai_reading($1, '{}'::jsonb)`, [reqId]))?.includes('Only managers'), 'a worker cannot save an AI reading');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
