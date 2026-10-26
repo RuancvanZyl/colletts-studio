@@ -49,7 +49,7 @@ export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
 
   // 2 — animals
   const [animals, setAnimals] = useState<Animal[]>([emptyAnimal()]);
-  const [expected, setExpected] = useState<{ docId: string; species: string; mount: string; huntId: string }[]>([]);
+  const [expected, setExpected] = useState<{ docId: string; species: string; mount: string; huntId: string; tag: string }[]>([]);
   const photoRef = useRef<HTMLInputElement>(null);
   const [photoFor, setPhotoFor] = useState<string | null>(null);
 
@@ -106,7 +106,7 @@ export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
       const ids = (hunts ?? []).map((h: any) => h.id);
       if (!ids.length) return;
       const { data } = await (supabase as any).from('hunt_documents').select('id, hunt_id, form_data').in('hunt_id', ids).eq('doc_type', 'job_card').eq('status', 'awaiting_arrival').limit(60);
-      setExpected((data ?? []).map((d: any) => ({ docId: d.id, huntId: d.hunt_id, species: d.form_data?.species ?? 'Animal', mount: d.form_data?.mount_type ?? '' })));
+      setExpected((data ?? []).map((d: any) => ({ docId: d.id, huntId: d.hunt_id, species: d.form_data?.species ?? 'Animal', mount: d.form_data?.mount_type ?? '', tag: d.form_data?.tag_number ?? '' })));
     })();
   }, [client]);
 
@@ -115,8 +115,8 @@ export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
   const whoOk = client ? true : fresh.full_name.trim().length >= 2;
   const animalsOk = animals.length > 0 && animals.every(a => a.species.trim() && a.parts.length > 0 && (!a.parts.includes('OTHER') || a.other.trim()));
 
-  const arrived = (e: { docId: string; species: string; mount: string }) => {
-    setAnimals(prev => [...prev.filter(a => a.species || a.parts.length), { ...emptyAnimal(), docId: e.docId, species: e.species, mount: e.mount }]);
+  const arrived = (e: { docId: string; species: string; mount: string; tag: string }) => {
+    setAnimals(prev => [...prev.filter(a => a.species || a.parts.length), { ...emptyAnimal(), docId: e.docId, species: e.species, mount: e.mount, tag: e.tag }]);
     setExpected(prev => prev.filter(x => x.docId !== e.docId));
   };
   const patch = (id: string, p: Partial<Animal>) => setAnimals(prev => prev.map(a => (a.id === id ? { ...a, ...p } : a)));

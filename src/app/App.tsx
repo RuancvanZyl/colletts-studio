@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { AuthProvider, useAuth } from '../lib/auth';
 import { supabase, AUTH_LINK, INVITE_AT_LOAD, clearInviteToken } from '../lib/supabase';
 import { InviteScreen } from './components/apex/InviteScreen';
+import { OutfitterInviteScreen } from './components/apex/OutfitterInviteScreen';
 
 export type UserRole = 'hunter' | 'local-hunter' | 'admin' | 'outfitter' | 'taxidermy' | 'unified' | null;
 
@@ -69,6 +70,7 @@ function AppInner() {
   // A signed-in hunter who opened their invitation link: attach the workshop's profile to this account
   useEffect(() => {
     if (!user || !profileResolved || profile || !inviteToken || currentView === 'invite') return;
+    if (inviteToken.startsWith('o_')) { clearInviteToken(); setInviteToken(null); return; }
     (async () => {
       const { error } = await (supabase as any).rpc('claim_client_invite', { p_token: inviteToken });
       if (error) toast.error(error.message);
@@ -188,17 +190,26 @@ function AppInner() {
     );
   }
 
-  // Invitation from the workshop's welcome message
+  // Invitation from the workshop's welcome message (hunters) or to an outfitter (link starts with o_)
   if (currentView === 'invite' && inviteToken && (!user || signedUpHere)) {
+    const outfitter = inviteToken.startsWith('o_');
     return (
       <ErrorBoundary>
         <ThemeProvider>
-          <InviteScreen
-            token={inviteToken}
-            onAccountCreated={() => setSignedUpHere(true)}
-            onDone={() => { setInviteToken(null); setPortalAndPersist('hunter'); setCurrentView('portal'); }}
-            onSignIn={() => { setPortalAndPersist('hunter'); setCurrentView('login'); }}
-          />
+          {outfitter ? (
+            <OutfitterInviteScreen
+              token={inviteToken.slice(2)}
+              onDone={() => { setInviteToken(null); setPortalAndPersist('outfitter'); setCurrentView('portal'); }}
+              onSignIn={() => { setPortalAndPersist('outfitter'); setCurrentView('login'); }}
+            />
+          ) : (
+            <InviteScreen
+              token={inviteToken}
+              onAccountCreated={() => setSignedUpHere(true)}
+              onDone={() => { setInviteToken(null); setPortalAndPersist('hunter'); setCurrentView('portal'); }}
+              onSignIn={() => { setPortalAndPersist('hunter'); setCurrentView('login'); }}
+            />
+          )}
           <Toaster closeButton toastOptions={{ duration: 9000 }} />
         </ThemeProvider>
       </ErrorBoundary>

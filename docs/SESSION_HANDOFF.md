@@ -29,3 +29,10 @@
 - Money → Quotes: once work is authorised, "Start the workshop flow" (also pops up right after a payment is recorded). `lib/releaseHunt.ts` turns the hunt's job cards into working cards: each animal leaves Receiving for its first department (pipelines added for Custom mount / combined / Replica), gets the order deadline as due date, a "received" stage-history entry, and the hunter is notified.
 - Job cards and printouts now show scientific name, parts received, condition. Client profile has a Money tab; Money → Payments is a ledger (received this month, still owed, recent); job cards show "On hold" while a quoted hunt is unpaid; Today and the Whiteboard count quotes awaiting payment.
 - Run supabase/launch/release_049_start_timeline.sql after 048.
+
+## 2026-10-26 — Outfitter link (migration 050)
+- Outfitters get an account tied to their `outfitters` row (invite link `/?invite=o_<token>`; self-registered ones start inactive until staff activate them). Management: Hunters → Outfitters (add/edit, status, commission %, invite via WhatsApp/e-mail/copy, their hunts and what they owe).
+- Outfitter portal rewritten on real data: My hunts (animals + where each is, money totals only), Register a hunt (hunter, hunt dates, animals + tag numbers; never mounts — the hunter chooses those), Account. All reads/writes go through functions (`outfitter_overview`, `outfitter_register_hunt`, `outfitter_add_animals`).
+- Registered animals arrive as "expected" job cards (awaiting_arrival, tag numbers kept) → Arrival Check-In "It arrived"; the hunter profile is created for them and invited when trophies arrive. Payments record who paid (hunter / outfitter / someone else); outfitter sees total, paid, outstanding and what they paid themselves.
+- The `outfitters` table is now readable only by staff and the outfitter themselves.
+- Run supabase/launch/release_050_outfitter_link.sql after 049 (and 049 after 048).

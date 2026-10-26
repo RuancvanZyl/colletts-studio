@@ -44,6 +44,7 @@ import { WorkshopSetup } from './taxidermy/WorkshopSetup';
 import { TodayScreen } from './taxidermy/TodayScreen';
 import { AnimalGuideEditor } from './taxidermy/AnimalGuideEditor';
 import { Quotes } from './taxidermy/Quotes';
+import { Outfitters } from './taxidermy/Outfitters';
 import { PaymentsLedger } from './taxidermy/PaymentsLedger';
 import { StationsHome } from './taxidermy/StationsHome';
 import { ClientStatusBoard } from './taxidermy/ClientStatusBoard';
@@ -105,7 +106,8 @@ type TaxidermyView =
   | 'status-board'
   | 'whiteboard'
   | 'animal-guide'
-  | 'quotes';
+  | 'quotes'
+  | 'outfitters';
 
 interface NavItem {
   view: TaxidermyView;
@@ -335,6 +337,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       { view: 'client-care',          label: 'Need contact' },
       { view: 'awaiting-instruction', label: 'Waiting for mounts' },
       { view: 'deadline-watch',       label: 'Past deadline' },
+      { view: 'outfitters',           label: 'Outfitters' },
       { view: 'status-board',         label: 'Status board' },
       { view: 'hunt-archive',         label: 'Archive' },
     ] },
@@ -388,6 +391,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'summary':         return <TodayScreen onNavigate={navigate} />;
       case 'whiteboard':      return <SummarySheet onNavigate={navigate} />;
       case 'animal-guide':    return <AnimalGuideEditor />;
+      case 'outfitters':      return <Outfitters onOpenQuote={(id) => navigate('quotes', id)} />;
       case 'quotes':          return <Quotes key={navClientId ?? 'all'} initialHuntId={navClientId} />;
       case 'stations':        return <StationsHome stations={STATIONS.filter(st => canSeeView(st.view as TaxidermyView))} onOpen={navigate} />;
       case 'status-board':    return <ClientStatusBoard onNavigate={navigate} />;

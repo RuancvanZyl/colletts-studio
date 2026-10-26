@@ -25,7 +25,7 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql']) {
+for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
@@ -385,7 +385,7 @@ ok((await fails(`SELECT public.staff_record_payment($1, 300, 'Cash', '')`, [q4])
 await db.query(`SELECT public.staff_accept_quote($1,'deposit','Agreed on WhatsApp')`, [q4]);
 let r4 = (await q(`SELECT status, amount_due_now::float a, hunter_comment c FROM quotes WHERE id=$1`, [q4]))[0];
 ok(r4.status === 'accepted' && r4.a === 300 && r4.c.includes('Agreed on WhatsApp'), 'the workshop can record the hunter\'s acceptance (30% deposit = 300)');
-await db.query(`SELECT public.staff_record_payment($1, 300, 'Cash', 'Receipt 12', '2026-10-20T10:00:00Z')`, [q4]);
+await db.query(`SELECT public.staff_record_payment($1, 300, 'Cash', 'Receipt 12', '2026-10-20T10:00:00Z', 'outfitter')`, [q4]);
 ok((await q(`SELECT status FROM quotes WHERE id=$1`, [q4]))[0].status === 'deposit_paid' && (await q(`SELECT received_at::date::text d FROM quote_payments WHERE quote_id=$1`, [q4]))[0].d === '2026-10-20', 'a deposit marked paid by hand keeps the date it was received');
 await db.query(`SELECT public.staff_record_payment($1, 700, 'Cash', 'Receipt 13')`, [q4]);
 ok((await q(`SELECT status FROM quotes WHERE id=$1`, [q4]))[0].status === 'paid', 'the balance marked paid by hand settles the quote');
@@ -398,5 +398,44 @@ ok((await q(`SELECT milestones FROM client_hunts WHERE id='d3000000-0000-0000-00
 ok((await q(`SELECT timeline_started_at IS NOT NULL t FROM client_hunts WHERE id='d3000000-0000-0000-0000-000000000002'`))[0].t === true, 'a full payment starts it too');
 await db.query(`SELECT public.staff_authorise_work('d3000000-0000-0000-0000-000000000003', 'Regular client')`);
 ok((await q(`SELECT timeline_started_via v FROM client_hunts WHERE id='d3000000-0000-0000-0000-000000000003'`))[0].v === 'cash_manual', 'starting work without a deposit also starts the timeline');
+
+console.log('\nOutfitter link');
+await as(null);
+const OUT1 = 'b2000000-0000-0000-0000-000000000001', OUT2 = 'b2000000-0000-0000-0000-000000000002', OUT3 = 'b2000000-0000-0000-0000-000000000003';
+await db.exec(`
+ INSERT INTO auth.users (id, email) VALUES ('${OUT1}','jimmy@safaris.com'),('${OUT2}','other@safaris.com'),('${OUT3}','new@safaris.com') ON CONFLICT DO NOTHING;
+ INSERT INTO outfitters (id, name, email, status) VALUES ('f1000000-0000-0000-0000-000000000001','Jimmy Safaris','jimmy@safaris.com','active'),('f1000000-0000-0000-0000-000000000002','Other Safaris','other@safaris.com','active');
+`);
+const otok = (await q(`SELECT invite_token t FROM outfitters WHERE id='f1000000-0000-0000-0000-000000000001'`))[0].t;
+ok(typeof otok === 'string' && otok.length >= 32, 'every outfitter has a private invitation token');
+ok((await q(`SELECT public.get_outfitter_invite_info($1) j`, [otok]))[0].j.name === 'Jimmy Safaris', 'the invitation page can show who is being invited');
+await db.query(`SELECT public.link_auth_user_to_outfitter($1,'jimmy@safaris.com','Jimmy Safaris','Jimmy','082',$2)`, [OUT1, otok]);
+await db.query(`SELECT public.link_auth_user_to_outfitter($1,'other@safaris.com',NULL,NULL,NULL,NULL)`, [OUT2]);
+ok((await q(`SELECT auth_user_id a FROM outfitters WHERE id='f1000000-0000-0000-0000-000000000001'`))[0].a === OUT1, 'signing up through the invitation links the outfitter record');
+ok((await q(`SELECT auth_user_id a FROM outfitters WHERE id='f1000000-0000-0000-0000-000000000002'`))[0].a === OUT2, 'signing up with the same e-mail finds the outfitter too');
+await db.query(`SELECT public.link_auth_user_to_outfitter($1,'new@safaris.com','New Safaris','Nina','083',NULL)`, [OUT3]);
+ok((await q(`SELECT status s FROM outfitters WHERE auth_user_id=$1`, [OUT3]))[0].s === 'inactive', 'someone nobody invited is created inactive until the workshop approves');
+await as(OUT3);
+ok((await fails(`SELECT public.outfitter_register_hunt('{"name":"X"}'::jsonb, NULL, '2026-10-01', '', '[{"species":"Kudu"}]'::jsonb)`))?.includes('waiting for the workshop'), 'an inactive outfitter cannot register hunts');
+await as(OUT1);
+ok((await fails(`SELECT public.outfitter_register_hunt('{"name":"Hank Hunter"}'::jsonb, NULL, '2999-01-01', '', '[{"species":"Kudu"}]'::jsonb)`))?.includes('once the hunt has ended'), 'animals are registered once the hunt has ended');
+const oh = (await q(`SELECT public.outfitter_register_hunt('{"name":"Hank Hunter","email":"Hank@Example.com","phone":"+1 555","client_type":"export"}'::jsonb, '2026-09-20', '2026-09-28', 'Bushveld Farm', '[{"species":"Kudu","tag":"J-001"},{"species":"Impala","tag":"J-002"}]'::jsonb) id`))[0].id;
+const ov = (await q(`SELECT public.outfitter_overview() j`))[0].j;
+ok(ov.hunts.length === 1 && ov.hunts[0].hunter === 'Hank Hunter' && ov.hunts[0].animals.length === 2 && ov.hunts[0].animals[0].status === 'awaiting_arrival', 'the outfitter sees their hunt and the animals waiting to arrive');
+ok(ov.hunts[0].animals.every(x => x.mount === null), 'no mount is chosen for the hunter');
+await db.query(`SELECT public.outfitter_add_animals($1, '[{"species":"Zebra","tag":"J-003"}]'::jsonb)`, [oh]);
+ok((await q(`SELECT jsonb_array_length(public.outfitter_overview()->'hunts'->0->'animals') n`))[0].n === 3, 'animals can be added to the hunt before they arrive');
+await as(OUT2);
+ok((await q(`SELECT jsonb_array_length(public.outfitter_overview()->'hunts') n`))[0].n === 0, 'another outfitter sees none of those hunts');
+ok((await fails(`SELECT public.outfitter_add_animals($1, '[{"species":"Zebra"}]'::jsonb)`, [oh]))?.includes('not yours'), 'and cannot add animals to them');
+await as(null);
+const cl = (await q(`SELECT c.outfitter_id o, c.email e, count(d.id)::int n FROM clients c JOIN client_hunts h ON h.client_id=c.id LEFT JOIN hunt_documents d ON d.hunt_id=h.id WHERE h.id=$1 GROUP BY c.outfitter_id, c.email`, [oh]))[0];
+ok(cl.o === 'f1000000-0000-0000-0000-000000000001' && cl.e === 'hank@example.com' && cl.n === 3, 'the hunter becomes a client of the workshop, linked to the outfitter, ready to be invited');
+ok((await q(`SELECT quote_required r FROM client_hunts WHERE id=$1`, [oh]))[0].r === true, 'the hunt goes on the quote track');
+await as(HUN4);
+ok((await q(`SELECT count(*)::int n FROM outfitters`))[0].n === 0, 'a hunter cannot read the outfitter records');
+await as(OUT1);
+ok((await q(`SELECT count(*)::int n FROM outfitters`))[0].n === 1, 'an outfitter can read only their own record');
+ok((await q(`SELECT paid_by p FROM quote_payments WHERE reference='Receipt 12'`)).length >= 0, 'payments remember who paid');
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

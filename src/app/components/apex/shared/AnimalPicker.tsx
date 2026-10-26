@@ -65,7 +65,7 @@ export function CollectionStrip({ speciesCount, total }: { speciesCount: number;
   );
 }
 
-export function AnimalPicker({ items, onChange, hunted }: { items: PickedAnimal[]; onChange: (next: PickedAnimal[]) => void; hunted?: Set<string> }) {
+export function AnimalPicker({ items, onChange, hunted, plain = false }: { items: PickedAnimal[]; onChange: (next: PickedAnimal[]) => void; hunted?: Set<string>; plain?: boolean }) {
   const [query, setQuery] = useState('');
   const [group, setGroup] = useState('Popular');
   const [justAdded, setJustAdded] = useState<string | null>(null);
@@ -77,14 +77,14 @@ export function AnimalPicker({ items, onChange, hunted }: { items: PickedAnimal[
   const add = (name: string) => {
     onChange([...items, { id: crypto.randomUUID(), base: name, variant: 'Normal' }]);
     setJustAdded(name); setTimeout(() => setJustAdded(j => (j === name ? null : j)), 700);
-    if (!live.has(name) && name !== 'Other') toast.success(`New species for your collection: ${name}`, { duration: 2200 });
+    if (!plain && !live.has(name) && name !== 'Other') toast.success(`New species for your collection: ${name}`, { duration: 2200 });
   };
   const removeOne = (name: string) => { const k = [...items].reverse().find(i => i.base === name); if (k) onChange(items.filter(i => i.id !== k.id)); };
 
   return (
     <div className="space-y-4">
       {guide && <SpeciesGuide species={guide} collected={0} onClose={() => setGuide(null)} />}
-      <CollectionStrip speciesCount={[...live].filter(n => n !== 'Other').length} total={SPECIES.length - 1} />
+      {!plain && <CollectionStrip speciesCount={[...live].filter(n => n !== 'Other').length} total={SPECIES.length - 1} />}
 
       {items.length > 0 && (
         <div className="rounded-2xl border-2 border-green-600 bg-green-50 dark:bg-green-950/30 p-3 space-y-2">
@@ -122,7 +122,7 @@ export function AnimalPicker({ items, onChange, hunted }: { items: PickedAnimal[
       <div className="grid grid-cols-2 gap-3">
         {list.map(sp => {
           const n = count(sp.name);
-          const isNew = !before.has(sp.name) && sp.name !== 'Other';
+          const isNew = !plain && !before.has(sp.name) && sp.name !== 'Other';
           const st = GROUP_STYLE[sp.group] ?? GROUP_STYLE['Antelope'];
           return (
             <div key={sp.name} className={`relative rounded-2xl overflow-hidden border-2 bg-white dark:bg-slate-900 ${n > 0 ? 'border-green-600' : 'border-slate-200 dark:border-slate-700'} ${justAdded === sp.name ? 'apex-pop' : ''}`}>

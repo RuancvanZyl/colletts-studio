@@ -137,9 +137,9 @@ function QuoteEditor({ huntId, onBack }: { huntId: string; onBack: () => void })
     load();
   }
 
-  async function record(amount: number, method: string, reference: string, date: string) {
+  async function record(amount: number, method: string, reference: string, date: string, paidBy: string) {
     setBusy(true);
-    const { error } = await (supabase as any).rpc('staff_record_payment', { p_quote: quote!.id, p_amount: amount, p_method: method, p_reference: reference || null, p_received: date ? `${date}T12:00:00` : null });
+    const { error } = await (supabase as any).rpc('staff_record_payment', { p_quote: quote!.id, p_amount: amount, p_method: method, p_reference: reference || null, p_received: date ? `${date}T12:00:00` : null, p_paid_by: paidBy });
     setBusy(false);
     if (error) { toast.error(error.message); return false; }
     toast.success('Payment recorded'); setPopup(null); await load(); setPopup({ kind: 'release' });
@@ -223,7 +223,7 @@ function QuoteEditor({ huntId, onBack }: { huntId: string; onBack: () => void })
               </div>
             ))}
           </div>
-          {quote.payments.length > 0 && <ul className="text-sm text-slate-300 divide-y divide-slate-800 rounded-lg border border-slate-700">{quote.payments.map(p => <li key={p.id} className="px-3 py-2 flex justify-between gap-3"><span>{new Date(p.received_at).toLocaleDateString('en-ZA')} · {p.method ?? ''} {p.reference ? `· ${p.reference}` : ''}{p.source === 'xero' ? ' · from Xero' : ''}</span><strong>{money(p.amount, quote.currency)}</strong></li>)}</ul>}
+          {quote.payments.length > 0 && <ul className="text-sm text-slate-300 divide-y divide-slate-800 rounded-lg border border-slate-700">{quote.payments.map(p => <li key={p.id} className="px-3 py-2 flex justify-between gap-3"><span>{new Date(p.received_at).toLocaleDateString('en-ZA')} · {p.method ?? ''} {p.reference ? `· ${p.reference}` : ''}{p.source === 'xero' ? ' · from Xero' : ''}{(p as any).paid_by && (p as any).paid_by !== 'hunter' ? ` · paid by the ${(p as any).paid_by === 'outfitter' ? 'outfitter' : 'someone else'}` : ''}</span><strong>{money(p.amount, quote.currency)}</strong></li>)}</ul>}
           {status !== 'paid' && (
             <div className="grid sm:grid-cols-2 gap-3">
               {status === 'accepted' && (
@@ -265,12 +265,13 @@ function QuoteEditor({ huntId, onBack }: { huntId: string; onBack: () => void })
 
 export function PaymentPopup({ kind, who, currency, amount, stillNeeded, busy, onClose, onConfirm }: {
   kind: 'deposit' | 'full' | 'balance' | 'other'; who: string; currency: string; amount: number; stillNeeded: number; busy: boolean;
-  onClose: () => void; onConfirm: (amount: number, method: string, reference: string, date: string) => Promise<boolean>;
+  onClose: () => void; onConfirm: (amount: number, method: string, reference: string, date: string, paidBy: string) => Promise<boolean>;
 }) {
   const [amt, setAmt] = useState(amount ? String(amount) : '');
   const [method, setMethod] = useState('EFT');
   const [ref, setRef] = useState('');
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [paidBy, setPaidBy] = useState('hunter');
   const n = Number(amt) || 0;
   const title = kind === 'deposit' ? 'Deposit paid?' : kind === 'full' ? 'Fully paid?' : kind === 'balance' ? 'Balance paid?' : 'Record a payment';
   const starts = stillNeeded > 0 && n >= stillNeeded - 0.005;
@@ -286,13 +287,14 @@ export function PaymentPopup({ kind, who, currency, amount, stillNeeded, busy, o
             <div><label className={lab}>How</label><select className={field} value={method} onChange={e => setMethod(e.target.value)}>{['EFT', 'Card', 'Cash', 'PayFast', 'Xero', 'Other'].map(m => <option key={m}>{m}</option>)}</select></div>
             <div><label className={lab}>Date received</label><input type="date" className={field} value={date} max={new Date().toISOString().slice(0, 10)} onChange={e => setDate(e.target.value)} /></div>
           </div>
+          <div><label className={lab}>Who paid?</label><select className={field} value={paidBy} onChange={e => setPaidBy(e.target.value)}><option value="hunter">The hunter</option><option value="outfitter">The outfitter</option><option value="other">Someone else</option></select></div>
           <div><label className={lab}>Reference <span className="font-normal text-slate-500">(optional)</span></label><input className={field} value={ref} onChange={e => setRef(e.target.value)} placeholder="Receipt or bank reference" /></div>
         </div>
         {starts && <p className="rounded-lg bg-emerald-950/40 border border-emerald-700 text-emerald-200 p-3 text-sm">This covers what is due now, so work can start for this hunt.</p>}
         {short && <p className="rounded-lg bg-amber-950/40 border border-amber-700 text-amber-200 p-3 text-sm">This is {money(stillNeeded - n, currency)} short of what is due now. Work will not start until the rest arrives.</p>}
         <div className="flex gap-2 pt-1">
           <button className="min-h-12 px-5 rounded-xl border border-slate-500 text-slate-100 font-semibold" onClick={onClose}>Cancel</button>
-          <button className="flex-1 min-h-12 rounded-xl bg-green-600 hover:bg-green-700 text-white text-lg font-bold disabled:opacity-60 flex items-center justify-center gap-2" disabled={busy || n <= 0} onClick={() => onConfirm(n, method, ref, date)}>{busy && <Loader2 className="w-5 h-5 animate-spin" />}Yes, mark as paid</button>
+          <button className="flex-1 min-h-12 rounded-xl bg-green-600 hover:bg-green-700 text-white text-lg font-bold disabled:opacity-60 flex items-center justify-center gap-2" disabled={busy || n <= 0} onClick={() => onConfirm(n, method, ref, date, paidBy)}>{busy && <Loader2 className="w-5 h-5 animate-spin" />}Yes, mark as paid</button>
         </div>
       </DialogContent>
     </Dialog>

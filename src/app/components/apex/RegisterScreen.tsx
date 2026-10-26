@@ -67,6 +67,7 @@ export function RegisterScreen({
           full_name: fullName,
           phone: formData.phone,
           portal_type: portalType,
+          company: formData.company || undefined,
           client_type: portalType === 'hunter' ? clientType : undefined,
         },
       },
