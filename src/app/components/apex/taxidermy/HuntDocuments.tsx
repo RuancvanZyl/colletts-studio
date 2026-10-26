@@ -10,9 +10,9 @@ import { supabase } from '../../../../lib/supabase';
 import { useAuth } from '../../../../lib/auth';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
 import { OutfitterThread } from '../shared/OutfitterThread';
-import { RESPONSIBLE_LABEL, STATUS_LABEL, STATUS_TONE, uploadHuntFiles, openHuntFile, waiting } from '../../../../lib/docs';
+import { PROVINCES, RESPONSIBLE_LABEL, STATUS_LABEL, STATUS_TONE, uploadHuntFiles, openHuntFile, waiting } from '../../../../lib/docs';
 
-interface BoardRow { hunt_id: string; ref_number: string | null; client_name: string; outfitter_name: string | null; required: number; approved: number; waiting_outfitter: number; waiting_hunter: number; waiting_other: number; to_check: number; rejected: number; oldest_wait: string | null; complete: boolean }
+interface BoardRow { hunt_id: string; ref_number: string | null; client_name: string; outfitter_name: string | null; required: number; approved: number; waiting_outfitter: number; waiting_hunter: number; waiting_other: number; to_check: number; rejected: number; oldest_wait: string | null; complete: boolean; province: string | null }
 interface Req { id: string; name: string; responsible: string; status: string; needs_signature: boolean; needs_stamp: boolean; file_paths: string[]; note: string | null; requested_at: string; received_at: string | null; received_by_name: string | null; rejection_reason: string | null; checked_signed: boolean; checked_stamped: boolean }
 
 const field = 'w-full rounded-lg border border-slate-600 bg-[#0f1a24] text-slate-100 px-3 min-h-11 text-base placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0073ea]';
@@ -65,9 +65,10 @@ export function HuntDocuments({ initialHuntId }: { initialHuntId?: string }) {
               <button key={r.hunt_id} onClick={() => setOpen(r.hunt_id)} className="w-full text-left px-4 py-3 flex items-center gap-3 min-h-16 hover:bg-[#162330]">
                 <span className="flex-1 min-w-0">
                   <span className="block text-lg font-semibold text-slate-100">{r.client_name} <span className="font-mono text-xs text-slate-500">{r.ref_number}</span></span>
-                  <span className="block text-sm text-slate-400">{r.outfitter_name ? `via ${r.outfitter_name} · ` : ''}{r.approved} of {r.required} approved{r.oldest_wait && !r.complete ? ` · oldest waiting ${waiting(r.oldest_wait)}` : ''}</span>
+                  <span className="block text-sm text-slate-400">{r.outfitter_name ? `via ${r.outfitter_name} · ` : ''}{r.province ? `${r.province} · ` : ''}{r.approved} of {r.required} approved{r.oldest_wait && !r.complete ? ` · oldest waiting ${waiting(r.oldest_wait)}` : ''}</span>
                 </span>
                 <span className="flex flex-col items-end gap-1 text-xs font-semibold">
+                  {!r.province && <span className="rounded-full bg-orange-900/50 text-orange-300 px-2.5 py-0.5">Province needed</span>}
                   {r.to_check > 0 && <span className="rounded-full bg-sky-900/50 text-sky-300 px-2.5 py-0.5">{r.to_check} to check</span>}
                   {r.rejected > 0 && <span className="rounded-full bg-red-900/50 text-red-300 px-2.5 py-0.5">{r.rejected} sent back</span>}
                   {r.waiting_outfitter > 0 && <span className="rounded-full bg-amber-900/50 text-amber-300 px-2.5 py-0.5">{r.waiting_outfitter} from outfitter</span>}
@@ -85,7 +86,7 @@ export function HuntDocuments({ initialHuntId }: { initialHuntId?: string }) {
 function Checklist({ huntId, onBack }: { huntId: string; onBack: () => void }) {
   const { profile } = useAuth();
   const isManager = ['admin', 'studio_manager', 'bookkeeper'].includes(profile?.role ?? '');
-  const [info, setInfo] = useState<{ client: string; ref: string; outfitter: string | null; outfitterId: string | null } | null>(null);
+  const [info, setInfo] = useState<{ client: string; ref: string; outfitter: string | null; outfitterId: string | null; province: string | null } | null>(null);
   const [reqs, setReqs] = useState<Req[] | null>(null);
   const [review, setReview] = useState<Req | null>(null);
   const [chat, setChat] = useState<{ text: string; req: string | null } | null>(null);
@@ -95,13 +96,17 @@ function Checklist({ huntId, onBack }: { huntId: string; onBack: () => void }) {
   const [uploadFor, setUploadFor] = useState<string | null>(null);
 
   const load = async () => {
-    const { data: h } = await (supabase as any).from('client_hunts').select('ref_number, outfitter_id, clients(full_name), outfitters(name)').eq('id', huntId).single();
-    setInfo({ client: h?.clients?.full_name ?? '', ref: h?.ref_number ?? '', outfitter: h?.outfitters?.name ?? null, outfitterId: h?.outfitter_id ?? null });
+    const { data: h } = await (supabase as any).from('client_hunts').select('ref_number, outfitter_id, province, clients(full_name), outfitters(name)').eq('id', huntId).single();
+    setInfo({ client: h?.clients?.full_name ?? '', ref: h?.ref_number ?? '', outfitter: h?.outfitters?.name ?? null, outfitterId: h?.outfitter_id ?? null, province: h?.province ?? null });
     const { data } = await (supabase as any).from('hunt_requirements').select('*').eq('hunt_id', huntId).order('name');
     setReqs(data ?? []);
   };
   useEffect(() => { load(); }, [huntId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  async function setProvince(v: string) {
+    const { error } = await (supabase as any).rpc('set_hunt_province', { p_hunt: huntId, p_province: v || null });
+    if (error) toast.error(error.message); else { toast.success('Province saved. The list now matches it.'); load(); }
+  }
   async function create() { const { data, error } = await (supabase as any).rpc('generate_hunt_requirements', { p_hunt: huntId }); if (error) toast.error(error.message); else { toast.success(data ? `${data} documents added` : 'Nothing to add. Check the list under Setup.'); load(); } }
   async function upload(files: FileList | null) {
     if (!files?.length || !uploadFor) return;
@@ -128,6 +133,13 @@ function Checklist({ huntId, onBack }: { huntId: string; onBack: () => void }) {
       <input ref={fileRef} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={e => { upload(e.target.files); e.target.value = ''; }} />
       <button onClick={onBack} className="inline-flex items-center gap-1.5 text-base text-[#3AAECC] font-semibold min-h-11"><ArrowLeft className="w-4 h-4" />All hunts</button>
       <div><h1 className="text-3xl font-bold text-slate-100 leading-tight">{info.client}</h1><p className="text-slate-400">{info.ref}{info.outfitter ? ` · via ${info.outfitter}` : ' · no outfitter'}</p></div>
+      <div className={`rounded-xl border p-3 space-y-1 ${info.province ? 'border-slate-700 bg-[#111c26]' : 'border-orange-500 bg-orange-950/20'}`}>
+        <label className={lab}>Which province was the hunt in?{!info.province && ' The documents depend on it.'}</label>
+        <select className={field} value={info.province ?? ''} onChange={e => setProvince(e.target.value)}>
+          <option value="">Choose a province…</option>
+          {PROVINCES.map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
+      </div>
       <div className={`rounded-xl border p-4 text-lg font-semibold ${open === 0 && reqs.length > 0 ? 'border-emerald-600 bg-emerald-950/30 text-emerald-200' : 'border-amber-600 bg-amber-950/20 text-amber-200'}`}>
         {reqs.length === 0 ? 'No checklist on this hunt yet.' : open === 0 ? 'All documents approved. The paperwork is complete.' : `${open} document${open > 1 ? 's' : ''} still to be approved. Final dispatch is blocked until they are.`}
       </div>

@@ -25,10 +25,13 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql']) {
+for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
+const seeded = (await db.query(`SELECT name, provinces FROM document_types ORDER BY sort_order`)).rows;
+if (seeded.length === 10 && seeded[0].provinces.length === 0 && seeded.find(x => x.name === 'Hunting permit (sable)').provinces.join() === 'Free State' && seeded.find(x => x.name === 'Game farm permit').provinces.join() === 'Northern Cape') console.log('  ok  the workshop list is loaded per province'); else { console.log('  FAIL the workshop list is loaded per province'); process.exit(1); }
+await db.exec(`DELETE FROM document_types`);
 await db.exec(`GRANT USAGE ON SCHEMA public, auth, storage TO authenticated; GRANT SELECT ON storage.objects TO authenticated; GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated; GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO authenticated;`);
 
 // people
@@ -507,5 +510,28 @@ await as(ids.worker);
 ok((await fails(`SELECT public.send_outfitter_message($1, 'hello')`, [dh]))?.includes('Only managers'), 'a worker cannot message outfitters');
 await as(OUT1);
 ok((await q(`SELECT count(*)::int n FROM outfitter_messages WHERE hunt_id=$1`, [dh]))[0].n === 2, 'the outfitter sees the whole thread');
+
+console.log('\nPaperwork per province');
+await as(ids.admin);
+await db.query(`DELETE FROM document_types`);
+await db.query(`INSERT INTO document_types (name, responsible, applies_to, provinces) VALUES ('Everywhere doc','outfitter','all','{}'),('Limpopo doc','outfitter','all',ARRAY['Limpopo']),('Free State doc','outfitter','all',ARRAY['Free State'])`);
+await as(OUT1);
+const ph = (await q(`SELECT public.outfitter_register_hunt('{"name":"Prov Hunter","email":"prov@example.com","client_type":"local"}'::jsonb, NULL, '2026-10-01', '', '[{"species":"Impala"}]'::jsonb) id`))[0].id;
+ok((await q(`SELECT count(*)::int n FROM hunt_requirements WHERE hunt_id=$1`, [ph]))[0].n === 1, 'with no province yet a hunt gets only the paperwork that applies everywhere');
+ok((await fails(`SELECT public.set_hunt_province($1, 'Narnia')`, [ph]))?.includes('nine provinces'), 'only the nine provinces are accepted');
+await db.query(`SELECT public.set_hunt_province($1, 'Limpopo')`, [ph]);
+ok(JSON.stringify((await q(`SELECT name FROM hunt_requirements WHERE hunt_id=$1 ORDER BY name`, [ph])).map(r => r.name)) === JSON.stringify(['Everywhere doc', 'Limpopo doc']), 'choosing Limpopo adds the Limpopo documents');
+await as(OUT2);
+ok((await fails(`SELECT public.set_hunt_province($1, 'Gauteng')`, [ph]))?.includes('cannot change'), 'another outfitter cannot change the province');
+await as(ids.admin);
+const lim = (await q(`SELECT id FROM hunt_requirements WHERE hunt_id=$1 AND name='Limpopo doc'`, [ph]))[0].id;
+await db.query(`SELECT public.set_hunt_province($1, 'Free State')`, [ph]);
+ok(JSON.stringify((await q(`SELECT name FROM hunt_requirements WHERE hunt_id=$1 ORDER BY name`, [ph])).map(r => r.name)) === JSON.stringify(['Everywhere doc', 'Free State doc']), 'moving to the Free State swaps the untouched Limpopo document for the Free State one');
+await db.query(`SELECT public.set_hunt_province($1, 'Limpopo')`, [ph]);
+await db.query(`SELECT public.submit_requirement((SELECT id FROM hunt_requirements WHERE hunt_id=$1 AND name='Limpopo doc'), ARRAY['x/y.pdf'])`, [ph]);
+await db.query(`SELECT public.set_hunt_province($1, 'Gauteng')`, [ph]);
+ok((await q(`SELECT count(*)::int n FROM hunt_requirements WHERE hunt_id=$1 AND name='Limpopo doc'`, [ph]))[0].n === 1, 'a document that already has a file is never thrown away by a province change');
+ok((await q(`SELECT province FROM v_hunt_documents WHERE hunt_id=$1`, [ph]))[0].province === 'Gauteng', 'the board shows the province');
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

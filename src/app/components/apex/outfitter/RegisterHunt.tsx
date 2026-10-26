@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { supabase } from '../../../../lib/supabase';
 import { AnimalPicker, pickedName, type PickedAnimal } from '../shared/AnimalPicker';
 import { speciesEmoji } from '../../../../lib/pricing';
+import { PROVINCES } from '../../../../lib/docs';
 
 const field = 'w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-3 min-h-12 text-base';
 const lab = 'block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1';
@@ -17,23 +18,25 @@ const today = () => new Date().toISOString().slice(0, 10);
 export function RegisterHunt({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [hunter, setHunter] = useState({ name: '', email: '', phone: '', country: '', client_type: 'export' });
-  const [end, setEnd] = useState(today()); const [start, setStart] = useState(''); const [farm, setFarm] = useState('');
+  const [end, setEnd] = useState(today()); const [start, setStart] = useState(''); const [farm, setFarm] = useState(''); const [province, setProvince] = useState('');
   const [items, setItems] = useState<PickedAnimal[]>([]);
   const [tags, setTags] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
 
   const valid1 = hunter.name.trim().length >= 2;
-  const valid2 = !!end && end <= today();
+  const valid2 = !!end && end <= today() && !!province;
 
   async function send() {
     setBusy(true);
-    const { error } = await (supabase as any).rpc('outfitter_register_hunt', {
+    const { data: huntId, error } = await (supabase as any).rpc('outfitter_register_hunt', {
       p_hunter: hunter, p_start: start || null, p_end: end, p_farm: farm || null,
       p_animals: items.map(it => ({ species: pickedName(it), tag: tags[it.id] ?? '' })),
     });
     setBusy(false);
     if (error) { toast.error(error.message); return; }
+    const pe = (await (supabase as any).rpc('set_hunt_province', { p_hunt: huntId, p_province: province })).error;
+    if (pe) toast.error('The hunt is registered, but the province was not saved: ' + pe.message);
     setDone(true); onDone();
   }
 
@@ -71,10 +74,13 @@ export function RegisterHunt({ onClose, onDone }: { onClose: () => void; onDone:
       {step === 2 && (
         <div className="space-y-3">
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">The hunt</h1>
+          <div><label className={lab}>Which province was the hunt in? *</label>
+            <select className={field} value={province} onChange={e => setProvince(e.target.value)}><option value="">Choose a province…</option>{PROVINCES.map(p => <option key={p} value={p}>{p}</option>)}</select>
+            <p className="text-xs text-slate-500 mt-1">The permits and papers needed depend on the province.</p></div>
           <div><label className={lab}>When did the hunt end? *</label><input type="date" className={field} value={end} max={today()} onChange={e => setEnd(e.target.value)} /></div>
           <div><label className={lab}>When did it start? <span className="font-normal text-slate-400">(optional)</span></label><input type="date" className={field} value={start} max={end || today()} onChange={e => setStart(e.target.value)} /></div>
           <div><label className={lab}>Farm or area <span className="font-normal text-slate-400">(optional)</span></label><input className={field} value={farm} onChange={e => setFarm(e.target.value)} /></div>
-          {!valid2 && <p className="text-sm text-amber-700 dark:text-amber-400">Register the animals once the hunt has ended.</p>}
+          {!valid2 && <p className="text-sm text-amber-700 dark:text-amber-400">Choose the province and the end date. Register the animals once the hunt has ended.</p>}
         </div>
       )}
       {step === 3 && (

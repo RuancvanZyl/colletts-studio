@@ -5,6 +5,8 @@ import { shrinkPhoto } from './offline/photos';
 export type DocStatus = 'awaiting' | 'received' | 'approved' | 'rejected' | 'not_needed';
 export type Responsible = 'outfitter' | 'hunter' | 'workshop' | 'authority';
 
+export const PROVINCES = ['Limpopo', 'Mpumalanga', 'Free State', 'North West', 'KwaZulu-Natal', 'Northern Cape', 'Eastern Cape', 'Western Cape', 'Gauteng'];
+
 export const RESPONSIBLE_LABEL: Record<string, string> = { outfitter: 'The outfitter', hunter: 'The hunter', workshop: 'The workshop', authority: 'The authorities' };
 export const STATUS_LABEL: Record<string, string> = { awaiting: 'Not received yet', received: 'Received, to be checked', approved: 'Approved', rejected: 'Sent back to be corrected', not_needed: 'Not needed' };
 export const STATUS_TONE: Record<string, string> = { awaiting: 'bg-amber-100 text-amber-900', received: 'bg-sky-100 text-sky-900', approved: 'bg-green-100 text-green-900', rejected: 'bg-red-100 text-red-900', not_needed: 'bg-slate-100 text-slate-700' };

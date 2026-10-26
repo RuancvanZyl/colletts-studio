@@ -44,3 +44,9 @@
 - Outfitter portal: Documents (upload per document, see rejections) and Messages (one thread per hunter, `outfitter_messages`). Staff side: Messages → Outfitters and a chat on each hunt's Documents page. This is the only chat besides the existing team/hunter ones; hunter-to-outfitter chat is deliberately not built.
 - Files go to the private `hunt-documents` bucket (folder = hunt id), opened via signed links.
 - Run supabase/launch/release_051_documents_chat.sql after 050.
+
+## 2026-10-26 — Documents per province (migration 052)
+- The workshop's list is province-based. Each hunt has a `province` (outfitter picks it when registering; staff set it on Hunters → Documents → the hunt; hunters' own pre-registered hunts need staff to set it). Each document type has `provinces` (empty = every province). Changing a hunt's province swaps its untouched documents (never one that already has a file); a hunt with no province gets only the all-province documents and shows "Province needed" on the board.
+- Loaded per the workshop's list: PH Register (all), Hunting rights / permission to hunt (LP, FS, KZN, NC), Hunting permit TOPS/CITES (LP, MP, FS, NW, KZN, EC, WC, GP), Sable permit (FS), Alien invasive species permit Barbary sheep (LP), P3 exemption (LP, NW, KZN), PH / HO licences (LP, NW, KZN, NC), Hunting licence (FS), Certificate of adequate fencing (FS), Game farm permit (NC). All outfitter-supplied, signed + stamped by default (adjust in Setup → Required documents).
+- Open questions for the workshop: Northern Cape had a heading that read "VERIFICATION"; species-specific permits (sable, Barbary sheep) are listed for the whole province and marked "Not needed" per hunt when they do not apply; export documents (CITES export, vet certificate, dip and pack, invoices) were not in the list.
+- Run supabase/launch/release_052_document_provinces.sql after 051.
