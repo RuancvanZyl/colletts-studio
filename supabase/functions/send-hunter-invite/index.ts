@@ -39,6 +39,11 @@ Deno.serve(async (req) => {
 <p>${arrived ? 'Open your profile to see what we received and choose how you would like each animal mounted.'
  : 'Please create your profile, check what we received, and choose how you would like each animal mounted. Once you have chosen, we start work — and you can follow every stage, with photos, from your phone.'}</p>
 <p style="text-align:center;margin:28px 0"><a href="${esc(url)}" style="background:#3AAECC;color:#080C0C;text-decoration:none;font-weight:700;padding:14px 30px;border-radius:8px;display:inline-block">${arrived ? 'CHOOSE MY MOUNTS' : 'CREATE MY PROFILE'}</a></p>
+<table width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 18px"><tr><td style="background:#eef7fa;border:1px solid #b6e0ec;border-radius:10px;padding:14px 16px;font-size:14px;line-height:1.6;color:#2d3748">
+<strong>Keep the app on your phone</strong><br>
+<strong>iPhone:</strong> open the button above in Safari, tap the Share button, then <em>Add to Home Screen</em>.<br>
+<strong>Android:</strong> open it in Chrome, tap the menu (three dots), then <em>Install app</em>.<br>
+After installing, open the app from your home screen and sign in with the same e-mail and password.</td></tr></table>
 <p style="font-size:13px;color:#718096">If the button does not work, copy this link into your browser:<br>${esc(url)}</p>
 <p>Kind regards,<br><strong>${esc(shop)}</strong></p></td></tr></table></td></tr></table></body></html>`;
 

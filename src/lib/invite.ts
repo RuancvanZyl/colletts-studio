@@ -19,8 +19,8 @@ export function inviteText(t: InviteTarget, url: string): string {
   const first = t.name.split(' ')[0] || 'there';
   const list = t.animals.map(a => `• ${a.species}${a.parts.length ? ` — ${listParts(a.parts, a.other)}` : ''}`).join('\n');
   return t.registered
-    ? `Hi ${first}, your trophies have arrived at ${WORKSHOP.name}:\n${list}\n\nOpen your profile to see what we received and choose your mounts:\n${url}`
-    : `Hi ${first}, thank you for choosing ${WORKSHOP.name}. We have received:\n${list}\n\nPlease create your profile and choose how you would like each animal mounted:\n${url}`;
+    ? `Hi ${first}, your trophies have arrived at ${WORKSHOP.name}:\n${list}\n\nOpen your profile to see what we received and choose your mounts:\n${url}\n\nTip: once you are in, install the app on your phone. iPhone: open the link in Safari, tap Share, then Add to Home Screen. Android: tap the menu (three dots), then Install app.`
+    : `Hi ${first}, thank you for choosing ${WORKSHOP.name}. We have received:\n${list}\n\nPlease create your profile and choose how you would like each animal mounted:\n${url}\n\nTip: once you are in, install the app on your phone. iPhone: open the link in Safari, tap Share, then Add to Home Screen. Android: tap the menu (three dots), then Install app.`;
 }
 
 /** South-African style numbers (082 123 4567) → international digits for wa.me */

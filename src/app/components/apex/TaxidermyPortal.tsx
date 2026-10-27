@@ -47,6 +47,7 @@ import { HuntDocuments } from './taxidermy/HuntDocuments';
 import { DocumentTypesEditor } from './taxidermy/DocumentTypesEditor';
 import { OutfitterInbox } from './taxidermy/OutfitterInbox';
 import { PermitNumbers } from './taxidermy/PermitNumbers';
+import { InstallBanner } from './shared/InstallApp';
 import { Quotes } from './taxidermy/Quotes';
 import { Outfitters } from './taxidermy/Outfitters';
 import { PaymentsLedger } from './taxidermy/PaymentsLedger';
@@ -577,6 +578,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
         {/* Page content */}
         <main className="flex-1 min-w-0 p-4 md:p-6 pb-28 lg:pb-6 overflow-x-auto bg-[#080C0C]">
           <OfflineBanner />
+          <InstallBanner />
           {activeSection && (
             <>
               <SectionTabs tabs={activeSection.tabs} active={activeTab} onSelect={navigate} />

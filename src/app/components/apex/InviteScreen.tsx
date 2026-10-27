@@ -8,6 +8,7 @@ import { Loader2, CheckCircle2, Trophy as TrophyIcon, AlertCircle } from 'lucide
 import { supabase, clearInviteToken } from '../../../lib/supabase';
 import { WORKSHOP } from '../../../lib/workshop';
 import { PART_LABEL } from '../../../lib/received';
+import { InstallCard } from './shared/InstallApp';
 
 interface Info { first_name: string; full_name: string; email: string | null; phone: string | null; client_type: string; registered: boolean; animals: { species: string; parts: { code: string; label?: string }[]; received_at: string }[] }
 
@@ -108,6 +109,7 @@ export function InviteScreen({ token, onDone, onSignIn, onAccountCreated }: { to
       <CheckCircle2 className="w-10 h-10 text-green-600" />
       <h1 className="text-xl font-bold text-slate-900">Check your e-mail</h1>
       <p className="text-sm text-slate-600">We sent a confirmation link to <strong>{email}</strong>. Open it, then sign in to see your trophies.</p>
+      <InstallCard />
       <button className={primary} onClick={onSignIn}>Go to sign in</button>
     </>);
   }
@@ -121,6 +123,7 @@ export function InviteScreen({ token, onDone, onSignIn, onAccountCreated }: { to
         <div><label className={label}>Country</label><input className={field} value={country} onChange={e => setCountry(e.target.value)} placeholder="USA" /></div>
         <div><label className={label}>Delivery address <span className="font-normal text-slate-400">(you can add this later)</span></label>
           <textarea className={`${field} py-2`} rows={3} value={address} onChange={e => setAddress(e.target.value)} /></div>
+        <InstallCard />
         <button className={primary} disabled={busy}>{busy && <Loader2 className="w-5 h-5 animate-spin" />}Show me my trophies</button>
         <button type="button" className="w-full text-sm text-slate-500 min-h-11" onClick={() => { clearInviteToken(); onDone(); }}>Skip for now</button>
       </form>

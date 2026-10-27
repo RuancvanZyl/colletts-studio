@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Compass, Loader2, AlertCircle } from 'lucide-react';
 import { supabase, clearInviteToken } from '../../../lib/supabase';
 import { WORKSHOP } from '../../../lib/workshop';
+import { InstallCard } from './shared/InstallApp';
 
 const field = 'w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 min-h-12 text-base placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-green-600';
 const primary = 'w-full rounded-xl bg-green-700 hover:bg-green-800 text-white font-bold min-h-12 text-base disabled:opacity-50 flex items-center justify-center gap-2';
@@ -10,7 +11,7 @@ const primary = 'w-full rounded-xl bg-green-700 hover:bg-green-800 text-white fo
 export function OutfitterInviteScreen({ token, onDone, onSignIn }: { token: string; onDone: () => void; onSignIn: () => void }) {
   const [info, setInfo] = useState<{ name: string; contact_name: string | null; email: string | null; registered: boolean } | null | undefined>(undefined);
   const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [phone, setPhone] = useState('');
-  const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null); const [checkMail, setCheckMail] = useState(false);
+  const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null); const [checkMail, setCheckMail] = useState(false); const [created, setCreated] = useState(false);
 
   useEffect(() => { (async () => {
     const { data } = await (supabase as any).rpc('get_outfitter_invite_info', { p_token: token });
@@ -28,7 +29,7 @@ export function OutfitterInviteScreen({ token, onDone, onSignIn }: { token: stri
     setBusy(false);
     if (err) { setError(/already/i.test(err.message) ? 'There is already an account with this e-mail address. Sign in instead.' : err.message); return; }
     if (!data.session) { setCheckMail(true); return; }
-    clearInviteToken(); onDone();
+    setCreated(true);
   }
 
   const shell = (c: React.ReactNode) => (
@@ -42,8 +43,9 @@ export function OutfitterInviteScreen({ token, onDone, onSignIn }: { token: stri
 
   if (info === undefined) return shell(<div className="flex justify-center py-10 text-slate-500"><Loader2 className="w-6 h-6 animate-spin" /></div>);
   if (info === null) return shell(<><div className="flex items-start gap-3"><AlertCircle className="w-6 h-6 text-amber-500 shrink-0" /><div><h1 className="text-lg font-bold text-slate-900">This link is not valid</h1><p className="text-sm text-slate-600 mt-1">Please ask {WORKSHOP.name} to send your link again.</p></div></div><button className={primary} onClick={onSignIn}>I already have an account</button></>);
+  if (created) return shell(<><div><h1 className="text-xl font-bold text-slate-900">You are in</h1><p className="text-sm text-slate-600 mt-1">Your outfitter account is ready.</p></div><InstallCard /><button className={primary} onClick={() => { clearInviteToken(); onDone(); }}>Continue to my account</button></>);
   if (info.registered) return shell(<><h1 className="text-xl font-bold text-slate-900">Welcome back, {info.name}</h1><p className="text-sm text-slate-600">You already have an account. Sign in to register hunts and follow your hunters.</p><button className={primary} onClick={onSignIn}>Sign in</button></>);
-  if (checkMail) return shell(<><h1 className="text-xl font-bold text-slate-900">Check your e-mail</h1><p className="text-sm text-slate-600">We sent a confirmation link to <strong>{email}</strong>. Open it, then sign in.</p><button className={primary} onClick={onSignIn}>Go to sign in</button></>);
+  if (checkMail) return shell(<><h1 className="text-xl font-bold text-slate-900">Check your e-mail</h1><p className="text-sm text-slate-600">We sent a confirmation link to <strong>{email}</strong>. Open it, then sign in.</p><InstallCard /><button className={primary} onClick={onSignIn}>Go to sign in</button></>);
 
   return shell(<>
     <div><h1 className="text-xl font-bold text-slate-900">Welcome, {info.name}</h1><p className="text-sm text-slate-600 mt-1">Create your outfitter account to register your hunters and their animals with {WORKSHOP.name}, and follow every trophy.</p></div>

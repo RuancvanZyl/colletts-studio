@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { InstallBanner } from './shared/InstallApp';
 import { LocalTrophyTracking } from './hunter/LocalTrophyTracking';
 import { Notifications } from './hunter/Notifications';
 import { HunterProfile } from './hunter/HunterProfile';
@@ -66,6 +67,7 @@ export function LocalHunterPortal({ onLogout }: LocalHunterPortalProps) {
 
       {/* Content */}
       <main className="md:ml-56 px-4 py-6 pb-24 md:pb-6 min-w-0 overflow-x-hidden">
+        <InstallBanner />
         {renderView()}
       </main>
 

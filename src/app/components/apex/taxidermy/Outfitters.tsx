@@ -85,7 +85,7 @@ function Detail({ id, outfitter, huntIds, onBack, onOpenQuote }: { id: string; o
   }
 
   const link = rec?.invite_token ? inviteUrl('o_' + rec.invite_token) : null;
-  const text = link ? `Hi ${(rec?.contact_name ?? rec?.name ?? '').split(' ')[0]}, ${WORKSHOP.name} has set you up on our outfitter portal. Register your hunters and their animals, and follow every trophy:\n${link}` : '';
+  const text = link ? `Hi ${(rec?.contact_name ?? rec?.name ?? '').split(' ')[0]}, ${WORKSHOP.name} has set you up on our outfitter portal. Register your hunters and their animals, and follow every trophy:\n${link}\n\nTip: once you are in, install the app on your phone. iPhone: open the link in Safari, tap Share, then Add to Home Screen. Android: tap the menu (three dots), then Install app.` : '';
   async function sent(ch: string) { if (rec) await (supabase as any).from('outfitters').update({ invite_sent_at: new Date().toISOString() }).eq('id', rec.id); toast.success(ch); }
 
   return (

@@ -10,6 +10,7 @@ import { RegisterHunt } from './outfitter/RegisterHunt';
 import { OutfitterDocuments } from './outfitter/OutfitterDocuments';
 import { OutfitterMessages } from './outfitter/OutfitterMessages';
 import { MyPermitNumbers } from './outfitter/MyPermitNumbers';
+import { InstallBanner } from './shared/InstallApp';
 import { useOutfitter } from '../../../lib/hooks/useOutfitter';
 import { useTheme } from './ThemeProvider';
 import { usePortalTheme } from './PortalThemeProvider';
@@ -65,7 +66,7 @@ export function OutfitterPortal({ onLogout }: OutfitterPortalProps) {
         </div>
       </header>
 
-      <main className="md:ml-64 px-4 py-6 pb-28 md:pb-6 min-w-0 overflow-x-hidden">{body()}</main>
+      <main className="md:ml-64 px-4 py-6 pb-28 md:pb-6 min-w-0 overflow-x-hidden"><InstallBanner />{body()}</main>
 
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-stone-900/90 backdrop-blur-lg border-t border-green-200 dark:border-green-900 z-50">
         <div className="grid grid-cols-5 gap-1 p-2">
