@@ -48,6 +48,8 @@ import { DocumentTypesEditor } from './taxidermy/DocumentTypesEditor';
 import { OutfitterInbox } from './taxidermy/OutfitterInbox';
 import { PermitNumbers } from './taxidermy/PermitNumbers';
 import { InstallBanner } from './shared/InstallApp';
+import { DepartmentProgress } from './taxidermy/DepartmentProgress';
+import { ProgressCheck } from './taxidermy/ProgressCheck';
 import { Quotes } from './taxidermy/Quotes';
 import { Outfitters } from './taxidermy/Outfitters';
 import { PaymentsLedger } from './taxidermy/PaymentsLedger';
@@ -116,7 +118,9 @@ type TaxidermyView =
   | 'documents'
   | 'outfitter-chat'
   | 'document-types'
-  | 'permit-numbers';
+  | 'permit-numbers'
+  | 'dept-progress'
+  | 'progress-check';
 
 interface NavItem {
   view: TaxidermyView;
@@ -317,6 +321,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     if (view === 'stations') return STATIONS.some(st => canSeeView(st.view as TaxidermyView));
     // department managers also handle client conversations
     if (isManager && view === 'client-inbox') return true;
+    if (isManager && view === 'dept-progress') return true;
     if (isBookkeeper) {
       return ['summary', 'whiteboard', 'dashboard', 'client-inbox', 'payment-confirmation', 'invoices', 'inventory', 'clients', 'hunt-archive', 'client-care', 'deadline-watch', 'awaiting-instruction', 'status-board', 'quotes', 'documents', 'outfitter-chat'].includes(view);
     }
@@ -356,7 +361,8 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       { view: 'stations',       label: 'Stations' },
       { view: 'dispatch',       label: 'Assign work' },
       { view: 'inventory',      label: 'Job tracker' },
-      { view: 'staff-overview', label: 'Who does what' },
+      { view: 'dept-progress',  label: 'Departments' },
+      { view: 'progress-check', label: 'Progress check' },
     ] },
     { key: 'shipping', label: 'Shipping', icon: Package, tabs: [
       { view: 'packing',       label: 'Packing' },
@@ -409,6 +415,8 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'document-types':  return <DocumentTypesEditor />;
       case 'permit-numbers':  return <PermitNumbers />;
       case 'outfitter-chat':  return <OutfitterInbox key={navClientId ?? 'all'} initialHuntId={navClientId} onOpenDocs={(id) => navigate('documents', id)} />;
+      case 'dept-progress':   return <DepartmentProgress onNavigate={navigate} />;
+      case 'progress-check':  return <ProgressCheck key={navClientId ?? 'all'} initialHuntId={navClientId} onNavigate={navigate} />;
       case 'quotes':          return <Quotes key={navClientId ?? 'all'} initialHuntId={navClientId} />;
       case 'stations':        return <StationsHome stations={STATIONS.filter(st => canSeeView(st.view as TaxidermyView))} onOpen={navigate} />;
       case 'status-board':    return <ClientStatusBoard onNavigate={navigate} />;

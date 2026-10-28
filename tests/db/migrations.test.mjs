@@ -25,7 +25,7 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql']) {
+for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
@@ -631,6 +631,22 @@ await db.query(`SELECT public.staff_save_ai_reading($1, '{"flags":["The stamp is
 ok((await fnd()).some(x => x.key.startsWith('ai:') && x.level === 'warn' && x.message.includes('stamp is very faint')), 'what the AI reader noticed shows up as a note');
 await as(ids.worker);
 ok((await fails(`SELECT public.staff_save_ai_reading($1, '{}'::jsonb)`, [reqId]))?.includes('Only managers'), 'a worker cannot save an AI reading');
+
+console.log('\nManagement progress check');
+await as(ids.worker);
+ok((await fails(`SELECT public.staff_review_progress($1, 'on_track')`, [rh]))?.includes('Only management'), 'a worker cannot mark progress');
+await as(ids.mgr);
+ok((await fails(`SELECT public.staff_review_progress($1, 'on_track')`, [rh]))?.includes('Only management'), 'a department manager cannot either: it is management only');
+await as(ids.admin);
+ok((await fails(`SELECT public.staff_review_progress($1, 'behind')`, [rh]))?.includes('holding it up'), 'marking a client Behind needs a reason');
+ok((await fails(`SELECT public.staff_review_progress($1, 'maybe')`, [rh]))?.includes('On track or Behind'), 'only On track or Behind are allowed');
+await db.query(`SELECT public.staff_review_progress($1, 'on_track')`, [rh]);
+await db.query(`SELECT public.staff_review_progress($1, 'behind', 'Tannery has not returned the skins', 'tannery')`, [rh]);
+const lastR = (await q(`SELECT status, note, held_up_in, reviewed_by_name FROM v_last_progress_review WHERE hunt_id=$1`, [rh]))[0];
+ok(lastR.status === 'behind' && lastR.held_up_in === 'tannery' && lastR.reviewed_by_name === 'Ann Admin', 'the latest check is shown with who made it and where it is held up');
+ok((await q(`SELECT count(*)::int n FROM hunt_progress_reviews WHERE hunt_id=$1`, [rh]))[0].n === 2, 'every check is kept, not overwritten');
+await as(OUT1);
+ok((await q(`SELECT count(*)::int n FROM hunt_progress_reviews`))[0].n === 0, 'outfitters cannot see management checks');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
