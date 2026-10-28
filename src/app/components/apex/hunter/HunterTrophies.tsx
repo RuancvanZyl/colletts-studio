@@ -9,6 +9,7 @@ import { getPipeline, DEPT_LABELS } from '../../../../lib/pipeline';
 import { speciesEmoji } from '../../../../lib/pricing';
 import { sciName } from '../../../../lib/species';
 import { WORKSHOP } from '../../../../lib/workshop';
+import { conditionSummary } from '../../../../lib/condition';
 import { printDropOffPapers } from '../../../../lib/print';
 import { PhotoGallery } from '../shared/TrophyPhotos';
 import { ChooseMounts } from './ChooseMounts';
@@ -92,7 +93,7 @@ export function HunterTrophies({ onRegisterHunt, onChanged, startAdding = false 
               onClick={() => printDropOffPapers({
                 clientName: client.name, huntRef: h.rows[0].huntRef, workshop: WORKSHOP, inviteLink: null,
                 receivedAt: h.rows.find(r => r.receivedAt)?.receivedAt ?? undefined,
-                animals: h.rows.map(r => ({ species: r.species, tag: r.tag, condition: r.condition, parts: r.parts.map(p => p.code), other: r.other, notes: '' })),
+                animals: h.rows.map(r => ({ species: r.species, tag: r.tag, condition: conditionSummary(r.conditionReport, r.condition), parts: r.parts.map(p => p.code), other: r.other, notes: '' })),
               }, { sheet: true })}>
               <Printer className="w-4 h-4" />Receiving sheet
             </button>
@@ -110,6 +111,7 @@ export function HunterTrophies({ onRegisterHunt, onChanged, startAdding = false 
                       {a.parts.map(p => <span key={p.code} className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300">✓ {p.code === 'OTHER' && a.other ? `Other: ${a.other}` : p.label}</span>)}
                       {a.expected && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300">Not received yet</span>}
                       {!a.expected && a.parts.length === 0 && <span className="text-xs text-slate-400">Parts list not recorded</span>}
+                      {!a.expected && (a.conditionReport || a.condition) && <p className="basis-full text-xs text-slate-600 dark:text-slate-300 mt-1"><strong>When we received it:</strong> {conditionSummary(a.conditionReport, a.condition)}</p>}
                     </span>
                     <span className={`flex items-center gap-1.5 text-sm font-semibold ${st.tone === 'todo' ? 'text-amber-600' : st.tone === 'done' ? 'text-green-700 dark:text-green-400' : 'text-slate-700 dark:text-slate-200'}`}>
                       {st.tone === 'done' && <CheckCircle2 className="w-4 h-4" />}{a.mountChosen ? `${a.mount} · ` : ''}{st.text}

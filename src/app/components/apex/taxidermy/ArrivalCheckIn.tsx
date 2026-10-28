@@ -20,12 +20,13 @@ import { InvitePanel } from '../shared/InvitePanel';
 import { SpeciesField } from '../shared/AnimalPicker';
 import { TrophyLabels } from './TrophyLabels';
 import type { TrophyPart } from '../../../../lib/trophyParts';
+import { CONDITION_ISSUES, VISUAL_CHECKS, conditionOk, conditionSummary } from '../../../../lib/condition';
 
 interface FoundClient { id: string; full_name: string; email: string | null; phone: string | null; client_number: string | null; client_type: string | null; auth_user_id: string | null }
-interface Animal { id: string; docId?: string; mount?: string; species: string; tag: string; condition: string; parts: string[]; other: string; notes: string; photos: File[]; previews: string[] }
+interface Animal { id: string; docId?: string; mount?: string; species: string; tag: string; condition: string; noIssues: boolean; issues: string[]; parts: string[]; other: string; notes: string; photos: File[]; previews: string[] }
 interface OpenHunt { id: string; ref_number: string | null; year: string; status: string | null }
 
-const emptyAnimal = (): Animal => ({ id: crypto.randomUUID(), species: '', tag: '', condition: 'fresh', parts: [], other: '', notes: '', photos: [], previews: [] });
+const emptyAnimal = (): Animal => ({ id: crypto.randomUUID(), species: '', tag: '', condition: '', noIssues: false, issues: [], parts: [], other: '', notes: '', photos: [], previews: [] });
 
 const field = 'w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-3 min-h-11 text-base placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0073ea]';
 const label = 'block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1';
@@ -113,7 +114,7 @@ export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
   const clientType = client?.client_type ?? fresh.client_type;
   const who = client ? client.full_name : fresh.full_name.trim();
   const whoOk = client ? true : fresh.full_name.trim().length >= 2;
-  const animalsOk = animals.length > 0 && animals.every(a => a.species.trim() && a.parts.length > 0 && (!a.parts.includes('OTHER') || a.other.trim()));
+  const animalsOk = animals.length > 0 && animals.every(a => a.species.trim() && a.parts.length > 0 && (!a.parts.includes('OTHER') || a.other.trim()) && conditionOk(a));
 
   const arrived = (e: { docId: string; species: string; mount: string; tag: string }) => {
     setAnimals(prev => [...prev.filter(a => a.species || a.parts.length), { ...emptyAnimal(), docId: e.docId, species: e.species, mount: e.mount, tag: e.tag }]);
@@ -169,6 +170,7 @@ export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
           received_parts: a.parts.map(code => ({ code, label: RECEIVED_PARTS.find(p => p.code === code)?.label ?? code })),
           received_other: a.other.trim(), received_at: receivedAt, received_by: profile?.full_name ?? '',
           tag_number: a.tag.trim(), condition: a.condition, notes: a.notes.trim(),
+          condition_report: { state: a.condition, none: a.noIssues && a.issues.length === 0, issues: a.issues, notes: a.notes.trim(), recorded_by: profile?.full_name ?? '', recorded_at: receivedAt },
         };
         let docId: string; let docHunt = huntId;
         if (a.docId) {
@@ -215,7 +217,7 @@ export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
   const dropOff = (r: NonNullable<typeof result>): DropOffPrint => ({
     clientName: r.name, clientNumber: r.number, huntRef: r.huntRef, receivedBy: profile?.full_name ?? '', workshop: WORKSHOP,
     inviteLink: r.registered ? null : r.link,
-    animals: r.animals.map(a => ({ species: a.species, tag: a.tag, condition: CONDITIONS.find(c => c.value === a.condition)?.label ?? a.condition, parts: a.parts, other: a.other, notes: a.notes })),
+    animals: r.animals.map(a => ({ species: a.species, tag: a.tag, condition: conditionSummary({ state: a.condition, none: a.noIssues, issues: a.issues }), parts: a.parts, other: a.other, notes: a.notes })),
   });
 
   // ── done ───────────────────────────────────────────────────────────────────
@@ -395,13 +397,26 @@ export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
                   {a.parts.includes('OTHER') && <input className={`${field} mt-2`} placeholder="What else came in? (e.g. hide, antlers, bones)" value={a.other} onChange={e => patch(a.id, { other: e.target.value })} />}
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div><label className={label}>Tag / number (if any)</label><input className={field} value={a.tag} onChange={e => patch(a.id, { tag: e.target.value })} /></div>
-                  <div><label className={label}>Condition</label>
-                    <select className={field} value={a.condition} onChange={e => patch(a.id, { condition: e.target.value })}>{CONDITIONS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}</select>
+                <div><label className={label}>Tag / number (if any)</label><input className={field} value={a.tag} onChange={e => patch(a.id, { tag: e.target.value })} /></div>
+
+                <div className="rounded-xl border-2 border-slate-300 dark:border-slate-600 p-3 space-y-3">
+                  <p className="font-bold text-slate-900 dark:text-slate-100">Condition report</p>
+                  <div>
+                    <label className={label}>Visual check *</label>
+                    <div className="flex flex-wrap gap-2">
+                      {VISUAL_CHECKS.map(v => <button key={v.value} type="button" aria-pressed={a.condition === v.value} onClick={() => patch(a.id, { condition: v.value })} className={`min-h-11 px-3 rounded-lg border-2 text-sm font-semibold ${a.condition === v.value ? 'border-green-600 bg-green-600 text-white' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}>{v.label}</button>)}
+                    </div>
                   </div>
+                  <div>
+                    <label className={label}>Anything wrong? Tick what you see *</label>
+                    <button type="button" aria-pressed={a.noIssues && a.issues.length === 0} onClick={() => patch(a.id, { noIssues: !a.noIssues, issues: [] })} className={`w-full min-h-12 rounded-lg border-2 text-base font-semibold mb-2 ${a.noIssues && a.issues.length === 0 ? 'border-green-600 bg-green-600 text-white' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}>{a.noIssues && a.issues.length === 0 ? '✓ ' : ''}No problems seen</button>
+                    <div className="flex flex-wrap gap-2">
+                      {CONDITION_ISSUES.map(i => { const on = a.issues.includes(i.value); return <button key={i.value} type="button" aria-pressed={on} onClick={() => patch(a.id, { noIssues: false, issues: on ? a.issues.filter(x => x !== i.value) : [...a.issues, i.value] })} className={`min-h-11 px-3 rounded-lg border-2 text-sm font-semibold ${on ? 'border-amber-500 bg-amber-500 text-white' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}>{on ? '✓ ' : ''}{i.label}</button>; })}
+                    </div>
+                    {a.issues.length > 0 && a.photos.length === 0 && <p className="text-sm font-semibold text-amber-700 dark:text-amber-400 mt-2">Add a photo of what you see. It is needed as evidence.</p>}
+                  </div>
+                  <div><label className={label}>Notes {a.issues.length > 0 ? '(describe it)' : '(optional)'}</label><input className={field} value={a.notes} onChange={e => patch(a.id, { notes: e.target.value })} /></div>
                 </div>
-                <div><label className={label}>Notes (damage, missing, special)</label><input className={field} value={a.notes} onChange={e => patch(a.id, { notes: e.target.value })} /></div>
 
                 <div className="flex items-center gap-2 flex-wrap">
                   {a.previews.map((src, i) => (
@@ -432,7 +447,7 @@ export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
             {animals.map((a, i) => (
               <div key={a.id} className="px-4 py-3 text-sm">
                 <p className="font-semibold text-slate-900 dark:text-slate-100">{i + 1}. {speciesEmoji(a.species)} {a.species}{a.tag ? <span className="text-slate-400 font-normal"> · {a.tag}</span> : null}</p>
-                <p className="text-slate-600 dark:text-slate-300">{listParts(a.parts, a.other)} · {CONDITIONS.find(c => c.value === a.condition)?.label}{a.photos.length ? ` · ${a.photos.length} photo${a.photos.length > 1 ? 's' : ''}` : ''}</p>
+                <p className="text-slate-600 dark:text-slate-300">{listParts(a.parts, a.other)} · {conditionSummary({ state: a.condition, none: a.noIssues, issues: a.issues })}{a.photos.length ? ` · ${a.photos.length} photo${a.photos.length > 1 ? 's' : ''}` : ''}</p>
               </div>
             ))}
           </div>
@@ -445,7 +460,7 @@ export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
         <div className="max-w-xl mx-auto flex gap-2">
           {step > 1 && <button className={`${bigBtn} border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100`} onClick={() => setStep((step - 1) as 1 | 2)}><ArrowLeft className="w-5 h-5" />Back</button>}
           {step === 1 && <button className={`${bigBtn} flex-1 bg-[#0073ea] text-white`} disabled={!whoOk || (mode === 'new' && !client && fresh.full_name.trim().length < 2)} onClick={() => setStep(2)}>Next: what came in<ArrowRight className="w-5 h-5" /></button>}
-          {step === 2 && <button className={`${bigBtn} flex-1 bg-[#0073ea] text-white`} disabled={!animalsOk} onClick={() => setStep(3)}>{animalsOk ? 'Next: check it' : 'Pick a species and tick the parts'}<ArrowRight className="w-5 h-5" /></button>}
+          {step === 2 && <button className={`${bigBtn} flex-1 bg-[#0073ea] text-white`} disabled={!animalsOk} onClick={() => setStep(3)}>{animalsOk ? 'Next: check it' : 'Species, parts and condition report'}<ArrowRight className="w-5 h-5" /></button>}
           {step === 3 && <button className={`${bigBtn} flex-1 bg-green-600 text-white`} disabled={saving} onClick={save}>{saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}Save check-in</button>}
         </div>
       </div>

@@ -5,6 +5,7 @@
  * ends up on the paper) and uses only data already on screen or in the saved copy, so it also works
  * with the internet off.
  */
+import { conditionSummary } from './condition';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QRCodeSVG } from 'qrcode.react';
@@ -159,7 +160,7 @@ async function hydrate(rows: any[]): Promise<{ jobs: PrintJob[]; items: { id: st
       huntRef: h.ref_number ?? '', huntYear: String(h.year ?? ''), operator: h.operator ?? '', country: h.country ?? '',
       species: fd.species ?? d.title ?? '', mount: fd.mount_type ?? '', quantity: fd.quantity ?? 1, tag: fd.tag_number ?? '',
       instructions: fd.instructions ?? '', special: special[d.hunt_id] ?? [],
-      received: (fd.received_parts ?? []).length ? listParts((fd.received_parts ?? []).map((p: any) => p.code), fd.received_other) : '', condition: fd.condition ?? '',
+      received: (fd.received_parts ?? []).length ? listParts((fd.received_parts ?? []).map((p: any) => p.code), fd.received_other) : '', condition: conditionSummary(fd.condition_report, fd.condition),
       dept: d.current_department ?? 'receiving', status: d.status ?? '', priority: d.priority ?? 3,
       dueDate: d.due_date ?? null, priorityNote: d.priority_note ?? '', assignedTo: d.assigned_to ? (staff[d.assigned_to] ?? '') : '',
       stageHistory: fd.stage_history ?? [],

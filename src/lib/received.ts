@@ -34,6 +34,7 @@ export const CONDITIONS: { value: string; label: string }[] = [
   { value: 'fresh',      label: 'Fresh' },
   { value: 'frozen',     label: 'Frozen' },
   { value: 'salted',     label: 'Salted' },
+  { value: 'dry_salted', label: 'Dry salted' },
   { value: 'wet_salted', label: 'Wet salted' },
   { value: 'dry',        label: 'Dry' },
   { value: 'other',      label: 'Other' },
