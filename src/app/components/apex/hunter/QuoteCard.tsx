@@ -14,6 +14,7 @@ export function QuoteCard({ quote, ref_, onChanged }: { quote: Quote; ref_?: str
   const total = quote.lines.reduce((s, l) => s + (l.amount ?? 0), 0);
   const paid = quote.payments.reduce((s, p) => s + p.amount, 0);
   const s = quote.status;
+  const creditDue = Math.max(0, paid - total);
 
   if (s === 'draft') return null;
   const tone = s === 'sent' ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/30'
@@ -53,8 +54,8 @@ export function QuoteCard({ quote, ref_, onChanged }: { quote: Quote; ref_?: str
 
         {['accepted', 'deposit_paid', 'paid'].includes(s) && (
           <div className="grid grid-cols-3 gap-2 text-center">
-            {[{ l: 'Total', v: total }, { l: 'Paid', v: paid }, { l: 'Outstanding', v: Math.max(0, total - paid) }].map(x => (
-              <div key={x.l} className={`rounded-xl border px-2 py-2 bg-white dark:bg-slate-900 ${x.l === 'Outstanding' && x.v > 0.005 ? 'border-amber-400' : 'border-slate-200 dark:border-slate-700'}`}>
+            {[{ l: 'Total', v: total }, { l: 'Paid', v: paid }, { l: creditDue > 0.005 ? 'Credit due to you' : 'Outstanding', v: creditDue > 0.005 ? creditDue : Math.max(0, total - paid) }].map(x => (
+              <div key={x.l} className={`rounded-xl border px-2 py-2 bg-white dark:bg-slate-900 ${x.l === 'Outstanding' && x.v > 0.005 ? 'border-amber-400' : x.l === 'Credit due to you' ? 'border-green-500' : 'border-slate-200 dark:border-slate-700'}`}>
                 <p className="text-xs text-slate-500">{x.l}</p><p className="text-base font-bold tabular-nums text-slate-900 dark:text-slate-100">{money(x.v, quote.currency)}</p>
               </div>
             ))}
@@ -90,9 +91,15 @@ function QuoteSheet({ quote, total, paid, onClose, onChanged }: { quote: Quote; 
         <button aria-label="Close" onClick={onClose} className="absolute top-3 right-3 w-11 h-11 rounded-full bg-black/60 text-white flex items-center justify-center"><X className="w-5 h-5" /></button>
         <h1 className="text-2xl font-bold pr-12">Your quote</h1>
         <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
-          {quote.lines.map(l => <div key={l.id ?? l.description} className="px-4 py-3 flex justify-between gap-4"><span>{l.description}</span><strong className="whitespace-nowrap">{money(l.amount, quote.currency)}</strong></div>)}
+          {quote.lines.map(l => <div key={l.id ?? l.description} className="px-4 py-3 flex justify-between gap-4"><span className={l.kind === 'credit' ? 'text-green-700 dark:text-green-300' : ''}>{l.description}{l.kind === 'hide_purchase' ? ' (from our stock)' : ''}</span><strong className={`whitespace-nowrap ${l.kind === 'credit' ? 'text-green-700 dark:text-green-300' : ''}`}>{(l.amount ?? 0) < 0 ? '-' : ''}{money(Math.abs(l.amount ?? 0), quote.currency)}</strong></div>)}
           <div className="px-4 py-3 flex justify-between text-lg font-bold"><span>Total</span><span>{money(total, quote.currency)}</span></div>
         </div>
+        {quote.amendments.length > 0 && (
+          <div className="rounded-xl border border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-950/30 p-3 text-sm space-y-1">
+            <p className="font-bold">Your order was changed</p>
+            {quote.amendments.map(a => <p key={a.id}><strong>{a.credit_no}</strong> · {new Date(a.created_at).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}: {a.reason}</p>)}
+          </div>
+        )}
         {quote.note && <p className="rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3 text-sm">{quote.note}</p>}
 
         {quote.status === 'sent' && !asking && (
@@ -115,7 +122,7 @@ function QuoteSheet({ quote, total, paid, onClose, onChanged }: { quote: Quote; 
             <button onClick={() => setAsking(false)} className="w-full min-h-11 text-slate-500">Back</button>
           </>
         )}
-        {quote.status !== 'sent' && paid > 0 && <p className="text-sm text-slate-600 dark:text-slate-300">Received so far: <strong>{money(paid, quote.currency)}</strong>. Outstanding: <strong>{money(Math.max(0, total - paid), quote.currency)}</strong>.</p>}
+        {quote.status !== 'sent' && paid > 0 && <p className="text-sm text-slate-600 dark:text-slate-300">Received so far: <strong>{money(paid, quote.currency)}</strong>. {paid > total + 0.005 ? <>You are in credit by <strong>{money(paid - total, quote.currency)}</strong>. The workshop will refund it or use it on another order.</> : <>Outstanding: <strong>{money(Math.max(0, total - paid), quote.currency)}</strong>.</>}</p>}
       </div>
     </div>
   );

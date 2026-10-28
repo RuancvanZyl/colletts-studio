@@ -29,12 +29,13 @@ export function useQuotePipeline() {
   return { rows, loading, refresh: load };
 }
 
-export interface QuoteLine { id?: string; hunt_doc_id: string | null; description: string; amount: number | null }
+export interface QuoteLine { id?: string; hunt_doc_id: string | null; description: string; amount: number | null; kind?: 'item' | 'credit' | 'hide_purchase'; stock_reference?: string | null; amendment_id?: string | null; credit_for_line_id?: string | null }
+export interface Amendment { id: string; quote_id: string; credit_no: string | null; reason: string; client_agreed: string; credit_total: number; added_total: number; created_by_name: string | null; created_at: string }
 export interface QuotePayment { id: string; amount: number; method: string | null; reference: string | null; source: string; received_at: string }
 export interface Quote {
   id: string; hunt_id: string; status: string; currency: string; deposit_percent: number; note: string | null; hunter_comment: string | null;
   payment_option: string | null; amount_due_now: number | null; sent_at: string | null; accepted_at: string | null;
-  xero_invoice_number: string | null; xero_invoice_url: string | null; lines: QuoteLine[]; payments: QuotePayment[];
+  xero_invoice_number: string | null; xero_invoice_url: string | null; lines: QuoteLine[]; payments: QuotePayment[]; amendments: Amendment[];
 }
 
 export async function loadQuotes(filter: { huntId?: string; clientId?: string }): Promise<Quote[]> {
@@ -44,14 +45,16 @@ export async function loadQuotes(filter: { huntId?: string; clientId?: string })
   const { data: quotes } = await q;
   const ids = (quotes ?? []).map((x: any) => x.id);
   if (!ids.length) return [];
-  const [l, p] = await Promise.all([
+  const [l, p, am] = await Promise.all([
     (supabase as any).from('quote_lines').select('*').in('quote_id', ids).order('sort_order'),
     (supabase as any).from('quote_payments').select('*').in('quote_id', ids).order('received_at'),
+    (supabase as any).from('quote_amendments').select('*').in('quote_id', ids).order('created_at'),
   ]);
   return (quotes ?? []).map((x: any) => ({
     ...x, deposit_percent: Number(x.deposit_percent), amount_due_now: x.amount_due_now == null ? null : Number(x.amount_due_now),
     lines: (l.data ?? []).filter((y: any) => y.quote_id === x.id).map((y: any) => ({ ...y, amount: y.amount == null ? null : Number(y.amount) })),
     payments: (p.data ?? []).filter((y: any) => y.quote_id === x.id).map((y: any) => ({ ...y, amount: Number(y.amount) })),
+    amendments: (am.data ?? []).filter((y: any) => y.quote_id === x.id).map((y: any) => ({ ...y, credit_total: Number(y.credit_total), added_total: Number(y.added_total) })),
   }));
 }
 

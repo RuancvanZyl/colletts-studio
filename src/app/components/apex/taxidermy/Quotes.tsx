@@ -11,6 +11,8 @@ import { mountsFor } from '../../../../lib/pricing';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
 import { planRelease, releaseHunt, type ReleasePreview } from '../../../../lib/releaseHunt';
 import { sciName } from '../../../../lib/species';
+import { OrderChangeDialog } from './OrderChangeDialog';
+import { printCreditNote } from '../../../../lib/print';
 import { useQuotePipeline, loadQuotes, money, STAGE_LABEL, type Quote, type QuoteLine, type PipelineRow } from '../../../../lib/hooks/useQuotes';
 
 const field = 'w-full rounded-lg border border-slate-600 bg-[#0f1a24] text-slate-100 px-3 min-h-11 text-base placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0073ea]';
@@ -88,6 +90,7 @@ function QuoteEditor({ huntId, onBack }: { huntId: string; onBack: () => void })
   const [authorised, setAuthorised] = useState(false);
   const [popup, setPopup] = useState<null | { kind: 'deposit' | 'full' | 'balance' | 'other' | 'accept' | 'release' }>(null);
   const [plan, setPlan] = useState<ReleasePreview | null>(null);
+  const [changing, setChanging] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -129,7 +132,7 @@ function QuoteEditor({ huntId, onBack }: { huntId: string; onBack: () => void })
     setBusy(true);
     const { error } = await (supabase as any).rpc('staff_save_quote', {
       p_hunt: huntId, p_currency: currency, p_deposit_percent: percent, p_note: note || null, p_send: send,
-      p_lines: lines.filter(l => l.description.trim()).map(l => ({ hunt_doc_id: l.hunt_doc_id, description: l.description, amount: l.amount == null || String(l.amount) === '' ? null : Number(l.amount) })),
+      p_lines: lines.filter(l => l.description.trim()).map(l => ({ hunt_doc_id: l.hunt_doc_id, kind: l.kind === 'hide_purchase' ? 'hide_purchase' : 'item', stock_reference: l.stock_reference || null, description: l.description, amount: l.amount == null || String(l.amount) === '' ? null : Number(l.amount) })),
     });
     setBusy(false);
     if (error) { toast.error(error.message); return; }
@@ -194,9 +197,10 @@ function QuoteEditor({ huntId, onBack }: { huntId: string; onBack: () => void })
             <input disabled={!editable} className={field} value={l.description} onChange={e => setLines(p => p.map((x, j) => j === i ? { ...x, description: e.target.value } : x))} aria-label="Description" />
             <input disabled={!editable} className={`${field} ${l.amount == null || String(l.amount) === '' ? 'border-amber-500' : ''}`} inputMode="decimal" placeholder="Price" value={l.amount ?? ''} onChange={e => setLines(p => p.map((x, j) => j === i ? { ...x, amount: e.target.value === '' ? null : (e.target.value as any) } : x))} aria-label="Price" />
             {editable && <button aria-label="Remove line" className="min-h-11 flex items-center justify-center text-red-400" onClick={() => setLines(p => p.filter((_, j) => j !== i))}><Trash2 className="w-5 h-5" /></button>}
+            {l.kind === 'hide_purchase' && <input disabled={!editable} className={`${field} col-span-3`} placeholder="Which hide from stock?" value={l.stock_reference ?? ''} onChange={e => setLines(p => p.map((x, j) => j === i ? { ...x, stock_reference: e.target.value } : x))} aria-label="Stock reference" />}
           </div>
         ))}
-        {editable && <button className="inline-flex items-center gap-2 rounded-xl border-2 border-dashed border-slate-600 text-slate-200 font-semibold px-4 min-h-12" onClick={() => setLines(p => [...p, { hunt_doc_id: null, description: '', amount: null }])}><Plus className="w-5 h-5" />Add a line (crating, permits, courier…)</button>}
+        {editable && <div className="flex flex-wrap gap-2"><button className="inline-flex items-center gap-2 rounded-xl border-2 border-dashed border-slate-600 text-slate-200 font-semibold px-4 min-h-12" onClick={() => setLines(p => [...p, { hunt_doc_id: null, description: '', amount: null }])}><Plus className="w-5 h-5" />Add a line (crating, permits, courier…)</button><button className="inline-flex items-center gap-2 rounded-xl border-2 border-dashed border-amber-500 text-amber-200 font-semibold px-4 min-h-12" onClick={() => setLines(p => [...p, { hunt_doc_id: null, description: 'Hide purchase: ', amount: null, kind: 'hide_purchase', stock_reference: '' }])}><Plus className="w-5 h-5" />Hide purchase</button></div>}
         {missing > 0 && editable && <p className="text-sm text-amber-400">{missing} line{missing > 1 ? 's need' : ' needs'} a price. Custom mounts and replicas are always priced by you.</p>}
       </section>
 
@@ -238,6 +242,12 @@ function QuoteEditor({ huntId, onBack }: { huntId: string; onBack: () => void })
             </div>
           )}
           {status === 'accepted' && isAdmin && !authorised && <button className="text-sm text-amber-300 underline min-h-11" onClick={startAnyway}>Start work without the payment (admin, needs a reason)</button>}
+          <button className="w-full min-h-12 rounded-xl border-2 border-amber-500 text-amber-200 font-bold" onClick={() => setChanging(true)}>Credit or amend this invoice</button>
+          {quote.amendments.length > 0 && (
+            <div className="space-y-1"><p className="text-sm font-semibold text-slate-300">Credit notes</p>
+              <ul className="text-sm text-slate-300 divide-y divide-slate-800 rounded-lg border border-slate-700">{quote.amendments.map(a => <li key={a.id} className="px-3 py-2 flex items-center gap-3"><span className="flex-1"><strong className="text-slate-100">{a.credit_no}</strong> · {new Date(a.created_at).toLocaleDateString('en-ZA')} · credit {money(a.credit_total, quote.currency)}{a.added_total > 0 ? `, added ${money(a.added_total, quote.currency)}` : ''}<br /><span className="text-slate-400">{a.reason}</span></span><button className="min-h-10 px-3 rounded-lg border border-slate-500 text-slate-100" onClick={() => printCreditNote(a.id).catch(e => toast.error(e.message))}>Print</button></li>)}</ul></div>
+          )}
+          {paid - total > 0.005 && <p className="rounded-lg border border-green-600 bg-green-950/30 text-green-200 p-3 font-semibold">The client is in credit by {money(paid - total, quote.currency)}. Refund it or use it on another order.</p>}
           <p className="text-xs text-slate-500">{quote.xero_invoice_number ? `Xero invoice ${quote.xero_invoice_number}.` : 'Xero is not linked yet, so payments are recorded here by hand.'}</p>
         </section>
       )}
@@ -247,6 +257,7 @@ function QuoteEditor({ huntId, onBack }: { huntId: string; onBack: () => void })
           amount={popup.kind === 'deposit' ? Math.max(0, dueNow - paid) : popup.kind === 'other' ? 0 : Math.max(0, total - paid)}
           stillNeeded={status === 'accepted' ? Math.max(0, dueNow - paid) : 0} onClose={() => setPopup(null)} onConfirm={record} />
       )}
+      {changing && quote && <OrderChangeDialog quote={quote} clientType={who.type} who={who.name} onClose={() => setChanging(false)} onDone={() => { setChanging(false); load(); }} />}
       {popup?.kind === 'release' && plan && <ReleasePopup plan={plan} onClose={() => setPopup(null)} onDone={() => { setPopup(null); load(); }} staff={{ id: profile?.id ?? null, name: profile?.full_name ?? 'Staff' }} huntId={huntId} />}
       {popup?.kind === 'accept' && quote && <AcceptPopup currency={quote.currency} total={total} percent={percent} busy={busy} onClose={() => setPopup(null)} onConfirm={acceptForHunter} />}
 

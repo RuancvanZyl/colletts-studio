@@ -25,7 +25,7 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql']) {
+for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
@@ -837,6 +837,60 @@ ok((await fails(`SELECT public.case_cancel_trophy('${case3}', '')`))?.includes('
 await db.query(`SELECT public.case_cancel_trophy('${case3}', 'Client agreed to drop it from the order')`);
 const cn = (await q(`SELECT d.status ds, c.status cs, c.needs_quote_change nq, c.cancelled_by_name n FROM quality_cases c JOIN hunt_documents d ON d.id = c.job_doc_id WHERE c.id='${case3}'`))[0];
 ok(cn.ds === 'cancelled' && cn.cs === 'resolved' && cn.nq && cn.n === 'Ann Admin', 'cancelling closes the problem, cancels that job card and flags the quote for a credit');
+
+console.log('\nCredit and amend an invoice, hide purchase');
+await as(null);
+const QA = 'f1000000-0000-0000-0000-000000000001', QB = 'f1000000-0000-0000-0000-000000000002', QC = 'f1000000-0000-0000-0000-000000000003';
+const L1 = 'f2000000-0000-0000-0000-000000000001', L2 = 'f2000000-0000-0000-0000-000000000002';
+await db.exec(`
+ INSERT INTO quotes (id, hunt_id, client_id, status, currency, deposit_percent, amount_due_now) SELECT '${QA}', id, client_id, 'deposit_paid', 'USD', 50, 1000 FROM client_hunts WHERE id='${rh}';
+ INSERT INTO quote_lines (id, quote_id, hunt_doc_id, description, amount, sort_order) VALUES ('${L1}','${QA}','${SK3}','Warthog shoulder mount',2000,1),('${L2}','${QA}',NULL,'Impala euro mount',500,2);
+ INSERT INTO quote_payments (quote_id, amount, method) VALUES ('${QA}',1000,'eft');
+ INSERT INTO quotes (id, hunt_id, client_id, status, currency, deposit_percent, amount_due_now) SELECT '${QB}', id, client_id, 'paid', 'USD', 50, 500 FROM client_hunts WHERE id='${rh}';
+ INSERT INTO quote_lines (quote_id, description, amount, sort_order) VALUES ('${QB}','Eland skull',1000,1);
+ INSERT INTO quote_payments (quote_id, amount, method) VALUES ('${QB}',1000,'eft');
+ INSERT INTO quotes (id, hunt_id, client_id, status, currency, deposit_percent, amount_due_now) SELECT '${QC}', id, client_id, 'paid', 'USD', 50, 500 FROM client_hunts WHERE id='${rh}';
+ INSERT INTO quote_lines (id, quote_id, description, amount, sort_order) VALUES ('f2000000-0000-0000-0000-000000000003','${QC}','Zebra rug',1000,1);
+ INSERT INTO quote_payments (quote_id, amount, method) VALUES ('${QC}',1000,'eft');`);
+await as(ids.worker);
+ok((await fails(`SELECT public.staff_amend_quote('${QA}', NULL, '[]'::jsonb, '[]'::jsonb, 'x', 'y')`))?.includes('Only managers'), 'a worker cannot credit or amend an invoice');
+await as(ids.admin);
+ok((await fails(`SELECT public.staff_amend_quote('${QA}', NULL, '[]'::jsonb, '[]'::jsonb, '', 'y')`))?.includes('Say why'), 'a change needs a reason');
+ok((await fails(`SELECT public.staff_amend_quote('${QA}', NULL, '[]'::jsonb, '[]'::jsonb, 'Reason', '')`))?.includes('client agreed'), 'and a record of how the client agreed');
+ok((await fails(`SELECT public.staff_amend_quote('${QA}', NULL, '[]'::jsonb, '[]'::jsonb, 'Reason', 'Agreed on WhatsApp')`))?.includes('Credit something'), 'and something to credit or add');
+ok((await fails(`SELECT public.staff_amend_quote('${QA}', NULL, $1::jsonb, '[]'::jsonb, 'Reason', 'Agreed')`, [JSON.stringify([{ line_id: L1, amount: 2500 }])]))?.includes('cannot credit more'), 'you cannot credit more than a line is worth');
+ok((await fails(`SELECT public.staff_amend_quote('${QA}', NULL, '[]'::jsonb, $1::jsonb, 'Reason', 'Agreed')`, [JSON.stringify([{ description: 'Hide purchase: Sable', amount: 600, kind: 'hide_purchase' }])]))?.includes('which hide from stock'), 'a hide purchase says which hide from stock it is');
+const amId = (await q(`SELECT public.staff_amend_quote('${QA}', '${case3}', $1::jsonb, $2::jsonb, 'Rejected warthog skin, client replaces it with a sable', 'Client agreed via the outfitter on WhatsApp') id`,
+  [JSON.stringify([{ line_id: L1, amount: 2000 }]),
+   JSON.stringify([{ description: 'Sable shoulder mount', amount: 1800, stock_reference: 'Stock hide S-14', new_card: { species: 'Sable', mount_type: 'Shoulder Mount', start_department: 'mounting' } },
+                   { description: 'Hide purchase: Sable', amount: 600, kind: 'hide_purchase', stock_reference: 'Stock hide S-14' }])]))[0].id;
+const am = (await q(`SELECT credit_no, credit_total::float c, added_total::float a FROM quote_amendments WHERE id='${amId}'`))[0];
+ok(/^CN-\d{5}$/.test(am.credit_no) && am.c === 2000 && am.a === 2400, 'the credit note gets a number and the credited and added totals');
+ok((await q(`SELECT sum(amount)::float t FROM quote_lines WHERE quote_id='${QA}'`))[0].t === 2900, 'the invoice total is its lines, credits being negative: 2000 + 500 - 2000 + 1800 + 600');
+ok((await q(`SELECT kind, stock_reference FROM quote_lines WHERE quote_id='${QA}' AND kind='hide_purchase'`))[0].stock_reference === 'Stock hide S-14', 'the hide purchase is its own line type with the stock reference');
+ok((await q(`SELECT count(*)::int n FROM quote_lines WHERE quote_id='${QA}' AND kind='credit' AND amount = -2000 AND credit_for_line_id='${L1}'`))[0].n === 1, 'the credit is a negative line pointing at the line it credits');
+const nc = (await q(`SELECT current_department d, form_data->>'species' sp, form_data->>'stock_reference' st FROM hunt_documents WHERE hunt_id='${rh}' AND title LIKE 'Sable - Shoulder Mount (replacement)'`))[0];
+ok(nc && nc.d === 'mounting' && nc.sp === 'Sable' && nc.st === 'Stock hide S-14', 'a new job card is created for the new mount, starting where management chose');
+ok((await q(`SELECT hunt_doc_id IS NOT NULL l FROM quote_lines WHERE quote_id='${QA}' AND description='Sable shoulder mount'`))[0].l, 'and its invoice line is linked to it');
+ok((await q(`SELECT status FROM quotes WHERE id='${QA}'`))[0].status === 'deposit_paid', 'the invoice now waits for the balance (paid 1000 of 2900)');
+const flags = (await q(`SELECT needs_quote_change q, needs_job_card_change j FROM quality_cases WHERE id='${case3}'`))[0];
+ok(!flags.q && !flags.j, 'the case no longer needs the quote or the job card changed');
+ok((await fails(`SELECT public.staff_amend_quote('${QA}', NULL, $1::jsonb, '[]'::jsonb, 'Reason', 'Agreed')`, [JSON.stringify([{ line_id: L1, amount: 1 }])]))?.includes('cannot credit more'), 'a line that has been credited in full cannot be credited again');
+ok((await q(`SELECT count(*)::int n FROM client_notifications WHERE type='alert' AND title='Your order was changed'`))[0].n >= 1, 'the hunter is told their order was changed');
+await db.query(`SELECT public.staff_amend_quote('${QB}', NULL, '[]'::jsonb, $1::jsonb, 'Client added a skull', 'Agreed by email')`, [JSON.stringify([{ description: 'Gemsbok skull', amount: 500 }])]);
+ok((await q(`SELECT status FROM quotes WHERE id='${QB}'`))[0].status === 'deposit_paid', 'adding to a fully paid invoice makes it wait for the balance again, so a payment can be recorded');
+await db.query(`SELECT public.staff_amend_quote('${QC}', NULL, $1::jsonb, '[]'::jsonb, 'Rug cancelled', 'Agreed by email')`, [JSON.stringify([{ line_id: 'f2000000-0000-0000-0000-000000000003', amount: 400 }])]);
+ok((await q(`SELECT status, (SELECT sum(amount)::float FROM quote_lines WHERE quote_id='${QC}') t FROM quotes WHERE id='${QC}'`))[0].t === 600, 'a credit larger than what is owed leaves the client in credit (total 600, paid 1000)');
+// the ordinary quote builder also takes a hide purchase
+await as(null);
+await db.exec(`INSERT INTO client_hunts (id, client_id, status) VALUES ('d7000000-0000-0000-0000-000000000002','c0000000-0000-0000-0000-000000000001','active')`);
+await as(ids.admin);
+const dq = (await q(`SELECT public.staff_save_quote('d7000000-0000-0000-0000-000000000002', 'USD', $1::jsonb, 50, NULL, false) id`, [JSON.stringify([{ description: 'Kudu shoulder mount', amount: 1500 }, { description: 'Hide purchase: Kudu', amount: 400, kind: 'hide_purchase', stock_reference: 'Stock hide K-3' }])]))[0].id;
+ok((await q(`SELECT count(*)::int n FROM quote_lines WHERE quote_id='${dq}' AND kind='hide_purchase' AND stock_reference='Stock hide K-3'`))[0].n === 1, 'a hide purchase can be added to an ordinary quote too');
+await as(ids.mgr2);
+ok((await fails(`SELECT public.case_update_card('${case3}', 'Euro Mount')`))?.includes('Only management'), 'only management can change a job card');
+await as(ids.admin);
+await db.query(`UPDATE quality_cases SET needs_job_card_change = true WHERE id='${case3}'`).catch(() => {});
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

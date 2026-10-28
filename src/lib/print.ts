@@ -387,3 +387,38 @@ export function printDropOffPapers(p: DropOffPrint, opts: { sheet?: boolean; let
   const parts = [opts.sheet !== false ? dropOffSheetHtml(p) : '', opts.letter ? welcomeLetterHtml(p) : ''].join('');
   printHtml(`Receiving Sheet — ${p.clientName}`, parts);
 }
+
+
+// ── credit note ──────────────────────────────────────────────────────────────
+
+/** A credit note for one amendment: what was credited, what was added, and where the invoice stands now. */
+export async function printCreditNote(amendmentId: string): Promise<void> {
+  const db = supabase as any;
+  const { data: am, error } = await db.from('quote_amendments').select('*').eq('id', amendmentId).single();
+  if (error || !am) throw new Error(error?.message ?? 'Credit note not found');
+  const [{ data: quote }, { data: lines }, { data: pays }, { data: hunt }] = await Promise.all([
+    db.from('quotes').select('currency').eq('id', am.quote_id).single(),
+    db.from('quote_lines').select('*').eq('quote_id', am.quote_id).order('sort_order'),
+    db.from('quote_payments').select('amount').eq('quote_id', am.quote_id),
+    db.from('client_hunts').select('ref_number, clients(full_name, client_number)').eq('id', am.hunt_id).single(),
+  ]);
+  const cur = quote?.currency === 'ZAR' ? 'R ' : 'US$ ';
+  const m = (n: number) => `${n < 0 ? '-' : ''}${cur}${Math.abs(Number(n)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const credits = (lines ?? []).filter((l: any) => l.amendment_id === am.id && l.kind === 'credit');
+  const added = (lines ?? []).filter((l: any) => l.amendment_id === am.id && l.kind !== 'credit');
+  const total = (lines ?? []).reduce((s: number, l: any) => s + Number(l.amount ?? 0), 0);
+  const paid = (pays ?? []).reduce((s: number, p: any) => s + Number(p.amount), 0);
+  const row = (l: any) => `<tr><td>${esc(l.description)}${l.stock_reference ? `<div class="sub">Stock: ${esc(l.stock_reference)}</div>` : ''}</td><td style="text-align:right;white-space:nowrap">${m(Number(l.amount))}</td></tr>`;
+  const body = `<div class="page">
+    <div class="head"><div><div class="brand">Credit note</div><h1>${esc(am.credit_no ?? '')}</h1></div>
+      <div class="meta">${esc(fmtDate(am.created_at))}<br>${esc(hunt?.clients?.full_name ?? '')}${hunt?.clients?.client_number ? ` · ${esc(hunt.clients.client_number)}` : ''}<br>Hunt ${esc(hunt?.ref_number ?? '')}</div></div>
+    <h3>Reason</h3><div class="box">${esc(am.reason)}</div>
+    <h3>Credited</h3><table><tr><th>Item</th><th style="width:25%;text-align:right">Amount</th></tr>${credits.map(row).join('') || '<tr><td colspan="2">Nothing credited</td></tr>'}<tr><td><strong>Total credit</strong></td><td style="text-align:right"><strong>${m(-Number(am.credit_total))}</strong></td></tr></table>
+    ${added.length ? `<h3>Added to the invoice</h3><table><tr><th>Item</th><th style="width:25%;text-align:right">Amount</th></tr>${added.map(row).join('')}<tr><td><strong>Total added</strong></td><td style="text-align:right"><strong>${m(Number(am.added_total))}</strong></td></tr></table>` : ''}
+    <h3>The invoice now</h3>
+    <table><tr><td class="k">Invoice total</td><td style="text-align:right">${m(total)}</td></tr><tr><td class="k">Received</td><td style="text-align:right">${m(paid)}</td></tr>
+      <tr><td class="k">${paid > total ? 'Credit due to the client' : 'Balance outstanding'}</td><td style="text-align:right"><strong>${m(Math.abs(total - paid))}</strong></td></tr></table>
+    <h3>Client agreed</h3><div class="box">${esc(am.client_agreed)}</div>
+    <div class="foot">Issued by ${esc(am.created_by_name ?? 'the workshop')}</div></div>`;
+  printHtml(`Credit note ${am.credit_no ?? ''}`, body);
+}

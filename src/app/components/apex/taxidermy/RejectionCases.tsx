@@ -14,9 +14,12 @@ import { soakSummary, type SoakFindings } from '../../../../lib/soak';
 import { informDaysLeft, informDeadline } from '../../../../lib/cases';
 import { recommendOutcome, type OutcomeRecommendation } from '../../../../lib/aiReader';
 import { OutfitterThread } from '../shared/OutfitterThread';
+import { OrderChangeDialog } from './OrderChangeDialog';
+import { loadQuotes, type Quote } from '../../../../lib/hooks/useQuotes';
+import { MOUNT_OPTIONS } from '../../../../lib/pricing';
 
 interface Case {
-  id: string; hunt_id: string; status: 'open' | 'outcome_set' | 'resolved'; reasons: string[]; note: string | null; created_at: string; created_by_name: string | null;
+  id: string; hunt_id: string; job_doc_id: string; status: 'open' | 'outcome_set' | 'resolved'; reasons: string[]; note: string | null; created_at: string; created_by_name: string | null;
   outfitter_notified_at: string | null; outfitter_ack_at: string | null; outfitter_ack_by_name: string | null; outcome_at: string | null; ai_recommendation: OutcomeRecommendation | null; ai_recommended_at: string | null;
   outcome: 'outfitter_replacement' | 'stock_replacement' | 'client_decision' | null; outcome_note: string | null; stock_reference: string | null; outcome_by_name: string | null;
   client_informed_by: string | null; client_informed_at: string | null; client_decision: string | null; client_decision_note: string | null;
@@ -77,6 +80,16 @@ function CaseCard({ c, open, toggle, canDecide, isMgmt, reload, onNavigate }: { 
   const [stock, setStock] = useState(''); const [outNote, setOutNote] = useState('');
   const [who, setWho] = useState(c.outcome === 'client_decision' && (informDaysLeft(c) ?? 1) < 0 ? 'workshop' : 'outfitter'); const [decision, setDecision] = useState(''); const [cnote, setCnote] = useState('');
   const [resNote, setResNote] = useState(''); const [busy, setBusy] = useState(false); const [thinking, setThinking] = useState(false);
+  const [newMount, setNewMount] = useState('');
+  const [changeQuote, setChangeQuote] = useState<{ quote: Quote; type: string } | null>(null);
+  async function openChange() {
+    setBusy(true);
+    const [q] = await loadQuotes({ huntId: c.hunt_id });
+    const { data: h } = await (supabase as any).from('client_hunts').select('client_type, clients(client_type)').eq('id', c.hunt_id).single();
+    setBusy(false);
+    if (!q || !['accepted', 'deposit_paid', 'paid'].includes(q.status)) { toast.error('There is no accepted invoice for this hunt yet. Edit the quote instead.'); return; }
+    setChangeQuote({ quote: q, type: h?.clients?.client_type ?? h?.client_type ?? 'export' });
+  }
   const rec = c.ai_recommendation;
   const left = informDaysLeft(c);
   async function askAi() {
@@ -209,14 +222,29 @@ function CaseCard({ c, open, toggle, canDecide, isMgmt, reload, onNavigate }: { 
                 </div>
               )}
               {(c.needs_job_card_change || c.needs_quote_change) && (
-                <div className="rounded-xl border-2 border-amber-500 bg-amber-950/20 p-3 space-y-2">
+                <div className="rounded-xl border-2 border-amber-500 bg-amber-950/20 p-3 space-y-3">
                   <p className="font-bold text-amber-200">This changes the order</p>
-                  {c.needs_job_card_change && <p className="text-sm text-amber-100">The job card needs to change (a different mount, or cancel the card).</p>}
-                  {c.needs_quote_change && <p className="text-sm text-amber-100">The quote and invoice need to be reviewed.</p>}
-                  <div className="flex flex-wrap gap-2">
-                    <button className="min-h-11 px-4 rounded-lg border border-amber-400 text-amber-100 font-semibold" onClick={() => onNavigate('workshop-brief')}>Open the job cards</button>
-                    <button className="min-h-11 px-4 rounded-lg border border-amber-400 text-amber-100 font-semibold" onClick={() => onNavigate('quotes', c.hunt_id)}>Open the quote</button>
-                  </div>
+                  {c.needs_job_card_change && (
+                    <div className="space-y-2">
+                      <p className="text-sm text-amber-100"><strong>The job card.</strong> Keep it as it is (a replacement skin of the same mount), or change the mount.</p>
+                      {isMgmt ? (
+                        <div className="flex flex-wrap gap-2">
+                          <select className={`${field} !w-auto min-w-[180px]`} value={newMount} onChange={e => setNewMount(e.target.value)}><option value="">Choose a different mount…</option>{MOUNT_OPTIONS.filter(m => !m.special).map(m => <option key={m.key} value={m.name}>{m.name}</option>)}</select>
+                          <button disabled={busy || !newMount} onClick={() => call('case_update_card', { p_case: c.id, p_mount: newMount }, 'The job card now has the new mount')} className="min-h-11 px-4 rounded-lg border border-amber-400 text-amber-100 font-semibold disabled:opacity-50">Change the mount</button>
+                          <button disabled={busy} onClick={() => call('case_update_card', { p_case: c.id, p_mount: null }, 'Job card left as it is')} className="min-h-11 px-4 rounded-lg border border-amber-400 text-amber-100 font-semibold disabled:opacity-50">Keep it as it is</button>
+                        </div>
+                      ) : <p className="text-xs text-slate-400">Management changes the job card.</p>}
+                    </div>
+                  )}
+                  {c.needs_quote_change && (
+                    <div className="space-y-2">
+                      <p className="text-sm text-amber-100"><strong>The invoice.</strong> Run a credit note for the trophy, then add what replaces it: a new mount, a hide bought from stock, or both.</p>
+                      <div className="flex flex-wrap gap-2">
+                        <button disabled={busy} onClick={openChange} className="min-h-11 px-4 rounded-lg bg-amber-500 hover:bg-amber-600 text-black font-bold disabled:opacity-50">Credit and amend the invoice</button>
+                        <button className="min-h-11 px-4 rounded-lg border border-amber-400 text-amber-100 font-semibold" onClick={() => onNavigate('quotes', c.hunt_id)}>Open the quote</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               {c.outcome && (
@@ -227,6 +255,7 @@ function CaseCard({ c, open, toggle, canDecide, isMgmt, reload, onNavigate }: { 
               )}
             </div>
           )}
+          {changeQuote && <OrderChangeDialog quote={changeQuote.quote} clientType={changeQuote.type} who={client} caseInfo={{ id: c.id, docId: c.job_doc_id, species, reasons: c.reasons }} onClose={() => setChangeQuote(null)} onDone={() => { setChangeQuote(null); reload(); }} />}
           {c.status === 'resolved' && <p className="text-sm text-slate-400">Closed {fmt(c.resolved_at)} by {c.outcome_by_name}{c.resolution_note ? `: ${c.resolution_note}` : ''}</p>}
         </div>
       )}
