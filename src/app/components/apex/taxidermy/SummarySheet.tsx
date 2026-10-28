@@ -17,6 +17,9 @@ import { DEPT_COLORS } from '../../../../lib/pipeline';
 import { ClientStatusBoard } from './ClientStatusBoard';
 import { DEPT_TO_VIEW } from '../../../../lib/stations';
 import { useQuotePipeline } from '../../../../lib/hooks/useQuotes';
+import { useAttentionCounts } from '../../../../lib/hooks/useAttentionCounts';
+import { useWorkshopProgress } from '../../../../lib/hooks/useWorkshopProgress';
+import { STATUS_CHIP, shortMilestone, daysText, fmtDate } from './progressUi';
 
 interface SummarySheetProps {
   onNavigate: (view: string, clientId?: string) => void;
@@ -42,12 +45,23 @@ export function SummarySheet({ onNavigate }: SummarySheetProps) {
   const { due: instructionsDue } = useAwaitingInstruction();
   const { rows: quoteRows } = useQuotePipeline();
   const quotesAwaitingPay = quoteRows.filter(r => r.stage === 'awaiting_deposit').length;
+  const counts = useAttentionCounts();
+  const { hunts: orders } = useWorkshopProgress();
+  const redOrders = orders.filter(h => h.a.auto === 'red');
+  const yellowOrders = orders.filter(h => h.a.auto === 'yellow');
+  const feedbackOrders = orders.filter(h => h.needsFeedback.length > 0).length;
 
   const attentionCards = [
     { count: attention?.newHunterSubmissions ?? 0, label: 'new hunter submission',  plural: 'new hunter submissions',  action: 'Review in Job Tracker',    view: 'inventory',       color: '#8b5cf6' },
-    { count: attention?.unassignedActive ?? 0,     label: 'unassigned active job',  plural: 'unassigned active jobs',  action: 'Assign in Staff Overview', view: 'staff-overview',  color: '#f59e0b' },
     { count: attention?.unreadMessages ?? 0,       label: 'unread client message',  plural: 'unread client messages',  action: 'Open Client Messages',     view: 'client-inbox',    color: '#0073ea' },
-    { count: attention?.stalledRed ?? 0,           label: 'critically stalled job', plural: 'critically stalled jobs', action: 'View Daily Tasks',         view: 'daily-todo',      color: '#ef4444' },
+    { count: redOrders.length,                     label: 'order is red',           plural: 'orders are red (more than one milestone missed)', action: 'Open Progress check', view: 'progress-check', color: '#ef4444' },
+    { count: feedbackOrders,                       label: 'missed milestone needs feedback', plural: 'orders missed a milestone and need management feedback', action: 'Give feedback', view: 'progress-check', color: '#f59e0b' },
+    { count: counts.heldAside,                     label: 'trophy held aside',      plural: 'trophies held aside (rejected skins)', action: 'Open Rejected skins', view: 'rejections', color: '#ef4444' },
+    { count: counts.notAcked,                      label: 'rejected skin not acknowledged', plural: 'rejected skins the outfitter has not acknowledged', action: 'Open Rejected skins', view: 'rejections', color: '#dc2626' },
+    { count: counts.needOutcome,                   label: 'rejected skin needs an outcome', plural: 'rejected skins need an outcome', action: 'Open Rejected skins', view: 'rejections', color: '#f97316' },
+    { count: counts.lateAccept,                    label: 'card waiting over 24h to be accepted', plural: 'cards waiting over 24 hours to be accepted', action: 'Open Incoming', view: 'incoming', color: '#f59e0b' },
+    { count: counts.toCheck,                       label: 'document to check',      plural: 'documents to check',      action: 'Open Documents',           view: 'documents',       color: '#0ea5e9' },
+    { count: counts.unverified,                    label: 'permit number to verify', plural: 'permit numbers to verify', action: 'Open Permit numbers',     view: 'permit-numbers',  color: '#0ea5e9' },
     { count: careOverdue,                          label: 'hunter needs contact',   plural: 'hunters need contact',    action: 'Open Client Care',         view: 'client-care',     color: '#ec4899' },
     { count: careDue,                              label: 'hunter due an update',   plural: 'hunters due an update',   action: 'Open Client Care',         view: 'client-care',     color: '#f97316' },
     { count: deadlinesOverdue.length,              label: 'hunt past deadline',     plural: 'hunts past deadline',     action: 'Open Deadline Watch',      view: 'deadline-watch',  color: '#dc2626' },
@@ -58,7 +72,7 @@ export function SummarySheet({ onNavigate }: SummarySheetProps) {
     { label: 'Active Job Cards',    value: stats?.totalActive        ?? 0, icon: TrendingUp,  color: '#0073ea' },
     { label: 'Completed This Month',value: stats?.completedThisMonth ?? 0, icon: CheckCircle2,color: '#10b981' },
     { label: 'Awaiting Payment',    value: (stats?.pendingPayment ?? 0) + quotesAwaitingPay, icon: CreditCard,  color: '#f59e0b' },
-    { label: 'Critically Stalled',  value: stats?.stalledRed         ?? 0, icon: AlertTriangle, color: stats?.stalledRed ? '#ef4444' : '#10b981' },
+    { label: 'Orders Red',          value: redOrders.length,                icon: AlertTriangle, color: redOrders.length ? '#ef4444' : '#10b981' },
   ];
 
   return (
@@ -158,9 +172,6 @@ export function SummarySheet({ onNavigate }: SummarySheetProps) {
                     >
                       <span className="text-2xl font-bold" style={{ color }}>{d.count}</span>
                       <span className="text-xs text-center leading-tight text-slate-600 dark:text-slate-400">{d.label}</span>
-                      {d.stalled > 0 && (
-                        <span className="text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded-full">{d.stalled} stalled</span>
-                      )}
                     </button>
                   );
                 })}
@@ -297,45 +308,37 @@ export function SummarySheet({ onNavigate }: SummarySheetProps) {
       {/* Stalled alerts + Recent activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-        {/* Stalled */}
+        {/* Orders and the milestones */}
         <div className="bg-white dark:bg-[#1c2b3a] rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100 dark:border-slate-700">
             <AlertTriangle className="w-4 h-4 text-red-500" />
-            <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">Stalled Jobs</h3>
-            {(stats?.stalledRed ?? 0) > 0 && (
-              <Badge className="bg-red-500 ml-auto text-xs">{stats!.stalledRed} critical</Badge>
-            )}
-            {(stats?.stalledYellow ?? 0) > 0 && (
-              <Badge className="bg-amber-500 ml-auto text-xs">{stats!.stalledYellow} warning</Badge>
-            )}
+            <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">Orders behind their milestones</h3>
+            {redOrders.length > 0 && <Badge className="bg-red-500 ml-auto text-xs">{redOrders.length} red</Badge>}
+            {yellowOrders.length > 0 && <Badge className="bg-amber-500 ml-auto text-xs">{yellowOrders.length} yellow</Badge>}
           </div>
           <div className="p-4">
-            {loading ? (
-              <div className="space-y-2">{[...Array(3)].map((_, i) => <div key={i} className="h-10 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />)}</div>
-            ) : (stats?.stalledRed ?? 0) === 0 && (stats?.stalledYellow ?? 0) === 0 ? (
+            {redOrders.length === 0 && yellowOrders.length === 0 ? (
               <div className="py-6 text-center">
                 <CheckCircle2 className="w-8 h-8 text-green-400 mx-auto mb-2" />
-                <p className="text-xs text-slate-400">All jobs on track</p>
+                <p className="text-xs text-slate-400">Every order with a payment date is on its milestones</p>
               </div>
             ) : (
               <div className="space-y-2">
-                {(stats?.byDept ?? []).filter(d => d.stalled > 0).map(d => (
-                  <div key={d.dept} className="flex items-center justify-between p-2.5 bg-red-50 dark:bg-red-950/20 rounded-lg border border-red-100 dark:border-red-900">
-                    <div>
-                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{d.label}</p>
-                      <p className="text-xs text-slate-500">{d.count} total · {d.stalled} stalled</p>
+                {[...redOrders, ...yellowOrders].slice(0, 8).map(h => (
+                  <button key={h.huntId} onClick={() => onNavigate('progress-check', h.huntId)} className="w-full text-left flex items-center justify-between gap-3 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:shadow-sm">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{h.clientName}</p>
+                      <p className="text-xs text-slate-500">{h.a.overdue[0] ? `${shortMilestone(h.a.overdue[0].label)} was due ${fmtDate(h.a.overdue[0].due)} (${daysText(h.a.overdue[0].daysLeft)})` : ''}{h.problems.length ? ` · ${h.problems.length} problem trophy` : ''}</p>
                     </div>
-                    <button onClick={() => onNavigate(d.dept.replace('_', '-'))} className="text-xs text-red-600 hover:underline flex items-center gap-1">
-                      View <ArrowRight className="w-3 h-3" />
-                    </button>
-                  </div>
+                    <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${STATUS_CHIP[h.a.auto].cls}`}>{h.a.auto === 'red' ? 'Red' : 'Yellow'}</span>
+                  </button>
                 ))}
               </div>
             )}
           </div>
           <div className="px-4 py-2.5 border-t border-slate-100 dark:border-slate-700">
-            <button onClick={() => onNavigate('inventory')} className="text-xs text-[#0073ea] hover:underline flex items-center gap-1">
-              View all jobs <ArrowRight className="w-3 h-3" />
+            <button onClick={() => onNavigate('progress-check')} className="text-xs text-[#0073ea] hover:underline flex items-center gap-1">
+              Open the progress check <ArrowRight className="w-3 h-3" />
             </button>
           </div>
         </div>

@@ -15,8 +15,7 @@ import { DEPT_COLORS } from '../../../../lib/pipeline';
 import { DEPT_TO_VIEW } from '../../../../lib/stations';
 import { useQuotePipeline } from '../../../../lib/hooks/useQuotes';
 import { useWorkshopProgress } from '../../../../lib/hooks/useWorkshopProgress';
-import { informDaysLeft } from '../../../../lib/cases';
-import { useLiveRefresh } from '../../../../lib/liveRefresh';
+import { useAttentionCounts } from '../../../../lib/hooks/useAttentionCounts';
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -32,20 +31,7 @@ export function TodayScreen({ onNavigate }: { onNavigate: (view: string, clientI
   const changes = quoteRows.filter(r => r.stage === 'declined').length;
   const awaitingPay = quoteRows.filter(r => r.stage === 'awaiting_deposit').length;
 
-  const [docs, setDocs] = useState({ toCheck: 0, fromOutfitter: 0, unreadChat: 0, unverified: 0, lateAccept: 0, notAcked: 0, needOutcome: 0, clientOverdue: 0, heldAside: 0 });
-  const loadCounts = useCallback(() => {
-    (async () => {
-      const db = supabase as any;
-      const { data: v } = await db.from('v_hunt_documents').select('to_check, waiting_outfitter');
-      const { count } = await db.from('outfitter_messages').select('id', { count: 'exact', head: true }).eq('sender', 'outfitter').is('read_at', null);
-      const { count: unv } = await db.from('registered_numbers').select('id', { count: 'exact', head: true }).is('verified_at', null);
-      const { count: late } = await db.from('job_card_legs').select('id', { count: 'exact', head: true }).is('accepted_at', null).is('completed_at', null).lt('sent_at', new Date(Date.now() - 24 * 3_600_000).toISOString());
-      const { data: qc } = await db.from('quality_cases').select('status, outfitter_id, outfitter_ack_at, outcome, outcome_at, client_informed_at, order_override_at').neq('status', 'resolved');
-      setDocs({ heldAside: (qc ?? []).filter((x: any) => x.order_override_at).length, clientOverdue: (qc ?? []).filter((x: any) => informDaysLeft(x) !== null && (informDaysLeft(x) as number) < 0).length, notAcked: (qc ?? []).filter((x: any) => x.outfitter_id && !x.outfitter_ack_at).length, needOutcome: (qc ?? []).filter((x: any) => x.status === 'open').length, lateAccept: late ?? 0, unverified: unv ?? 0, toCheck: (v ?? []).reduce((n: number, r: any) => n + +r.to_check, 0), fromOutfitter: (v ?? []).filter((r: any) => +r.waiting_outfitter > 0).length, unreadChat: count ?? 0 });
-    })().catch(() => {});
-  }, []);
-  useEffect(() => { loadCounts(); }, [loadCounts]);
-  useLiveRefresh(['hunt_requirements', 'quality_cases', 'job_card_legs', 'registered_numbers'], loadCounts);
+  const docs = useAttentionCounts();
 
   const { hunts: progress } = useWorkshopProgress();
   const redCount = progress.filter(h => h.a.auto === 'red').length;

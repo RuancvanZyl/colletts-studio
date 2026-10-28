@@ -131,3 +131,6 @@
 - **Data changes** show up without a refresh on the main boards via Supabase Realtime (`lib/liveRefresh.ts` `useLiveRefresh`): Today, My Tasks, Incoming, soak reviews, Rejected skins (staff and outfitter), Departments / Progress check, Documents. Realtime respects row security. Needs migration 062 (publishes the tables for realtime); until it is run, screens behave as before.
 - Role-based VISIBILITY is separate and unchanged (`canSeeView` in TaxidermyPortal): management sees everything, department staff and leads see less. To be decided with the workshop if everyone should see everything.
 - Run supabase/launch/release_062_live_updates.sql.
+
+## 2026-10-28 — Whiteboard shows the new rules
+- The Whiteboard (Today → Whiteboard) no longer shows the old department-timer items (unassigned jobs, critically stalled) or the stalled badges on the pipeline. Needs attention now lists: orders red, orders needing management feedback, trophies held aside, rejected skins not acknowledged / needing an outcome, cards waiting over 24 hours to be accepted, documents to check, permit numbers to verify (plus the existing hunter, client-care and deadline items). The fourth KPI card is "Orders Red" and the "Stalled Jobs" panel is "Orders behind their milestones". `useAttentionCounts` is shared with the Today screen.
