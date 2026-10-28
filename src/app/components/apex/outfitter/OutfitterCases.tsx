@@ -5,8 +5,9 @@ import { toast } from 'sonner';
 import { supabase } from '../../../../lib/supabase';
 import { WORKSHOP } from '../../../../lib/workshop';
 import { OutfitterThread } from '../shared/OutfitterThread';
+import { informDaysLeft, informDeadline } from '../../../../lib/cases';
 
-interface C { id: string; hunt_id: string; status: string; client: string; species: string | null; reasons: string[]; note: string | null; created_at: string; ack_at: string | null; outcome: string | null }
+interface C { id: string; hunt_id: string; status: string; client: string; species: string | null; reasons: string[]; note: string | null; created_at: string; ack_at: string | null; outcome: string | null; outcome_at: string | null; client_informed_at: string | null; client_decision: string | null }
 const OUTCOME: Record<string, string> = { outfitter_replacement: 'You will replace it', stock_replacement: 'The workshop will replace it from stock', client_decision: 'The client will decide: change the order or scrap it' };
 
 export function OutfitterCases() {
@@ -17,6 +18,12 @@ export function OutfitterCases() {
   useEffect(() => { load(); const t = setInterval(load, 60_000); return () => clearInterval(t); }, [load]);
   if (cases.length === 0) return null;
 
+  async function told(c: C) {
+    setBusy(c.id);
+    const { error } = await (supabase as any).rpc('outfitter_informed_client', { p_case: c.id });
+    setBusy(null);
+    if (error) toast.error(error.message); else { toast.success('Recorded. Thank you.'); load(); }
+  }
   async function ack(c: C) {
     setBusy(c.id);
     const { error } = await (supabase as any).rpc('outfitter_ack_case', { p_case: c.id });
@@ -31,6 +38,13 @@ export function OutfitterCases() {
           <p className="text-slate-800 dark:text-slate-200"><strong>{c.species ?? 'Skin'}</strong> · {c.client}</p>
           <p className="text-sm text-slate-800 dark:text-slate-200"><strong>Reasons:</strong> {c.reasons.join(', ')}{c.note ? ` · ${c.note}` : ''}</p>
           {c.outcome && <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Agreed: {OUTCOME[c.outcome] ?? c.outcome}</p>}
+          {c.outcome === 'client_decision' && (c.client_informed_at
+            ? <p className="text-sm text-green-800 dark:text-green-300">You told the client on {new Date(c.client_informed_at).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}.{c.client_decision ? ` They decided to ${c.client_decision === 'scrap' ? 'scrap it' : 'change the order'}.` : ' The workshop is waiting for their decision.'}</p>
+            : (() => { const left = informDaysLeft(c); return (
+              <div className="space-y-2 rounded-xl border border-slate-400 p-3">
+                <p className="text-sm text-slate-900 dark:text-slate-100">Please tell the client{left !== null && left >= 0 ? ` by ${informDeadline(c.outcome_at)?.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}` : ''}. {left !== null && left < 0 ? 'The 3 weeks have passed, so the workshop will now tell the client.' : 'After 3 weeks the workshop will contact them instead.'}</p>
+                <button disabled={busy === c.id} onClick={() => told(c)} className="w-full min-h-12 rounded-xl bg-green-700 text-white font-bold disabled:opacity-50">I have told the client</button>
+              </div>); })())}
           {!c.ack_at ? (
             <button disabled={busy === c.id} onClick={() => ack(c)} className="w-full min-h-14 rounded-xl bg-red-600 hover:bg-red-700 text-white text-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50">{busy === c.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}I acknowledge this notification</button>
           ) : (

@@ -25,7 +25,7 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql']) {
+for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
@@ -782,6 +782,30 @@ const rep2 = (await q(`SELECT public.soak_submit('${SK}', 'third_party', 'Cape T
 await db.query(`SELECT public.soak_review('${rep2}', true)`);
 await db.query(`UPDATE hunt_documents SET current_department='mounting' WHERE id='${SK}'`);
 ok((await q(`SELECT current_department d FROM hunt_documents WHERE id='${SK}'`))[0].d === 'mounting', 'once the soak report is accepted the card moves on');
+
+console.log('\nRejected skins: telling the client, and the AI recommendation');
+await as(ids.mgr2);
+const SK2 = 'e8000000-0000-0000-0000-000000000002';
+await as(null);
+await db.exec(`INSERT INTO hunt_documents (id, hunt_id, doc_type, title, status, current_department, form_data) VALUES ('${SK2}','${rh}','job_card','Soak test 2','in_progress','salting','{"species":"Impala","mount_type":"Shoulder Mount"}')`);
+await db.exec(`UPDATE hunt_documents SET current_department='tannery' WHERE id='${SK2}'`);
+await as(ids.mgr2);
+await db.query(`SELECT public.job_accept('${SK2}')`);
+const rep3 = (await q(`SELECT public.soak_submit('${SK2}', 'in_house', NULL, $1::jsonb, 3, NULL, NULL) id`, [JSON.stringify({ ...good, bullet_damage: true })]))[0].id;
+const case2 = (await q(`SELECT public.soak_review('${rep3}', false, ARRAY['Bullet damage']) id`))[0].id;
+await as(ids.worker);
+ok((await fails(`SELECT public.case_save_recommendation('${case2}', '{}'::jsonb)`))?.includes('tannery lead'), 'only the lead or management can save an AI recommendation');
+await as(ids.mgr2);
+await db.query(`SELECT public.case_save_recommendation('${case2}', '{"recommended_outcome":"outfitter_replacement","reasoning":"The outfitter offered a replacement"}'::jsonb)`);
+ok((await q(`SELECT ai_recommendation->>'recommended_outcome' r, ai_recommended_at IS NOT NULL t FROM quality_cases WHERE id='${case2}'`))[0].r === 'outfitter_replacement', 'the recommendation is kept on the case with its time (the outcome is still chosen by a person)');
+ok((await q(`SELECT outcome FROM quality_cases WHERE id='${case2}'`))[0].outcome === null, 'saving a recommendation does not set the outcome');
+await db.query(`SELECT public.case_set_outcome('${case2}', 'client_decision')`);
+await as(OUT2);
+ok((await fails(`SELECT public.outfitter_informed_client('${case2}')`))?.includes('not waiting for you'), 'another outfitter cannot say they told the client');
+await as(OUT1);
+await db.query(`SELECT public.outfitter_informed_client('${case2}')`);
+const oc2 = (await q(`SELECT public.outfitter_cases() j`))[0].j.find(x => x.id === case2);
+ok(oc2.client_informed_by === 'outfitter' && oc2.client_informed_at && oc2.outcome_at, 'the outfitter confirms they told the client, stamped with the time');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -97,3 +97,10 @@
 - Set `WORKSHOP.whatsapp` (src/lib/workshop.ts) so outfitters can WhatsApp the workshop from a case.
 - Not built yet: the AI recommendation from the case conversation (Edge Function, like read-document), automatic job card / quote alteration, pausing or extending the milestone clock for outfitter / client delays (decision pending).
 - Run supabase/launch/release_058_soak_reports_and_cases.sql after 057 (needs 051, 041).
+
+## 2026-10-28 — Rejected skins part two: 3-week rule and AI recommendation (migration 059)
+- When the outcome is "the client decides", the outfitter has **3 weeks** (`CLIENT_INFORM_DAYS = 21` in `lib/cases.ts`, counted from `outcome_at`) to tell the client; they confirm with "I have told the client" (`outfitter_informed_client`, stamped). After 3 weeks the case shows in red that the workshop must now tell the client (staff record it with `case_record_client`, workshop); Today lists these.
+- **AI recommendation**: Edge Function `supabase/functions/recommend-outcome/index.ts` (tannery lead / management only; same Anthropic key and secrets as read-document). It reads the case, the soak findings and the whole conversation (app messages and logged WhatsApp) and suggests one of the three outcomes with reasoning, what was said, what is unclear and a next step; stored on the case (`case_save_recommendation`); the recommended option is badged "AI suggests"; a person still chooses. NOT deployed by me (paste into Supabase → Edge Functions → new function `recommend-outcome`).
+- Decision recorded: the milestone clock does NOT stop or extend for outfitter / client delays (management feedback records the cause).
+- Still open: what the invoice does for each outcome (credit a scrapped skin, charge a stock replacement...); today the case only flags the job card and quote for change.
+- Run supabase/launch/release_059_case_client_deadline_and_ai.sql after 058.

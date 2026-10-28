@@ -22,3 +22,21 @@ export async function readDocument(huntId: string, requirementId: string, kind: 
   if (data?.error) throw new Error(data.error);
   return data;
 }
+
+export interface OutcomeRecommendation {
+  recommended_outcome: 'outfitter_replacement' | 'stock_replacement' | 'client_decision' | null;
+  reasoning: string; what_was_said: string[]; unclear: string[]; next_step: string;
+}
+
+/** Ask the AI to read a rejected-skin case and its conversation and suggest an outcome. A suggestion only. */
+export async function recommendOutcome(caseId: string): Promise<OutcomeRecommendation> {
+  const { data, error } = await supabase.functions.invoke('recommend-outcome', { body: { case_id: caseId } });
+  if (error) {
+    let msg = error.message;
+    try { const body = await (error as any).context?.json?.(); if (body?.error) msg = body.error; } catch { /* keep the generic message */ }
+    if ((error as any).context?.status === 404 && !/case/i.test(msg)) msg = 'The AI recommendation is not set up yet. Ask for the setup steps.';
+    throw new Error(msg);
+  }
+  if (data?.error) throw new Error(data.error);
+  return data.data;
+}

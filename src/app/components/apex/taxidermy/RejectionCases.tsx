@@ -11,11 +11,13 @@ import { useAuth } from '../../../../lib/auth';
 import { WORKSHOP } from '../../../../lib/workshop';
 import { whatsappUrl } from '../../../../lib/invite';
 import { soakSummary, type SoakFindings } from '../../../../lib/soak';
+import { informDaysLeft, informDeadline } from '../../../../lib/cases';
+import { recommendOutcome, type OutcomeRecommendation } from '../../../../lib/aiReader';
 import { OutfitterThread } from '../shared/OutfitterThread';
 
 interface Case {
   id: string; hunt_id: string; status: 'open' | 'outcome_set' | 'resolved'; reasons: string[]; note: string | null; created_at: string; created_by_name: string | null;
-  outfitter_notified_at: string | null; outfitter_ack_at: string | null; outfitter_ack_by_name: string | null;
+  outfitter_notified_at: string | null; outfitter_ack_at: string | null; outfitter_ack_by_name: string | null; outcome_at: string | null; ai_recommendation: OutcomeRecommendation | null; ai_recommended_at: string | null;
   outcome: 'outfitter_replacement' | 'stock_replacement' | 'client_decision' | null; outcome_note: string | null; stock_reference: string | null; outcome_by_name: string | null;
   client_informed_by: string | null; client_informed_at: string | null; client_decision: string | null; client_decision_note: string | null;
   needs_job_card_change: boolean; needs_quote_change: boolean; resolved_at: string | null; resolution_note: string | null;
@@ -69,8 +71,19 @@ function CaseCard({ c, open, toggle, canDecide, reload, onNavigate }: { c: Case;
   const species = c.doc?.form_data?.species ?? 'Skin'; const client = c.hunt?.clients?.full_name ?? 'Client';
   const [wa, setWa] = useState({ from: 'outfitter', text: '' });
   const [stock, setStock] = useState(''); const [outNote, setOutNote] = useState('');
-  const [who, setWho] = useState('outfitter'); const [decision, setDecision] = useState(''); const [cnote, setCnote] = useState('');
-  const [resNote, setResNote] = useState(''); const [busy, setBusy] = useState(false);
+  const [who, setWho] = useState(c.outcome === 'client_decision' && (informDaysLeft(c) ?? 1) < 0 ? 'workshop' : 'outfitter'); const [decision, setDecision] = useState(''); const [cnote, setCnote] = useState('');
+  const [resNote, setResNote] = useState(''); const [busy, setBusy] = useState(false); const [thinking, setThinking] = useState(false);
+  const rec = c.ai_recommendation;
+  const left = informDaysLeft(c);
+  async function askAi() {
+    setThinking(true);
+    try {
+      const r = await recommendOutcome(c.id);
+      const { error } = await (supabase as any).rpc('case_save_recommendation', { p_case: c.id, p_data: r });
+      if (error) throw new Error(error.message);
+      toast.success('Recommendation ready. You still choose the outcome.'); reload();
+    } catch (e: any) { toast.error(e.message); } finally { setThinking(false); }
+  }
   const call = async (fn: string, args: Record<string, unknown>, ok: string) => {
     setBusy(true); const { error } = await (supabase as any).rpc(fn, args); setBusy(false);
     if (error) { toast.error(error.message); return false; } toast.success(ok); reload(); return true;
@@ -119,11 +132,26 @@ function CaseCard({ c, open, toggle, canDecide, reload, onNavigate }: { c: Case;
           {canDecide && c.status !== 'resolved' && (
             <div className="space-y-2">
               <h3 className="text-lg font-bold text-slate-100">What happens next</h3>
+              {!c.outcome && c.outfitter && (
+                <div className="rounded-xl border border-violet-600 bg-violet-950/20 p-3 space-y-2">
+                  <div className="flex items-center gap-3"><p className="flex-1 font-bold text-violet-200">AI recommendation</p><button disabled={thinking} onClick={askAi} className="min-h-11 px-4 rounded-lg border border-violet-400 text-violet-100 font-semibold disabled:opacity-50 flex items-center gap-2">{thinking && <Loader2 className="w-4 h-4 animate-spin" />}{rec ? 'Read the conversation again' : 'Read the conversation and recommend'}</button></div>
+                  {rec && (
+                    <div className="space-y-1.5 text-sm text-slate-200">
+                      <p className="text-base font-bold text-violet-100">{rec.recommended_outcome ? OUTCOMES.find(o => o.v === rec.recommended_outcome)?.title : 'Not enough to recommend yet'}</p>
+                      <p>{rec.reasoning}</p>
+                      {rec.what_was_said.length > 0 && <ul className="list-disc pl-5 text-slate-300">{rec.what_was_said.map((w, i) => <li key={i}>{w}</li>)}</ul>}
+                      {rec.unclear.length > 0 && <p className="text-amber-200"><strong>Still unclear:</strong> {rec.unclear.join('; ')}</p>}
+                      <p><strong>Next step:</strong> {rec.next_step}</p>
+                      <p className="text-xs text-slate-500">A suggestion from the AI based on the conversation{c.ai_recommended_at ? `, ${fmt(c.ai_recommended_at)}` : ''}. You decide below.</p>
+                    </div>
+                  )}
+                </div>
+              )}
               {!c.outcome ? (
                 <div className="space-y-2">
                   {OUTCOMES.map(o => (
                     <div key={o.v} className="rounded-xl border border-slate-600 p-3 space-y-2">
-                      <p className="font-bold text-slate-100">{o.title}</p><p className="text-sm text-slate-400">{o.body}</p>
+                      <p className="font-bold text-slate-100">{o.title}{rec?.recommended_outcome === o.v && <span className="ml-2 rounded-full bg-violet-700 text-white text-xs px-2 py-0.5">AI suggests</span>}</p><p className="text-sm text-slate-400">{o.body}</p>
                       {o.v === 'stock_replacement' && <input className={field} placeholder="Which skin from stock?" value={stock} onChange={e => setStock(e.target.value)} />}
                       <input className={field} placeholder="Note (optional)" value={outNote} onChange={e => setOutNote(e.target.value)} />
                       <button disabled={busy || (o.v === 'stock_replacement' && !stock.trim())} onClick={() => call('case_set_outcome', { p_case: c.id, p_outcome: o.v, p_note: outNote || null, p_stock_ref: o.v === 'stock_replacement' ? stock : null }, 'Outcome recorded')} className="min-h-11 px-4 rounded-lg border-2 border-[#0073ea] text-sky-200 font-bold disabled:opacity-50">Choose this</button>
@@ -138,7 +166,10 @@ function CaseCard({ c, open, toggle, canDecide, reload, onNavigate }: { c: Case;
                   <p className="text-slate-400">Set by {c.outcome_by_name}</p>
                   {c.outcome === 'client_decision' && (
                     <div className="space-y-2 pt-1">
-                      <p className="text-slate-300">If the outfitter does not tell the client, it becomes the workshop's job to.</p>
+                      <p className="text-slate-300">The outfitter has 3 weeks to tell the client. After that it is the workshop's job.</p>
+                      {!c.client_informed_at && left !== null && (left < 0
+                        ? <p className="rounded-lg border-2 border-red-500 bg-red-950/30 text-red-200 font-semibold p-2">The outfitter has not told the client in 3 weeks ({-left} day{left === -1 ? '' : 's'} over). The workshop must now tell the client.</p>
+                        : <p className="text-amber-200">The outfitter should tell the client by {informDeadline(c.outcome_at)?.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })} ({left} day{left === 1 ? '' : 's'} left).</p>)}
                       <select className={field} value={who} onChange={e => setWho(e.target.value)}><option value="outfitter">The outfitter told the client</option><option value="workshop">The workshop told the client</option></select>
                       <select className={field} value={decision} onChange={e => setDecision(e.target.value)}><option value="">The client has not decided yet</option><option value="change_order">The client changes the order</option><option value="scrap">The client scraps it</option></select>
                       <input className={field} placeholder="Note (optional)" value={cnote} onChange={e => setCnote(e.target.value)} />
