@@ -25,7 +25,7 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql']) {
+for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
@@ -647,6 +647,22 @@ ok(lastR.status === 'behind' && lastR.held_up_in === 'tannery' && lastR.reviewed
 ok((await q(`SELECT count(*)::int n FROM hunt_progress_reviews WHERE hunt_id=$1`, [rh]))[0].n === 2, 'every check is kept, not overwritten');
 await as(OUT1);
 ok((await q(`SELECT count(*)::int n FROM hunt_progress_reviews`))[0].n === 0, 'outfitters cannot see management checks');
+
+console.log('\nMilestone feedback');
+await as(null);
+await db.exec(`UPDATE client_hunts SET milestones = '[{"key":"m1","label":"Milestone 1","due_date":"2026-01-01","completed":false},{"key":"m2","label":"Milestone 2","due_date":"2026-03-01","completed":false}]'::jsonb WHERE id='${rh}'`);
+await as(ids.worker);
+ok((await fails(`SELECT public.staff_give_milestone_feedback($1, 'm1', 'yellow', 'x')`, [rh]))?.includes('Only management'), 'a worker cannot give milestone feedback');
+await as(ids.admin);
+ok((await fails(`SELECT public.staff_give_milestone_feedback($1, 'm1', 'yellow', '')`, [rh]))?.includes('holding it up'), 'feedback needs a reason');
+ok((await fails(`SELECT public.staff_give_milestone_feedback($1, 'm1', 'orange', 'x')`, [rh]))?.includes('yellow or red'), 'only yellow or red');
+ok((await fails(`SELECT public.staff_give_milestone_feedback($1, 'm4', 'red', 'x')`, [rh]))?.includes('no such milestone'), 'it must be a milestone the order actually has');
+ok((await fails(`SELECT public.staff_give_milestone_feedback($1, 'm1', 'yellow', 'x', NULL, NULL, '2020-01-01')`, [rh]))?.includes('past'), 'the new target date cannot be in the past');
+await db.query(`SELECT public.staff_give_milestone_feedback($1, 'm1', 'yellow', 'Skins late from the salt room', 'salting', 'Add a second shift', '2999-01-01')`, [rh]);
+await db.query(`SELECT public.staff_give_milestone_feedback($1, 'm2', 'red', 'Tannery has not returned the skins', 'tannery')`, [rh]);
+ok((await q(`SELECT count(*)::int n FROM milestone_feedback WHERE hunt_id=$1`, [rh]))[0].n === 2, 'each missed milestone gets its own feedback and the history is kept');
+await as(OUT1);
+ok((await q(`SELECT count(*)::int n FROM milestone_feedback`))[0].n === 0, 'outfitters cannot see management feedback');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -42,7 +42,8 @@ export function TodayScreen({ onNavigate }: { onNavigate: (view: string, clientI
   }, []);
 
   const { hunts: progress } = useWorkshopProgress();
-  const behindCount = progress.filter(h => h.a.auto === 'behind').length;
+  const redCount = progress.filter(h => h.a.auto === 'red').length;
+  const feedbackCount = progress.filter(h => h.needsFeedback.length > 0).length;
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const first = profile?.full_name?.split(' ')[0] ?? '';
@@ -56,7 +57,8 @@ export function TodayScreen({ onNavigate }: { onNavigate: (view: string, clientI
     { n: docs.unverified, text: plural(docs.unverified, 'permit number from an outfitter needs verifying', 'permit numbers from outfitters need verifying'), go: 'permit-numbers', tone: 'amber' },
     { n: docs.unreadChat, text: plural(docs.unreadChat, 'unread message from an outfitter', 'unread messages from outfitters'), go: 'outfitter-chat', tone: 'amber' },
     { n: docs.fromOutfitter, text: plural(docs.fromOutfitter, 'hunt is waiting on documents from the outfitter', 'hunts are waiting on documents from outfitters'), go: 'documents', tone: 'blue' },
-    { n: behindCount, text: plural(behindCount, 'client is behind the production milestones', 'clients are behind the production milestones'), go: 'progress-check', tone: 'red' },
+    { n: feedbackCount, text: plural(feedbackCount, 'order missed a milestone and needs management feedback', 'orders missed a milestone and need management feedback'), go: 'progress-check', tone: 'red' },
+    { n: redCount, text: plural(redCount, 'order is red: more than one milestone missed', 'orders are red: more than one milestone missed'), go: 'progress-check', tone: 'red' },
     { n: deadlinesOverdue.length, text: plural(deadlinesOverdue.length, 'hunt is past its deadline', 'hunts are past their deadline'), go: 'deadline-watch', tone: 'red' },
     { n: attention?.stalledRed ?? 0, text: plural(attention?.stalledRed ?? 0, 'animal has been stuck for far too long', 'animals have been stuck for far too long'), go: 'daily-todo', tone: 'red' },
     { n: attention?.unreadMessages ?? 0, text: plural(attention?.unreadMessages ?? 0, 'unread message from a hunter', 'unread messages from hunters'), go: 'client-inbox', tone: 'amber' },

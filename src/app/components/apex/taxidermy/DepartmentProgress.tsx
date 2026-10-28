@@ -12,8 +12,8 @@ export function DepartmentProgress({ onNavigate }: { onNavigate: (view: string, 
   const { hunts, loading, error, refresh } = useWorkshopProgress();
   const [open, setOpen] = useState<Record<string, boolean>>({});
 
-  const counts = { behind: 0, due_soon: 0, on_track: 0, no_clock: 0 };
-  for (const h of hunts) { const k = h.a.auto === 'finished' ? 'on_track' : h.a.auto; counts[k]++; }
+  const counts = { red: 0, yellow: 0, green: 0, no_clock: 0 };
+  for (const h of hunts) { const k = h.a.auto === 'finished' ? 'green' : h.a.auto; counts[k]++; }
 
   type Row = { h: HuntProgress; n: number; behind: number };
   const byDept = new Map<string, Row[]>();
@@ -45,7 +45,7 @@ export function DepartmentProgress({ onNavigate }: { onNavigate: (view: string, 
       {loading && hunts.length === 0 && <div className="flex items-center gap-2 text-slate-400"><Loader2 className="w-5 h-5 animate-spin" />Loading…</div>}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {([['behind', 'Behind'], ['due_soon', 'Due soon'], ['on_track', 'On track'], ['no_clock', 'No payment date']] as const).map(([k, l]) => (
+        {([['red', 'Red'], ['yellow', 'Yellow'], ['green', 'Green'], ['no_clock', 'No payment date']] as const).map(([k, l]) => (
           <button key={k} onClick={() => onNavigate('progress-check')} className={`rounded-2xl border p-3 text-center ${STATUS_CHIP[k].cls}`}>
             <span className="block text-3xl font-bold tabular-nums">{counts[k]}</span><span className="block text-sm">{l}</span>
           </button>

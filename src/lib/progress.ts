@@ -44,11 +44,13 @@ export function expectation(key: string, size: string | null): string {
   return '';
 }
 
-export type AutoStatus = 'no_clock' | 'behind' | 'due_soon' | 'on_track' | 'finished';
+/** green: every milestone that has fallen due is met. yellow: one is overdue. red: two or more are overdue (or the final deadline has passed). */
+export type AutoStatus = 'no_clock' | 'green' | 'yellow' | 'red' | 'finished';
 
 export interface MilestoneState { key: string; label: string; due: string; daysLeft: number; met: boolean; metCount: number; total: number; manual: boolean }
 export interface Assessment {
   auto: AutoStatus;
+  dueSoon: boolean;                 // the next milestone is within 14 days (a heads-up, not a colour)
   milestones: MilestoneState[];
   next: MilestoneState | null;      // the first milestone not yet met
   overdue: MilestoneState[];
@@ -60,7 +62,7 @@ export interface Assessment {
 export function assess(h: { size: string | null; clockStart: string | null; milestones: Milestone[] | null; deadline?: string | null }, animals: AnimalPos[], now: Date = new Date()): Assessment {
   const ms = h.milestones ?? [];
   if (!h.clockStart || ms.length === 0) {
-    return { auto: 'no_clock', milestones: [], next: null, overdue: [], day: null, totalDays: null, animalBehind: () => false };
+    return { auto: 'no_clock', dueSoon: false, milestones: [], next: null, overdue: [], day: null, totalDays: null, animalBehind: () => false };
   }
   const day = Math.floor((now.getTime() - new Date(h.clockStart).getTime()) / DAY);
   const states: MilestoneState[] = ms.map(m => {
@@ -73,11 +75,13 @@ export function assess(h: { size: string | null; clockStart: string | null; mile
   const next = states.find(s => !s.met) ?? null;
   const lastDue = ms[ms.length - 1].due_date;
   const totalDays = Math.round((new Date(lastDue).getTime() - new Date(h.clockStart).getTime()) / DAY);
+  const deadlinePassed = !!(h.deadline && new Date(h.deadline).getTime() < now.getTime());
   let auto: AutoStatus;
   if (!next) auto = 'finished';
-  else if (overdue.length > 0 || (h.deadline && new Date(h.deadline).getTime() < now.getTime())) auto = 'behind';
-  else if (next.daysLeft <= 14) auto = 'due_soon';
-  else auto = 'on_track';
+  else if (overdue.length >= 2 || deadlinePassed) auto = 'red';
+  else if (overdue.length === 1) auto = 'yellow';
+  else auto = 'green';
+  const dueSoon = !!next && next.daysLeft >= 0 && next.daysLeft <= 14;
   const overdueKeys = overdue.map(o => o.key);
-  return { auto, milestones: states, next, overdue, day, totalDays, animalBehind: a => overdueKeys.some(k => !milestoneMet(k, h.size, a)) };
+  return { auto, dueSoon, milestones: states, next, overdue, day, totalDays, animalBehind: a => overdueKeys.some(k => !milestoneMet(k, h.size, a)) };
 }

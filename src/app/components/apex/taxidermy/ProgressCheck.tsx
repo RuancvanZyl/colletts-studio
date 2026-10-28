@@ -13,7 +13,7 @@ import { ALL_DEPARTMENTS } from '../../../../lib/pipeline';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
 import { daysText, deptLabel, fmtDate, processChips, shortMilestone, STATUS_CHIP } from './progressUi';
 
-type Filter = 'all' | 'behind' | 'due_soon' | 'on_track' | 'no_clock' | 'unchecked';
+type Filter = 'all' | 'red' | 'yellow' | 'needs_feedback' | 'green' | 'no_clock' | 'unchecked';
 const SIZE: Record<string, string> = { small: 'Small order', medium: 'Medium order', large: 'Large order' };
 const field = 'w-full rounded-lg border border-slate-600 bg-[#0f1a24] text-slate-100 px-3 min-h-11 text-base placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0073ea]';
 
@@ -21,9 +21,10 @@ export function ProgressCheck({ initialHuntId, onNavigate }: { initialHuntId?: s
   const { profile } = useAuth();
   const canReview = ['admin', 'studio_manager'].includes(profile?.role ?? '');
   const { hunts, loading, error, refresh } = useWorkshopProgress();
-  const [filter, setFilter] = useState<Filter>(initialHuntId ? 'all' : 'behind');
+  const [filter, setFilter] = useState<Filter>(initialHuntId ? 'all' : 'needs_feedback');
   const [search, setSearch] = useState('');
   const [behindFor, setBehindFor] = useState<HuntProgress | null>(null);
+  const [feedbackFor, setFeedbackFor] = useState<HuntProgress | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const focusRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => { if (initialHuntId && !loading) focusRef.current?.scrollIntoView({ block: 'center' }); }, [initialHuntId, loading]);
@@ -31,18 +32,26 @@ export function ProgressCheck({ initialHuntId, onNavigate }: { initialHuntId?: s
   const sevenDays = 7 * 86_400_000;
   const unchecked = (h: HuntProgress) => !h.review || Date.now() - new Date(h.review.reviewed_at).getTime() > sevenDays;
   const counts: Record<Filter, number> = {
-    all: hunts.length, behind: hunts.filter(h => h.a.auto === 'behind').length, due_soon: hunts.filter(h => h.a.auto === 'due_soon').length,
-    on_track: hunts.filter(h => h.a.auto === 'on_track' || h.a.auto === 'finished').length, no_clock: hunts.filter(h => h.a.auto === 'no_clock').length,
+    all: hunts.length, red: hunts.filter(h => h.a.auto === 'red').length, yellow: hunts.filter(h => h.a.auto === 'yellow').length,
+    needs_feedback: hunts.filter(h => h.needsFeedback.length > 0).length,
+    green: hunts.filter(h => h.a.auto === 'green' || h.a.auto === 'finished').length, no_clock: hunts.filter(h => h.a.auto === 'no_clock').length,
     unchecked: hunts.filter(h => h.a.auto !== 'no_clock' && unchecked(h)).length,
   };
-  const rank: Record<AutoStatus, number> = { behind: 0, due_soon: 1, on_track: 2, finished: 3, no_clock: 4 };
+  const rank: Record<AutoStatus, number> = { red: 0, yellow: 1, green: 2, finished: 3, no_clock: 4 };
   const list = useMemo(() => hunts
-    .filter(h => filter === 'all' || (filter === 'on_track' ? h.a.auto === 'on_track' || h.a.auto === 'finished' : filter === 'unchecked' ? h.a.auto !== 'no_clock' && unchecked(h) : h.a.auto === filter) || h.huntId === initialHuntId)
+    .filter(h => filter === 'all' || (filter === 'green' ? h.a.auto === 'green' || h.a.auto === 'finished' : filter === 'needs_feedback' ? h.needsFeedback.length > 0 : filter === 'unchecked' ? h.a.auto !== 'no_clock' && unchecked(h) : h.a.auto === filter) || h.huntId === initialHuntId)
     .filter(h => !search.trim() || `${h.clientName} ${h.clientNumber ?? ''} ${h.ref ?? ''}`.toLowerCase().includes(search.trim().toLowerCase()))
     .sort((a, b) => (rank[a.a.auto] - rank[b.a.auto]) || a.clientName.localeCompare(b.clientName)),
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [hunts, filter, search, initialHuntId]);
 
+  async function giveFeedback(h: HuntProgress, f: { key: string; level: 'yellow' | 'red'; reason: string; dept: string; plan: string; target: string }) {
+    setBusy(h.huntId);
+    const { error: err } = await (supabase as any).rpc('staff_give_milestone_feedback', { p_hunt: h.huntId, p_key: f.key, p_level: f.level, p_reason: f.reason, p_dept: f.dept || null, p_plan: f.plan || null, p_target: f.target || null });
+    setBusy(null);
+    if (err) { toast.error(err.message); return false; }
+    toast.success(`${h.clientName}: feedback recorded`); refresh(); return true;
+  }
   async function mark(h: HuntProgress, status: 'on_track' | 'behind', note?: string, dept?: string) {
     setBusy(h.huntId);
     const { error: err } = await (supabase as any).rpc('staff_review_progress', { p_hunt: h.huntId, p_status: status, p_note: note ?? null, p_dept: dept ?? null });
@@ -51,7 +60,7 @@ export function ProgressCheck({ initialHuntId, onNavigate }: { initialHuntId?: s
     toast.success(status === 'on_track' ? `${h.clientName}: marked on track` : `${h.clientName}: marked behind`); refresh(); return true;
   }
 
-  const FILTERS: [Filter, string][] = [['behind', 'Behind'], ['due_soon', 'Due soon'], ['unchecked', 'Not checked this week'], ['on_track', 'On track'], ['no_clock', 'No payment date'], ['all', 'All']];
+  const FILTERS: [Filter, string][] = [['needs_feedback', 'Needs feedback'], ['red', 'Red'], ['yellow', 'Yellow'], ['green', 'Green'], ['unchecked', 'Not checked this week'], ['no_clock', 'No payment date'], ['all', 'All']];
   return (
     <div className="max-w-4xl space-y-4">
       <div className="flex items-start justify-between gap-3">
@@ -85,8 +94,18 @@ export function ProgressCheck({ initialHuntId, onNavigate }: { initialHuntId?: s
                   <p className="text-xl font-bold text-slate-100 leading-tight">{h.clientName}</p>
                   <p className="text-sm text-slate-400">{[h.size ? SIZE[h.size] : null, h.year ? `${h.year} hunt` : null, `${h.animals.length} trophies`].filter(Boolean).join(' · ')}</p>
                 </div>
-                <span className={`rounded-full border px-3 py-1 text-sm font-bold whitespace-nowrap ${chip.cls}`}>{chip.label}</span>
+                <div className="flex flex-col items-end gap-1">
+                  <span className={`rounded-full border px-3 py-1 text-sm font-bold whitespace-nowrap ${chip.cls}`}>{chip.label}</span>
+                  {h.a.dueSoon && h.a.auto !== 'red' && h.a.next && <span className="text-xs font-semibold text-amber-300">{shortMilestone(h.a.next.label)} due {daysText(h.a.next.daysLeft)}</span>}
+                </div>
               </div>
+              {h.needsFeedback.length > 0 && (
+                <div className={`rounded-xl border-2 p-3 space-y-2 ${h.a.auto === 'red' ? 'border-red-600 bg-red-950/30' : 'border-amber-600 bg-amber-950/20'}`}>
+                  <p className={`font-bold ${h.a.auto === 'red' ? 'text-red-200' : 'text-amber-200'}`}>Management feedback needed: {h.needsFeedback.map(m => shortMilestone(m.label)).join(' and ')} {h.needsFeedback.length > 1 ? 'were' : 'was'} missed.</p>
+                  <p className="text-sm text-slate-300">Record what is holding it up, where, and the plan to get it back on track.</p>
+                  {canReview && <button className="min-h-12 px-4 rounded-xl bg-[#0073ea] text-white font-bold" onClick={() => setFeedbackFor(h)}>Give feedback</button>}
+                </div>
+              )}
 
               {h.a.auto === 'no_clock' ? (
                 <div className="rounded-xl border border-slate-600 bg-[#0f1a24] p-3 space-y-2">
@@ -119,6 +138,16 @@ export function ProgressCheck({ initialHuntId, onNavigate }: { initialHuntId?: s
                       })}
                     </ul>
                   </div>
+                  {h.feedback.length > 0 && (
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Management feedback</p>
+                      <ul className="space-y-1.5">{h.feedback.map(f => { const ms = h.a.milestones.find(m => m.key === f.milestone_key); return (
+                        <li key={f.id} className="rounded-lg border border-slate-700 bg-[#0f1a24] px-3 py-2 text-sm text-slate-300">
+                          <span className={`font-bold ${f.level === 'red' ? 'text-red-300' : 'text-amber-300'}`}>{f.level === 'red' ? 'Red' : 'Yellow'}</span> · {ms ? shortMilestone(ms.label) : f.milestone_key.toUpperCase()} · {fmtDate(f.given_at)} by {f.given_by_name ?? 'management'}{ms?.met ? ' · milestone now met' : ''}
+                          <br />{f.reason}{f.held_up_in ? ` (held up in ${deptLabel(f.held_up_in)})` : ''}{f.plan ? ` · Plan: ${f.plan}` : ''}{f.new_target ? ` · New target ${fmtDate(f.new_target)}` : ''}
+                        </li>); })}</ul>
+                    </div>
+                  )}
                   {should && <p className={`rounded-lg px-3 py-2 text-sm ${should.daysLeft < 0 ? 'bg-red-950/40 text-red-200' : 'bg-[#0f1a24] text-slate-300'}`}><strong>{should.daysLeft < 0 ? 'Should already be:' : `By ${fmtDate(should.due)} it should be:`}</strong> {expectation(should.key, h.size)}.</p>}
                 </>
               )}
@@ -136,6 +165,7 @@ export function ProgressCheck({ initialHuntId, onNavigate }: { initialHuntId?: s
         })}
       </div>
 
+      {feedbackFor && <FeedbackPopup h={feedbackFor} onClose={() => setFeedbackFor(null)} onSave={async f => { if (await giveFeedback(feedbackFor, f)) setFeedbackFor(null); }} />}
       {behindFor && <BehindPopup h={behindFor} onClose={() => setBehindFor(null)} onSave={async (note, dept) => { if (await mark(behindFor, 'behind', note, dept)) setBehindFor(null); }} />}
     </div>
   );
@@ -156,6 +186,31 @@ function BehindPopup({ h, onClose, onSave }: { h: HuntProgress; onClose: () => v
         <div className="flex gap-2">
           <button className="min-h-12 px-5 rounded-xl border border-slate-500 text-slate-100 font-semibold" onClick={onClose}>Cancel</button>
           <button className="flex-1 min-h-12 rounded-xl bg-red-600 hover:bg-red-700 text-white text-lg font-bold disabled:opacity-50" disabled={!note.trim()} onClick={() => onSave(note, dept)}>Mark as behind</button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function FeedbackPopup({ h, onClose, onSave }: { h: HuntProgress; onClose: () => void; onSave: (f: { key: string; level: 'yellow' | 'red'; reason: string; dept: string; plan: string; target: string }) => void }) {
+  const first = h.needsFeedback[0];
+  const [key, setKey] = useState(first?.key ?? '');
+  const [reason, setReason] = useState(''); const [plan, setPlan] = useState(''); const [target, setTarget] = useState('');
+  const [dept, setDept] = useState([...processChips(h)].sort((a, b) => b.behind - a.behind)[0]?.dept ?? '');
+  // yellow for the first missed milestone, red once more than one is missed
+  const level: 'yellow' | 'red' = h.a.auto === 'red' ? 'red' : 'yellow';
+  return (
+    <Dialog open onOpenChange={(o: boolean) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogHeader><DialogTitle className="text-2xl">{h.clientName}: {level === 'red' ? 'red' : 'yellow'} feedback</DialogTitle></DialogHeader>
+        {h.needsFeedback.length > 1 && <div><label className="block text-sm font-semibold text-slate-300 mb-1">Which milestone?</label><select className={field} value={key} onChange={e => setKey(e.target.value)}>{h.needsFeedback.map(m => <option key={m.key} value={m.key}>{shortMilestone(m.label)}</option>)}</select></div>}
+        <div><label className="block text-sm font-semibold text-slate-300 mb-1">What is holding it up?</label><textarea rows={3} className={field} value={reason} onChange={e => setReason(e.target.value)} autoFocus /></div>
+        <div><label className="block text-sm font-semibold text-slate-300 mb-1">Where is it held up?</label><select className={field} value={dept} onChange={e => setDept(e.target.value)}><option value="">Not sure</option>{ALL_DEPARTMENTS.map(d => <option key={d} value={d}>{deptLabel(d)}</option>)}</select></div>
+        <div><label className="block text-sm font-semibold text-slate-300 mb-1">The plan to get it back on track <span className="font-normal text-slate-500">(optional)</span></label><textarea rows={2} className={field} value={plan} onChange={e => setPlan(e.target.value)} /></div>
+        <div><label className="block text-sm font-semibold text-slate-300 mb-1">New target date <span className="font-normal text-slate-500">(optional)</span></label><input type="date" className={field} value={target} onChange={e => setTarget(e.target.value)} min={new Date().toISOString().slice(0, 10)} /></div>
+        <div className="flex gap-2">
+          <button className="min-h-12 px-5 rounded-xl border border-slate-500 text-slate-100 font-semibold" onClick={onClose}>Cancel</button>
+          <button className="flex-1 min-h-12 rounded-xl bg-[#0073ea] text-white text-lg font-bold disabled:opacity-50" disabled={!reason.trim() || !key} onClick={() => onSave({ key, level, reason, dept, plan, target })}>Record feedback</button>
         </div>
       </DialogContent>
     </Dialog>

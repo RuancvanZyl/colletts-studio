@@ -47,23 +47,25 @@ test('no payment date means the clock has not started', () => {
   assert.equal(a.auto, 'no_clock');
 });
 
-test('on track early in the order', () => {
+test('green early in the order', () => {
   const a = assess({ size: 'medium', clockStart: start, milestones: ms }, [at(SHOULDER, 'skinning'), at(SHOULDER, 'salting')], on('2026-07-01'));
-  assert.equal(a.auto, 'on_track');
+  assert.equal(a.auto, 'green');
+  assert.equal(a.dueSoon, false);
   assert.equal(a.day, 30);
   assert.equal(a.next?.key, 'm1');
   assert.equal(a.totalDays, 270);
 });
 
-test('due soon inside the last 14 days before a milestone', () => {
+test('still green inside the last 14 days before a milestone, with a heads-up', () => {
   const a = assess({ size: 'medium', clockStart: start, milestones: ms }, [at(SHOULDER, 'salting')], on('2026-08-20'));
-  assert.equal(a.auto, 'due_soon');
+  assert.equal(a.auto, 'green');
+  assert.equal(a.dueSoon, true);
 });
 
-test('behind once a milestone date passes with a trophy still in an earlier stage', () => {
+test('yellow once one milestone date passes with a trophy still in an earlier stage', () => {
   const animals = [at(SHOULDER, 'tannery'), at(SHOULDER, 'salting')];
   const a = assess({ size: 'medium', clockStart: start, milestones: ms }, animals, on('2026-09-15'));
-  assert.equal(a.auto, 'behind');
+  assert.equal(a.auto, 'yellow');
   assert.deepEqual(a.overdue.map(o => o.key), ['m1']);
   assert.equal(a.animalBehind(animals[1]), true);
   assert.equal(a.animalBehind(animals[0]), false);
@@ -72,12 +74,27 @@ test('behind once a milestone date passes with a trophy still in an earlier stag
 test('a milestone marked done by management counts even if the stages say otherwise', () => {
   const marked = ms.map(m => (m.key === 'm1' ? { ...m, completed: true } : m));
   const a = assess({ size: 'medium', clockStart: start, milestones: marked }, [at(SHOULDER, 'salting')], on('2026-09-15'));
-  assert.equal(a.auto, 'on_track');
+  assert.equal(a.auto, 'green');
 });
 
-test('past the final deadline with work left is behind, and all milestones met is finished', () => {
+test('red when a second milestone is missed', () => {
+  const a = assess({ size: 'medium', clockStart: start, milestones: ms }, [at(SHOULDER, 'salting')], on('2026-11-05'));
+  assert.equal(a.auto, 'red');
+  assert.deepEqual(a.overdue.map(o => o.key), ['m1', 'm2']);
+});
+
+test('back to green once the trophies catch up, even after being yellow or red', () => {
+  const late = assess({ size: 'medium', clockStart: start, milestones: ms }, [at(SHOULDER, 'salting')], on('2026-11-05'));
+  assert.equal(late.auto, 'red');
+  const half = assess({ size: 'medium', clockStart: start, milestones: ms }, [at(SHOULDER, 'tannery')], on('2026-11-05'));
+  assert.equal(half.auto, 'yellow');
+  const caught = assess({ size: 'medium', clockStart: start, milestones: ms }, [at(SHOULDER, 'mounting')], on('2026-11-05'));
+  assert.equal(caught.auto, 'green');
+});
+
+test('past the final deadline with work left is red, and all milestones met is finished', () => {
   const late = assess({ size: 'medium', clockStart: start, milestones: ms, deadline: '2027-02-26' }, [at(SHOULDER, 'mounting')], on('2027-03-10'));
-  assert.equal(late.auto, 'behind');
+  assert.equal(late.auto, 'red');
   const done = assess({ size: 'medium', clockStart: start, milestones: ms }, [at(SHOULDER, 'done', true)], on('2026-12-01'));
   assert.equal(done.auto, 'finished');
 });
