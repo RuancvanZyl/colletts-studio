@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialo
 import { LegRecords } from './LegRecords';
 import { daysText, deptLabel, fmtDate, processChips, shortMilestone, STATUS_CHIP } from './progressUi';
 
-type Filter = 'all' | 'red' | 'yellow' | 'needs_feedback' | 'green' | 'no_clock' | 'unchecked';
+type Filter = 'all' | 'red' | 'yellow' | 'needs_feedback' | 'problem' | 'green' | 'no_clock' | 'unchecked';
 const SIZE: Record<string, string> = { small: 'Small order', medium: 'Medium order', large: 'Large order' };
 const field = 'w-full rounded-lg border border-slate-600 bg-[#0f1a24] text-slate-100 px-3 min-h-11 text-base placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0073ea]';
 
@@ -35,13 +35,13 @@ export function ProgressCheck({ initialHuntId, onNavigate }: { initialHuntId?: s
   const unchecked = (h: HuntProgress) => !h.review || Date.now() - new Date(h.review.reviewed_at).getTime() > sevenDays;
   const counts: Record<Filter, number> = {
     all: hunts.length, red: hunts.filter(h => h.a.auto === 'red').length, yellow: hunts.filter(h => h.a.auto === 'yellow').length,
-    needs_feedback: hunts.filter(h => h.needsFeedback.length > 0).length,
+    needs_feedback: hunts.filter(h => h.needsFeedback.length > 0).length, problem: hunts.filter(h => h.problems.length > 0).length,
     green: hunts.filter(h => h.a.auto === 'green' || h.a.auto === 'finished').length, no_clock: hunts.filter(h => h.a.auto === 'no_clock').length,
     unchecked: hunts.filter(h => h.a.auto !== 'no_clock' && unchecked(h)).length,
   };
   const rank: Record<AutoStatus, number> = { red: 0, yellow: 1, green: 2, finished: 3, no_clock: 4 };
   const list = useMemo(() => hunts
-    .filter(h => filter === 'all' || (filter === 'green' ? h.a.auto === 'green' || h.a.auto === 'finished' : filter === 'needs_feedback' ? h.needsFeedback.length > 0 : filter === 'unchecked' ? h.a.auto !== 'no_clock' && unchecked(h) : h.a.auto === filter) || h.huntId === initialHuntId)
+    .filter(h => filter === 'all' || (filter === 'green' ? h.a.auto === 'green' || h.a.auto === 'finished' : filter === 'needs_feedback' ? h.needsFeedback.length > 0 : filter === 'problem' ? h.problems.length > 0 : filter === 'unchecked' ? h.a.auto !== 'no_clock' && unchecked(h) : h.a.auto === filter) || h.huntId === initialHuntId)
     .filter(h => !search.trim() || `${h.clientName} ${h.clientNumber ?? ''} ${h.ref ?? ''}`.toLowerCase().includes(search.trim().toLowerCase()))
     .sort((a, b) => (rank[a.a.auto] - rank[b.a.auto]) || a.clientName.localeCompare(b.clientName)),
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -62,7 +62,7 @@ export function ProgressCheck({ initialHuntId, onNavigate }: { initialHuntId?: s
     toast.success(status === 'on_track' ? `${h.clientName}: marked on track` : `${h.clientName}: marked behind`); refresh(); return true;
   }
 
-  const FILTERS: [Filter, string][] = [['needs_feedback', 'Needs feedback'], ['red', 'Red'], ['yellow', 'Yellow'], ['green', 'Green'], ['unchecked', 'Not checked this week'], ['no_clock', 'No payment date'], ['all', 'All']];
+  const FILTERS: [Filter, string][] = [['needs_feedback', 'Needs feedback'], ['problem', 'Problem trophy'], ['red', 'Red'], ['yellow', 'Yellow'], ['green', 'Green'], ['unchecked', 'Not checked this week'], ['no_clock', 'No payment date'], ['all', 'All']];
   return (
     <div className="max-w-4xl space-y-4">
       <div className="flex items-start justify-between gap-3">
@@ -101,6 +101,14 @@ export function ProgressCheck({ initialHuntId, onNavigate }: { initialHuntId?: s
                   {h.a.dueSoon && h.a.auto !== 'red' && h.a.next && <span className="text-xs font-semibold text-amber-300">{shortMilestone(h.a.next.label)} due {daysText(h.a.next.daysLeft)}</span>}
                 </div>
               </div>
+              {h.problems.length > 0 && (
+                <div className="rounded-xl border-2 border-red-600 bg-red-950/30 p-3 space-y-1">
+                  <p className="font-bold text-red-200">Problem: {h.problems.length} trophy {h.problems.some(p => p.held) ? 'held aside' : 'on hold'} (rejected skin)</p>
+                  {h.problems.map(p => <p key={p.caseId} className="text-sm text-red-100"><strong>{p.species}</strong>: {p.reasons.join(', ')}{p.held ? ' · the order is carrying on without it' : ' · the order cannot be shipped until this is solved'}</p>)}
+                  <p className="text-xs text-red-300">It stays red until it is replaced or cancelled.</p>
+                  <button className="min-h-11 px-3 rounded-lg border border-red-400 text-red-100 font-semibold" onClick={() => onNavigate('rejections', h.problems[0].caseId)}>Open the case</button>
+                </div>
+              )}
               {h.needsFeedback.length > 0 && (
                 <div className={`rounded-xl border-2 p-3 space-y-2 ${h.a.auto === 'red' ? 'border-red-600 bg-red-950/30' : 'border-amber-600 bg-amber-950/20'}`}>
                   <p className={`font-bold ${h.a.auto === 'red' ? 'text-red-200' : 'text-amber-200'}`}>Management feedback needed: {h.needsFeedback.map(m => shortMilestone(m.label)).join(' and ')} {h.needsFeedback.length > 1 ? 'were' : 'was'} missed.</p>

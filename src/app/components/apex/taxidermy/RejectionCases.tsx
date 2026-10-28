@@ -21,6 +21,7 @@ interface Case {
   outcome: 'outfitter_replacement' | 'stock_replacement' | 'client_decision' | null; outcome_note: string | null; stock_reference: string | null; outcome_by_name: string | null;
   client_informed_by: string | null; client_informed_at: string | null; client_decision: string | null; client_decision_note: string | null;
   needs_job_card_change: boolean; needs_quote_change: boolean; resolved_at: string | null; resolution_note: string | null;
+  order_override_at: string | null; order_override_by_name: string | null; order_override_reason: string | null; replacement_arrived_at: string | null; cancelled_at: string | null; cancel_reason: string | null;
   doc: { form_data: any } | null; hunt: { clients: { full_name: string } | null } | null; outfitter: { name: string; phone: string | null; contact_name: string | null } | null;
   soak: { findings: SoakFindings; holes: number | null; tannery_type: string; tannery_name: string | null } | null;
 }
@@ -34,7 +35,8 @@ const OUTCOMES: { v: NonNullable<Case['outcome']>; title: string; body: string }
 
 export function RejectionCases({ initialCaseId, onNavigate }: { initialCaseId?: string; onNavigate: (view: string, id?: string) => void }) {
   const { profile } = useAuth();
-  const canDecide = ['admin', 'studio_manager'].includes(profile?.role ?? '') || ((profile as any)?.manages_departments ?? []).includes('tannery');
+  const isMgmt = ['admin', 'studio_manager'].includes(profile?.role ?? '');
+  const canDecide = isMgmt || ((profile as any)?.manages_departments ?? []).includes('tannery');
   const [cases, setCases] = useState<Case[] | null>(null);
   const [open, setOpen] = useState<string | null>(initialCaseId ?? null);
   const load = useCallback(async () => {
@@ -44,10 +46,12 @@ export function RejectionCases({ initialCaseId, onNavigate }: { initialCaseId?: 
   useEffect(() => { load(); }, [load]);
 
   if (!cases) return <div className="flex items-center gap-2 text-slate-400"><Loader2 className="w-5 h-5 animate-spin" />Loading…</div>;
+  const held = (c: Case) => c.status !== 'resolved' && !!c.order_override_at;
   const groups: [string, Case[]][] = [
-    ['Waiting for the outfitter to acknowledge', cases.filter(c => c.status === 'open' && !c.outfitter_ack_at && c.outfitter)],
-    ['Being discussed', cases.filter(c => c.status === 'open' && (c.outfitter_ack_at || !c.outfitter))],
-    ['Outcome set, still to be completed', cases.filter(c => c.status === 'outcome_set')],
+    ['Held aside: the order is carrying on without these', cases.filter(held)],
+    ['Waiting for the outfitter to acknowledge', cases.filter(c => !held(c) && c.status === 'open' && !c.outfitter_ack_at && c.outfitter)],
+    ['Being discussed', cases.filter(c => !held(c) && c.status === 'open' && (c.outfitter_ack_at || !c.outfitter))],
+    ['Outcome set, still to be completed', cases.filter(c => !held(c) && c.status === 'outcome_set')],
     ['Closed', cases.filter(c => c.status === 'resolved')],
   ];
   return (
@@ -60,14 +64,14 @@ export function RejectionCases({ initialCaseId, onNavigate }: { initialCaseId?: 
       {groups.map(([title, list]) => list.length > 0 && (
         <section key={title} className="space-y-2">
           <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400">{title} · {list.length}</h2>
-          {list.map(c => <CaseCard key={c.id} c={c} open={open === c.id} toggle={() => setOpen(open === c.id ? null : c.id)} canDecide={canDecide} reload={load} onNavigate={onNavigate} />)}
+          {list.map(c => <CaseCard key={c.id} c={c} open={open === c.id} toggle={() => setOpen(open === c.id ? null : c.id)} canDecide={canDecide} isMgmt={isMgmt} reload={load} onNavigate={onNavigate} />)}
         </section>
       ))}
     </div>
   );
 }
 
-function CaseCard({ c, open, toggle, canDecide, reload, onNavigate }: { c: Case; open: boolean; toggle: () => void; canDecide: boolean; reload: () => void; onNavigate: (view: string, id?: string) => void }) {
+function CaseCard({ c, open, toggle, canDecide, isMgmt, reload, onNavigate }: { c: Case; open: boolean; toggle: () => void; canDecide: boolean; isMgmt: boolean; reload: () => void; onNavigate: (view: string, id?: string) => void }) {
   const species = c.doc?.form_data?.species ?? 'Skin'; const client = c.hunt?.clients?.full_name ?? 'Client';
   const [wa, setWa] = useState({ from: 'outfitter', text: '' });
   const [stock, setStock] = useState(''); const [outNote, setOutNote] = useState('');
@@ -89,7 +93,9 @@ function CaseCard({ c, open, toggle, canDecide, reload, onNavigate }: { c: Case;
     if (error) { toast.error(error.message); return false; } toast.success(ok); reload(); return true;
   };
   const message = `Hi ${(c.outfitter?.contact_name ?? c.outfitter?.name ?? '').split(' ')[0]}, the ${species} for ${client} was rejected at the soak at ${WORKSHOP.name}. Reasons: ${c.reasons.join(', ')}. Please open the app to acknowledge this and tell us how you want to proceed: ${WORKSHOP.portalUrl}`;
-  const chip = c.status === 'resolved' ? ['Closed', 'bg-slate-700 text-slate-200'] : c.status === 'outcome_set' ? ['Outcome set', 'bg-sky-900/60 text-sky-200'] : !c.outfitter ? ['No outfitter', 'bg-amber-900/60 text-amber-200'] : c.outfitter_ack_at ? ['Acknowledged', 'bg-green-900/60 text-green-200'] : ['Not acknowledged yet', 'bg-red-900/60 text-red-200'];
+  const heldAside = c.status !== 'resolved' && !!c.order_override_at;
+  const ask = (q: string) => { const r = window.prompt(q); return r && r.trim() ? r.trim() : null; };
+  const chip = heldAside ? ['Held aside', 'bg-red-900/60 text-red-200'] : c.status === 'resolved' ? ['Closed', 'bg-slate-700 text-slate-200'] : c.status === 'outcome_set' ? ['Outcome set', 'bg-sky-900/60 text-sky-200'] : !c.outfitter ? ['No outfitter', 'bg-amber-900/60 text-amber-200'] : c.outfitter_ack_at ? ['Acknowledged', 'bg-green-900/60 text-green-200'] : ['Not acknowledged yet', 'bg-red-900/60 text-red-200'];
 
   return (
     <div className="rounded-2xl border border-slate-700 bg-[#111c26] overflow-hidden">
@@ -126,6 +132,29 @@ function CaseCard({ c, open, toggle, canDecide, reload, onNavigate }: { c: Case;
                   <button disabled={busy || !wa.text.trim()} className="min-h-11 px-4 rounded-lg bg-[#0073ea] text-white font-semibold disabled:opacity-50" onClick={async () => { if (await call('log_case_whatsapp', { p_case: c.id, p_from: wa.from, p_body: wa.text }, 'Added to the conversation')) setWa(p => ({ ...p, text: '' })); }}>Add to the conversation</button>
                 </div>
               )}
+            </div>
+          )}
+
+          {c.status !== 'resolved' && (
+            <div className={`rounded-xl border-2 p-3 space-y-2 ${heldAside ? 'border-red-600 bg-red-950/20' : 'border-slate-600'}`}>
+              <h3 className="text-lg font-bold text-slate-100">The rest of the order</h3>
+              {heldAside ? (
+                <>
+                  <p className="text-sm text-red-200"><strong>The order is carrying on without this trophy.</strong> Overridden by {c.order_override_by_name} on {fmt(c.order_override_at)}: {c.order_override_reason}. The good trophies can be passed on and shipped. This one stays red on the job card until it is solved.</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-slate-300">Until this is solved the order cannot be shipped. If the other trophies are good, management can let them carry on.</p>
+                  {isMgmt ? <button disabled={busy} onClick={async () => { const r = ask('Why can the order carry on without this trophy? (this is recorded)'); if (r) await call('case_override_order', { p_case: c.id, p_reason: r }, 'The order will carry on without this trophy'); }} className="min-h-12 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold disabled:opacity-50">Carry on with the good trophies (management override)</button> : <p className="text-xs text-slate-500">Only management can override this.</p>}
+                </>
+              )}
+              <p className="text-sm text-slate-300">It is solved when:</p>
+              <ul className="text-sm text-slate-300 list-disc pl-5"><li>a replacement arrives and gets a new soak report that is accepted (the trophy then catches up), or</li><li>management cancels this trophy and the quote is credited.</li></ul>
+              <div className="flex flex-wrap gap-2">
+                {canDecide && ['outfitter_replacement', 'stock_replacement'].includes(c.outcome ?? '') && !c.replacement_arrived_at && <button disabled={busy} onClick={async () => { const r = window.prompt('Note about the replacement (optional)'); if (r !== null) await call('case_replacement_arrived', { p_case: c.id, p_note: r || null }, 'Recorded: do a new soak report on the card'); }} className="min-h-11 px-4 rounded-lg border-2 border-green-500 text-green-200 font-bold disabled:opacity-50">The replacement has arrived</button>}
+                {c.replacement_arrived_at && <p className="text-sm text-green-200 self-center">Replacement arrived {fmt(c.replacement_arrived_at)}. A new soak report is needed on the card.</p>}
+                {isMgmt && <button disabled={busy} onClick={async () => { const r = ask('Why is this trophy cancelled? (this is recorded, and the quote will need a credit)'); if (r && window.confirm('Cancel this trophy? Its job card will be cancelled.')) await call('case_cancel_trophy', { p_case: c.id, p_reason: r }, 'Trophy cancelled. Review the quote.'); }} className="min-h-11 px-4 rounded-lg border-2 border-red-500 text-red-200 font-bold disabled:opacity-50">Cancel this trophy</button>}
+              </div>
             </div>
           )}
 

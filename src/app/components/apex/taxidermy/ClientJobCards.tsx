@@ -3,6 +3,7 @@
  * Open a client, see each trophy: where it is, who has it, when it is due, how far the checklist is,
  * and the very next thing to do.
  */
+import { CaseTag, type OpenCase } from './CaseTag';
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2, CheckCircle2, ArrowRight, Eye, EyeOff, Play, Camera } from 'lucide-react';
 import { supabase } from '../../../../lib/supabase';
@@ -48,6 +49,19 @@ export function ClientJobCards({ clientId }: { clientId: string }) {
       openedAt: d.opened_at ?? null, startedAt: d.started_at ?? null, huntStatus: h.status,
       held: !!(h as any).quote_required && !(h as any).work_authorised_at,
     }))), [hunts]);
+
+  // rejected skins that are not solved yet, so the trophy stays red on its job card
+  const [problems, setProblems] = useState<Record<string, OpenCase>>({});
+  useEffect(() => {
+    const ids = hunts.map(h => h.id);
+    if (!ids.length) return;
+    (async () => {
+      const { data } = await (supabase as any).from('quality_cases').select('id, job_doc_id, reasons, order_override_at, order_override_reason').in('hunt_id', ids).neq('status', 'resolved');
+      const m: Record<string, OpenCase> = {};
+      for (const c of data ?? []) m[c.job_doc_id] = { id: c.id, reasons: c.reasons ?? [], held: !!c.order_override_at, overrideReason: c.order_override_reason ?? null };
+      setProblems(m);
+    })();
+  }, [hunts]);
 
   const finished = (r: Row) => r.status === 'completed' || r.status === 'complete' || r.dept === 'done';
   const live = rows.filter(r => !finished(r));
@@ -123,6 +137,7 @@ export function ClientJobCards({ clientId }: { clientId: string }) {
                     <p className="font-semibold text-slate-900 dark:text-slate-100">{r.species || r.title}</p>
                     <p className="text-xs text-slate-500">{r.mount}</p>
                     {/^(custom mount|replica)/i.test(r.mount) && <span className="inline-block text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-400 text-amber-950 mt-1">{r.mount.startsWith('Custom') ? 'CUSTOM — see photos' : 'REPLICA'}</span>}
+                    {problems[r.id] && <CaseTag c={problems[r.id]} />}
                     <p className="text-[11px] font-mono text-slate-400">{r.huntRef} · {r.huntYear}</p>
                     <button type="button" onClick={() => setPhotoRow(r)} className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-[#0073ea] hover:underline"><Camera className="w-3 h-3" />Photos</button>
                     {r.instructions && <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5 max-w-[220px] line-clamp-2" title={r.instructions}>{r.instructions}</p>}
@@ -189,6 +204,7 @@ export function ClientJobCards({ clientId }: { clientId: string }) {
                   <p className="font-semibold text-slate-900 dark:text-slate-100">{r.species || r.title}</p>
                   <p className="text-xs text-slate-500">{r.mount} · <span className="font-mono">{r.huntRef}</span></p>
                   {/^(custom mount|replica)/i.test(r.mount) && <span className="inline-block text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-400 text-amber-950 mt-1">{r.mount.startsWith('Custom') ? 'CUSTOM — see photos' : 'REPLICA'}</span>}
+                  {problems[r.id] && <CaseTag c={problems[r.id]} />}
                 </div>
                 <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full bg-[#0073ea]/10 text-[#0073ea]">
                   {done ? 'Done' : (DEPT_LABELS[r.dept] ?? r.dept)}{!done && idx >= 0 ? ` · ${idx + 1}/${pipeline.length}` : ''}

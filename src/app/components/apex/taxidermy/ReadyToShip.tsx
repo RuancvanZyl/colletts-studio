@@ -18,6 +18,7 @@ interface ShipHunt {
   completedTrophies: number;
   hasPackingList: boolean;
   operator: string | null;
+  heldBack: { species: string; reason: string | null }[];
 }
 
 interface PackingTarget {
@@ -41,7 +42,12 @@ export function ReadyToShip({ onOpenClient, onOpenDocs }: { onOpenClient?: (clie
       .select('id, hunt_id, status, form_data')
       .eq('doc_type', 'job_card')
       .neq('status', 'pending_payment')
+      .neq('status', 'cancelled')
       .order('id'));
+
+    // trophies management has held aside (a rejected skin) so the rest of the order can ship
+    const { data: heldRows } = await (supabase as any).from('quality_cases').select('job_doc_id, order_override_reason').not('order_override_at', 'is', null).neq('status', 'resolved');
+    const heldDocs = new Map<string, string | null>((heldRows ?? []).map((h: any) => [h.job_doc_id, h.order_override_reason]));
 
     const packingLists = await fetchAllRows(() => (supabase as any)
       .from('hunt_documents')
@@ -52,18 +58,19 @@ export function ReadyToShip({ onOpenClient, onOpenDocs }: { onOpenClient?: (clie
     const plHuntIds = new Set(packingLists.map((p: any) => p.hunt_id));
 
     // Group by hunt
-    const huntMap: Record<string, { total: number; completed: number; species: Set<string> }> = {};
+    const huntMap: Record<string, { total: number; completed: number; species: Set<string>; held: { species: string; reason: string | null }[] }> = {};
     for (const doc of docs) {
-      if (!huntMap[doc.hunt_id]) huntMap[doc.hunt_id] = { total: 0, completed: 0, species: new Set() };
+      if (!huntMap[doc.hunt_id]) huntMap[doc.hunt_id] = { total: 0, completed: 0, species: new Set(), held: [] };
       huntMap[doc.hunt_id].total++;
       if (doc.status === 'completed') huntMap[doc.hunt_id].completed++;
+      else if (heldDocs.has(doc.id)) huntMap[doc.hunt_id].held.push({ species: doc.form_data?.species ?? 'Trophy', reason: heldDocs.get(doc.id) ?? null });
       const sp = doc.form_data?.species;
       if (sp) huntMap[doc.hunt_id].species.add(sp);
     }
 
     // Only keep hunts where ALL trophies are completed
     const completedHuntIds = Object.entries(huntMap)
-      .filter(([, v]) => v.total > 0 && v.completed === v.total)
+      .filter(([, v]) => v.total > 0 && v.completed > 0 && v.completed + v.held.length === v.total)
       .map(([id]) => id);
 
     if (completedHuntIds.length === 0) { setHunts([]); setLoading(false); return; }
@@ -91,6 +98,7 @@ export function ReadyToShip({ onOpenClient, onOpenDocs }: { onOpenClient?: (clie
         completedTrophies: stats?.completed ?? 0,
         hasPackingList:   plHuntIds.has(h.id),
         operator:         h.operator,
+        heldBack:         stats?.held ?? [],
       };
     });
 
@@ -145,7 +153,7 @@ export function ReadyToShip({ onOpenClient, onOpenDocs }: { onOpenClient?: (clie
                     )}
                     <Badge className="bg-lime-100 text-lime-700 dark:bg-lime-950 dark:text-lime-300">
                       <CheckCircle2 className="w-3 h-3 mr-1" />
-                      All {hunt.totalTrophies} complete
+                      {hunt.heldBack.length ? `${hunt.completedTrophies} of ${hunt.totalTrophies} ready` : `All ${hunt.totalTrophies} complete`}
                     </Badge>
                     {hunt.hasPackingList && (
                       <Badge variant="outline" className="border-blue-400 text-blue-600 dark:text-blue-400 text-xs">
@@ -153,6 +161,12 @@ export function ReadyToShip({ onOpenClient, onOpenDocs }: { onOpenClient?: (clie
                       </Badge>
                     )}
                   </div>
+                  {hunt.heldBack.length > 0 && (
+                    <div className="mt-2 rounded-lg border border-red-600 bg-red-50 dark:bg-red-950/30 px-3 py-2 text-sm text-red-800 dark:text-red-200">
+                      <p className="font-bold">Held back: {hunt.heldBack.map(x => x.species).join(', ')}</p>
+                      <p>A rejected skin. Management let the rest of the order carry on. It stays red until it is replaced or cancelled.</p>
+                    </div>
+                  )}
                   <p className="text-sm text-slate-500 mt-1">
                     {hunt.huntYear} hunt{hunt.operator ? ` · ${hunt.operator}` : ''}
                   </p>

@@ -104,3 +104,10 @@
 - Decision recorded: the milestone clock does NOT stop or extend for outfitter / client delays (management feedback records the cause).
 - Still open: what the invoice does for each outcome (credit a scrapped skin, charge a stock replacement...); today the case only flags the job card and quote for change.
 - Run supabase/launch/release_059_case_client_deadline_and_ai.sql after 058.
+
+## 2026-10-28 — Carry on with the good trophies (migration 060)
+- A rejected skin no longer has to hold back the rest of the order. Management (admin / studio manager only) uses **"Carry on with the good trophies (management override)"** on the case (`case_override_order`, reason required, recorded with who and when). Ready to Ship then lists the hunt with "N of M ready" and a red "Held back: <species>" note, so the good trophies can be packed and shipped; cancelled cards are ignored there.
+- The problem trophy stays **red** until solved: a red "Rejected skin: held aside / on hold" tag on its job card (Client job cards), a red Problem banner on the order in Progress check (new "Problem trophy" filter), and on Today. Milestone colours are unchanged (the held trophy stays in the calculation; the clock does not stop).
+- Solved by either: **replacement** (lead / management taps "The replacement has arrived" (`case_replacement_arrived`), a new soak report is done and accepted, which auto-resolves the case: the trophy has caught up), or **cancellation** (management `case_cancel_trophy`: job card status becomes cancelled, the case is closed, the quote is flagged for a credit).
+- Not yet: the quote credit / invoice change itself (flag + shortcut to Quotes only), correcting the hunt register for a cancelled trophy (the register check does not yet flag it), partial packing list.
+- Run supabase/launch/release_060_carry_on_with_good_trophies.sql after 059.

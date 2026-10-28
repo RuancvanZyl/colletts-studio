@@ -25,7 +25,7 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql']) {
+for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
@@ -806,6 +806,37 @@ await as(OUT1);
 await db.query(`SELECT public.outfitter_informed_client('${case2}')`);
 const oc2 = (await q(`SELECT public.outfitter_cases() j`))[0].j.find(x => x.id === case2);
 ok(oc2.client_informed_by === 'outfitter' && oc2.client_informed_at && oc2.outcome_at, 'the outfitter confirms they told the client, stamped with the time');
+
+console.log('\nCarrying on with the good trophies');
+await as(ids.mgr2);
+ok((await fails(`SELECT public.case_override_order('${case2}', 'Ship the rest')`))?.includes('Only management'), 'a department lead cannot override the order: it is management only');
+await as(ids.admin);
+ok((await fails(`SELECT public.case_override_order('${case2}', '')`))?.includes('Say why'), 'an override needs a reason');
+await db.query(`SELECT public.case_override_order('${case2}', 'The other animals are good and the client is waiting')`);
+const ovr = (await q(`SELECT order_override_by_name n, order_override_at IS NOT NULL t, status FROM quality_cases WHERE id='${case2}'`))[0];
+ok(ovr.n === 'Ann Admin' && ovr.t && ovr.status !== 'resolved', 'the override is recorded with who and why, and the problem stays open (red) until solved');
+await as(ids.mgr2);
+await db.query(`SELECT public.case_set_outcome('${case2}', 'outfitter_replacement')`);
+await db.query(`SELECT public.case_replacement_arrived('${case2}', 'New skin arrived by courier')`);
+ok((await q(`SELECT replacement_arrived_at IS NOT NULL a FROM quality_cases WHERE id='${case2}'`))[0].a, 'the arrival of the replacement is recorded');
+const rep4 = (await q(`SELECT public.soak_submit('${SK2}', 'in_house', NULL, $1::jsonb, 1, NULL, NULL) id`, [JSON.stringify(good)]))[0].id;
+await db.query(`SELECT public.soak_review('${rep4}', true)`);
+ok((await q(`SELECT status, resolution_note FROM quality_cases WHERE id='${case2}'`))[0].status === 'resolved', 'once the new soak report is accepted the trophy has caught up and the problem is solved');
+// cancel a trophy
+await as(null);
+const SK3 = 'e8000000-0000-0000-0000-000000000003';
+await db.exec(`INSERT INTO hunt_documents (id, hunt_id, doc_type, title, status, current_department, form_data) VALUES ('${SK3}','${rh}','job_card','Soak test 3','in_progress','salting','{"species":"Warthog","mount_type":"Shoulder Mount"}')`);
+await db.exec(`UPDATE hunt_documents SET current_department='tannery' WHERE id='${SK3}'`);
+await as(ids.mgr2);
+await db.query(`SELECT public.job_accept('${SK3}')`);
+const rep5 = (await q(`SELECT public.soak_submit('${SK3}', 'in_house', NULL, $1::jsonb, 20, NULL, NULL) id`, [JSON.stringify({ ...good, rubbery: true })]))[0].id;
+const case3 = (await q(`SELECT public.soak_review('${rep5}', false, ARRAY['Rubbery']) id`))[0].id;
+ok((await fails(`SELECT public.case_cancel_trophy('${case3}', 'No replacement possible')`))?.includes('Only management'), 'only management can cancel a trophy');
+await as(ids.admin);
+ok((await fails(`SELECT public.case_cancel_trophy('${case3}', '')`))?.includes('Say why'), 'cancelling needs a reason');
+await db.query(`SELECT public.case_cancel_trophy('${case3}', 'Client agreed to drop it from the order')`);
+const cn = (await q(`SELECT d.status ds, c.status cs, c.needs_quote_change nq, c.cancelled_by_name n FROM quality_cases c JOIN hunt_documents d ON d.id = c.job_doc_id WHERE c.id='${case3}'`))[0];
+ok(cn.ds === 'cancelled' && cn.cs === 'resolved' && cn.nq && cn.n === 'Ann Admin', 'cancelling closes the problem, cancels that job card and flags the quote for a credit');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

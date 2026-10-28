@@ -31,7 +31,7 @@ export function TodayScreen({ onNavigate }: { onNavigate: (view: string, clientI
   const changes = quoteRows.filter(r => r.stage === 'declined').length;
   const awaitingPay = quoteRows.filter(r => r.stage === 'awaiting_deposit').length;
 
-  const [docs, setDocs] = useState({ toCheck: 0, fromOutfitter: 0, unreadChat: 0, unverified: 0, lateAccept: 0, notAcked: 0, needOutcome: 0, clientOverdue: 0 });
+  const [docs, setDocs] = useState({ toCheck: 0, fromOutfitter: 0, unreadChat: 0, unverified: 0, lateAccept: 0, notAcked: 0, needOutcome: 0, clientOverdue: 0, heldAside: 0 });
   useEffect(() => {
     (async () => {
       const db = supabase as any;
@@ -39,8 +39,8 @@ export function TodayScreen({ onNavigate }: { onNavigate: (view: string, clientI
       const { count } = await db.from('outfitter_messages').select('id', { count: 'exact', head: true }).eq('sender', 'outfitter').is('read_at', null);
       const { count: unv } = await db.from('registered_numbers').select('id', { count: 'exact', head: true }).is('verified_at', null);
       const { count: late } = await db.from('job_card_legs').select('id', { count: 'exact', head: true }).is('accepted_at', null).is('completed_at', null).lt('sent_at', new Date(Date.now() - 24 * 3_600_000).toISOString());
-      const { data: qc } = await db.from('quality_cases').select('status, outfitter_id, outfitter_ack_at, outcome, outcome_at, client_informed_at').neq('status', 'resolved');
-      setDocs({ clientOverdue: (qc ?? []).filter((x: any) => informDaysLeft(x) !== null && (informDaysLeft(x) as number) < 0).length, notAcked: (qc ?? []).filter((x: any) => x.outfitter_id && !x.outfitter_ack_at).length, needOutcome: (qc ?? []).filter((x: any) => x.status === 'open').length, lateAccept: late ?? 0, unverified: unv ?? 0, toCheck: (v ?? []).reduce((n: number, r: any) => n + +r.to_check, 0), fromOutfitter: (v ?? []).filter((r: any) => +r.waiting_outfitter > 0).length, unreadChat: count ?? 0 });
+      const { data: qc } = await db.from('quality_cases').select('status, outfitter_id, outfitter_ack_at, outcome, outcome_at, client_informed_at, order_override_at').neq('status', 'resolved');
+      setDocs({ heldAside: (qc ?? []).filter((x: any) => x.order_override_at).length, clientOverdue: (qc ?? []).filter((x: any) => informDaysLeft(x) !== null && (informDaysLeft(x) as number) < 0).length, notAcked: (qc ?? []).filter((x: any) => x.outfitter_id && !x.outfitter_ack_at).length, needOutcome: (qc ?? []).filter((x: any) => x.status === 'open').length, lateAccept: late ?? 0, unverified: unv ?? 0, toCheck: (v ?? []).reduce((n: number, r: any) => n + +r.to_check, 0), fromOutfitter: (v ?? []).filter((r: any) => +r.waiting_outfitter > 0).length, unreadChat: count ?? 0 });
     })().catch(() => {});
   }, []);
 
@@ -62,6 +62,7 @@ export function TodayScreen({ onNavigate }: { onNavigate: (view: string, clientI
     { n: docs.fromOutfitter, text: plural(docs.fromOutfitter, 'hunt is waiting on documents from the outfitter', 'hunts are waiting on documents from outfitters'), go: 'documents', tone: 'blue' },
     { n: feedbackCount, text: plural(feedbackCount, 'order missed a milestone and needs management feedback', 'orders missed a milestone and need management feedback'), go: 'progress-check', tone: 'red' },
     { n: docs.notAcked, text: plural(docs.notAcked, 'rejected skin: the outfitter has not acknowledged it yet', 'rejected skins: the outfitter has not acknowledged them yet'), go: 'rejections', tone: 'red' },
+    { n: docs.heldAside, text: plural(docs.heldAside, 'trophy is held aside so the order can carry on, and stays red until it is solved', 'trophies are held aside so their orders can carry on, and stay red until solved'), go: 'rejections', tone: 'red' },
     { n: docs.clientOverdue, text: plural(docs.clientOverdue, 'rejected skin: the outfitter has not told the client in 3 weeks, so the workshop must', 'rejected skins: the outfitter has not told the client in 3 weeks, so the workshop must'), go: 'rejections', tone: 'red' },
     { n: docs.needOutcome, text: plural(docs.needOutcome, 'rejected skin still needs an outcome', 'rejected skins still need an outcome'), go: 'rejections', tone: 'amber' },
     { n: docs.lateAccept, text: plural(docs.lateAccept, 'job card has waited over 24 hours to be accepted by a department lead', 'job cards have waited over 24 hours to be accepted by a department lead'), go: 'incoming', tone: 'amber' },
