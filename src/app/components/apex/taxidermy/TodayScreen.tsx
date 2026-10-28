@@ -30,14 +30,15 @@ export function TodayScreen({ onNavigate }: { onNavigate: (view: string, clientI
   const changes = quoteRows.filter(r => r.stage === 'declined').length;
   const awaitingPay = quoteRows.filter(r => r.stage === 'awaiting_deposit').length;
 
-  const [docs, setDocs] = useState({ toCheck: 0, fromOutfitter: 0, unreadChat: 0, unverified: 0 });
+  const [docs, setDocs] = useState({ toCheck: 0, fromOutfitter: 0, unreadChat: 0, unverified: 0, lateAccept: 0 });
   useEffect(() => {
     (async () => {
       const db = supabase as any;
       const { data: v } = await db.from('v_hunt_documents').select('to_check, waiting_outfitter');
       const { count } = await db.from('outfitter_messages').select('id', { count: 'exact', head: true }).eq('sender', 'outfitter').is('read_at', null);
       const { count: unv } = await db.from('registered_numbers').select('id', { count: 'exact', head: true }).is('verified_at', null);
-      setDocs({ unverified: unv ?? 0, toCheck: (v ?? []).reduce((n: number, r: any) => n + +r.to_check, 0), fromOutfitter: (v ?? []).filter((r: any) => +r.waiting_outfitter > 0).length, unreadChat: count ?? 0 });
+      const { count: late } = await db.from('job_card_legs').select('id', { count: 'exact', head: true }).is('accepted_at', null).is('completed_at', null).lt('sent_at', new Date(Date.now() - 24 * 3_600_000).toISOString());
+      setDocs({ lateAccept: late ?? 0, unverified: unv ?? 0, toCheck: (v ?? []).reduce((n: number, r: any) => n + +r.to_check, 0), fromOutfitter: (v ?? []).filter((r: any) => +r.waiting_outfitter > 0).length, unreadChat: count ?? 0 });
     })().catch(() => {});
   }, []);
 
@@ -58,6 +59,7 @@ export function TodayScreen({ onNavigate }: { onNavigate: (view: string, clientI
     { n: docs.unreadChat, text: plural(docs.unreadChat, 'unread message from an outfitter', 'unread messages from outfitters'), go: 'outfitter-chat', tone: 'amber' },
     { n: docs.fromOutfitter, text: plural(docs.fromOutfitter, 'hunt is waiting on documents from the outfitter', 'hunts are waiting on documents from outfitters'), go: 'documents', tone: 'blue' },
     { n: feedbackCount, text: plural(feedbackCount, 'order missed a milestone and needs management feedback', 'orders missed a milestone and need management feedback'), go: 'progress-check', tone: 'red' },
+    { n: docs.lateAccept, text: plural(docs.lateAccept, 'job card has waited over 24 hours to be accepted by a department lead', 'job cards have waited over 24 hours to be accepted by a department lead'), go: 'incoming', tone: 'amber' },
     { n: redCount, text: plural(redCount, 'order is red: more than one milestone missed', 'orders are red: more than one milestone missed'), go: 'progress-check', tone: 'red' },
     { n: deadlinesOverdue.length, text: plural(deadlinesOverdue.length, 'hunt is past its deadline', 'hunts are past their deadline'), go: 'deadline-watch', tone: 'red' },
     { n: attention?.stalledRed ?? 0, text: plural(attention?.stalledRed ?? 0, 'animal has been stuck for far too long', 'animals have been stuck for far too long'), go: 'daily-todo', tone: 'red' },

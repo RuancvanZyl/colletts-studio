@@ -11,6 +11,7 @@ import { useWorkshopProgress, type HuntProgress } from '../../../../lib/hooks/us
 import { expectation, type AutoStatus } from '../../../../lib/progress';
 import { ALL_DEPARTMENTS } from '../../../../lib/pipeline';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
+import { LegRecords } from './LegRecords';
 import { daysText, deptLabel, fmtDate, processChips, shortMilestone, STATUS_CHIP } from './progressUi';
 
 type Filter = 'all' | 'red' | 'yellow' | 'needs_feedback' | 'green' | 'no_clock' | 'unchecked';
@@ -25,6 +26,7 @@ export function ProgressCheck({ initialHuntId, onNavigate }: { initialHuntId?: s
   const [search, setSearch] = useState('');
   const [behindFor, setBehindFor] = useState<HuntProgress | null>(null);
   const [feedbackFor, setFeedbackFor] = useState<HuntProgress | null>(null);
+  const [recordsFor, setRecordsFor] = useState<HuntProgress | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const focusRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => { if (initialHuntId && !loading) focusRef.current?.scrollIntoView({ block: 'center' }); }, [initialHuntId, loading]);
@@ -154,6 +156,8 @@ export function ProgressCheck({ initialHuntId, onNavigate }: { initialHuntId?: s
 
               {r && <p className="text-sm text-slate-400">Last checked by <strong className="text-slate-200">{r.reviewed_by_name ?? 'management'}</strong> on {fmtDate(r.reviewed_at)}: <strong className={r.status === 'behind' ? 'text-red-300' : 'text-green-300'}>{r.status === 'behind' ? 'Behind' : 'On track'}</strong>{r.held_up_in ? ` · held up in ${deptLabel(r.held_up_in)}` : ''}{r.note ? ` · "${r.note}"` : ''}</p>}
 
+              {canReview && <button className="text-sm text-sky-300 underline min-h-10" onClick={() => setRecordsFor(h)}>Department records (who accepted and completed each stage)</button>}
+
               {canReview && h.a.auto !== 'no_clock' && (
                 <div className="grid grid-cols-2 gap-2 pt-1">
                   <button disabled={busy === h.huntId} onClick={() => mark(h, 'on_track')} className="min-h-14 rounded-xl border-2 border-green-600 text-green-200 text-lg font-bold hover:bg-green-950/40 disabled:opacity-50">On track</button>
@@ -165,6 +169,7 @@ export function ProgressCheck({ initialHuntId, onNavigate }: { initialHuntId?: s
         })}
       </div>
 
+      {recordsFor && <LegRecords huntId={recordsFor.huntId} client={recordsFor.clientName} onClose={() => setRecordsFor(null)} />}
       {feedbackFor && <FeedbackPopup h={feedbackFor} onClose={() => setFeedbackFor(null)} onSave={async f => { if (await giveFeedback(feedbackFor, f)) setFeedbackFor(null); }} />}
       {behindFor && <BehindPopup h={behindFor} onClose={() => setBehindFor(null)} onSave={async (note, dept) => { if (await mark(behindFor, 'behind', note, dept)) setBehindFor(null); }} />}
     </div>

@@ -25,7 +25,7 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql']) {
+for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
@@ -663,6 +663,60 @@ await db.query(`SELECT public.staff_give_milestone_feedback($1, 'm2', 'red', 'Ta
 ok((await q(`SELECT count(*)::int n FROM milestone_feedback WHERE hunt_id=$1`, [rh]))[0].n === 2, 'each missed milestone gets its own feedback and the history is kept');
 await as(OUT1);
 ok((await q(`SELECT count(*)::int n FROM milestone_feedback`))[0].n === 0, 'outfitters cannot see management feedback');
+
+console.log('\nDepartment hand-over');
+const HD = 'e7000000-0000-0000-0000-000000000001';
+await as(null);
+await db.exec(`INSERT INTO client_hunts (id, client_id, status) VALUES ('d7000000-0000-0000-0000-000000000001','c0000000-0000-0000-0000-000000000001','active')`);
+await db.exec(`INSERT INTO hunt_documents (id, hunt_id, doc_type, title, status, current_department, form_data) VALUES ('${HD}','d7000000-0000-0000-0000-000000000001','job_card','Handover test','in_progress','receiving','{"species":"Kudu","mount_type":"Full Mount"}')`);
+await db.exec(`UPDATE staff_profiles SET manages_departments = ARRAY['skinning','zzdept','mounting'], works_in = ARRAY['skinning','zzdept','mounting'] WHERE id='${ids.mgr}'`);
+await db.exec(`UPDATE staff_profiles SET works_in = ARRAY['skinning','zzdept'] WHERE id='${ids.worker}'`);
+await db.exec(`UPDATE hunt_documents SET current_department='zzdept' WHERE id='${HD}'`);
+ok((await q(`SELECT count(*)::int n FROM job_card_legs WHERE job_doc_id='${HD}' AND department='zzdept' AND accepted_at IS NULL AND completed_at IS NULL`))[0].n === 1, 'a card entering a department opens a leg that waits to be accepted');
+await as(ids.worker);
+ok((await fails(`SELECT public.job_accept('${HD}')`))?.includes('lead can accept'), 'a department member who is not the lead cannot accept');
+ok((await q(`SELECT jsonb_array_length(public.my_incoming_cards()) n`))[0].n === 0, 'and does not see the card as theirs to accept');
+ok((await fails(`UPDATE hunt_documents SET current_department='zzdept2' WHERE id='${HD}'`))?.includes('Not accepted yet'), 'work cannot be completed on a card that has not been accepted');
+await as(ids.mgr2);
+ok((await fails(`SELECT public.job_accept('${HD}')`))?.includes('lead can accept'), 'the lead of another department cannot accept it either');
+await as(ids.mgr);
+ok((await q(`SELECT public.my_incoming_cards() j`))[0].j.some(x => x.doc_id === HD && x.department === 'zzdept' && x.client === 'Test Client'), 'the lead sees the card waiting with the client and animal');
+await db.query(`SELECT public.job_accept('${HD}')`);
+await db.query(`SELECT public.job_accept('${HD}')`);
+ok(!(await q(`SELECT public.my_incoming_cards() j`))[0].j.some(x => x.doc_id === HD), 'once accepted it is no longer waiting (and accepting twice is harmless)');
+ok((await q(`SELECT count(*)::int n FROM job_card_legs`))[0].n === 0, 'time spent in departments is not visible to a department lead');
+await as(ids.admin);
+const leg1 = (await q(`SELECT accepted_by_name, accepted_at IS NOT NULL a FROM job_card_legs WHERE job_doc_id='${HD}' AND department='zzdept'`))[0];
+ok(leg1.accepted_by_name === 'Mo Manager' && leg1.a, 'management sees who accepted it and when');
+await as(ids.worker);
+await db.query(`UPDATE hunt_documents SET current_department='zzdept2' WHERE id='${HD}'`);
+await as(ids.admin);
+const closed = (await q(`SELECT completed_by_name, completed_at IS NOT NULL c FROM job_card_legs WHERE job_doc_id='${HD}' AND department='zzdept'`))[0];
+ok(closed.completed_by_name === 'Wally Worker' && closed.c, 'completing the stage closes the leg with who finished it and when');
+ok((await q(`SELECT count(*)::int n FROM job_card_legs WHERE job_doc_id='${HD}' AND department='zzdept2' AND accepted_at IS NULL`))[0].n === 1, 'and the next department gets the card to accept');
+await as(null);
+await db.exec(`UPDATE job_card_legs SET sent_at = now() - interval '30 hours' WHERE job_doc_id='${HD}' AND department='zzdept2'`);
+await as(ids.admin);
+ok((await q(`SELECT count(*)::int n FROM job_card_legs WHERE accepted_at IS NULL AND completed_at IS NULL AND sent_at < now() - interval '24 hours'`))[0].n === 1, 'a card waiting more than 24 hours can be found for the flag');
+await as(null);
+await db.exec(`UPDATE staff_profiles SET works_in = ARRAY['skinning','zzdept','zzdept2'] WHERE id='${ids.worker}'`);
+await as(ids.worker);
+await db.query(`SELECT public.job_accept('${HD}')`);
+await as(ids.admin);
+ok((await q(`SELECT count(*)::int n FROM job_card_legs WHERE job_doc_id='${HD}' AND department='zzdept2' AND accepted_at IS NOT NULL`))[0].n === 1, 'a department with no lead can have its own staff accept');
+
+// Mounting needs a photo
+await as(null);
+await db.exec(`UPDATE hunt_documents SET current_department='mounting' WHERE id='${HD}'`);
+await as(ids.mgr);
+for (const it of await q(`SELECT id FROM department_checklist_items WHERE dept_key='mounting' AND is_active`)) await db.query(`SELECT public.job_check_item('${HD}', '${it.id}', true)`);
+await db.query(`SELECT public.job_accept('${HD}')`);
+ok((await fails(`UPDATE hunt_documents SET current_department='finishing' WHERE id='${HD}'`))?.includes('time-stamped photo'), 'a card cannot leave Mounting without a completion photo');
+await db.query(`UPDATE hunt_documents SET current_department='finishing', completion_photo_paths=ARRAY['job-completions/x/mounting.jpg'] WHERE id='${HD}'`);
+ok((await q(`SELECT current_department d FROM hunt_documents WHERE id='${HD}'`))[0].d === 'finishing', 'with the photo it moves on');
+await as(ids.admin);
+await db.query(`SELECT public.job_force_advance('${HD}', 'zzdept3', 'in_progress', 'Test override')`);
+ok((await q(`SELECT override_reason FROM job_card_legs WHERE job_doc_id='${HD}' AND department='finishing'`))[0].override_reason !== null, 'a management override is recorded on the leg');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

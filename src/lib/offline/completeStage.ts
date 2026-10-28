@@ -4,9 +4,10 @@
  * so a record never points at a photo that is not there.
  */
 import { supabase } from '../supabase';
-import { getNextDepartment } from '../pipeline';
+import { getNextDepartment, DEPT_LABELS } from '../pipeline';
 import { blobPut, blobGet, blobDelete } from './idb';
 import { classify, performActionWith, registerExecutor } from './outbox';
+import { stampPhoto } from './photos';
 import type { Executor } from './outboxCore';
 
 export interface CompleteArgs {
@@ -106,7 +107,10 @@ export const completeStageExecutor: Executor = async a => {
  */
 export async function completeStage(opts: { doc: string; dept: string; mountType: string; notes: string; files: Blob[]; staffId: string | null; staffName: string | null }) {
   const blobIds: string[] = [];
-  for (const f of opts.files) { const id = crypto.randomUUID(); await blobPut(id, f); blobIds.push(id); }
+  // Mounting and Finishing: the date, time, department and name are printed on the photo itself
+  const stamp = ['mounting', 'finishing'].includes(opts.dept)
+    ? `${new Date().toLocaleString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })} · ${DEPT_LABELS[opts.dept] ?? opts.dept} · ${opts.staffName ?? 'Staff'}` : null;
+  for (const f of opts.files) { const id = crypto.randomUUID(); await blobPut(id, stamp ? await stampPhoto(f, stamp) : f); blobIds.push(id); }
   const args: CompleteArgs = { doc: opts.doc, dept: opts.dept, mountType: opts.mountType, notes: opts.notes, blobIds, staffId: opts.staffId, staffName: opts.staffName };
   const r = await performActionWith('job_complete', args as unknown as Record<string, unknown>, opts.staffId);
   if (r.error) for (const id of blobIds) await blobDelete(id);   // refused → the photos are not needed

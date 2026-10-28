@@ -50,6 +50,7 @@ import { PermitNumbers } from './taxidermy/PermitNumbers';
 import { InstallBanner } from './shared/InstallApp';
 import { DepartmentProgress } from './taxidermy/DepartmentProgress';
 import { ProgressCheck } from './taxidermy/ProgressCheck';
+import { IncomingCards } from './taxidermy/IncomingCards';
 import { Quotes } from './taxidermy/Quotes';
 import { Outfitters } from './taxidermy/Outfitters';
 import { PaymentsLedger } from './taxidermy/PaymentsLedger';
@@ -120,7 +121,8 @@ type TaxidermyView =
   | 'document-types'
   | 'permit-numbers'
   | 'dept-progress'
-  | 'progress-check';
+  | 'progress-check'
+  | 'incoming';
 
 interface NavItem {
   view: TaxidermyView;
@@ -317,7 +319,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
   const canSeeView = (view: TaxidermyView): boolean => {
     if (isAdmin) return true;
     // Everyone gets their tasks + daily list + workshop instructions
-    if (['daily-todo', 'tasks', 'workshop-brief', 'messages'].includes(view)) return true;
+    if (['daily-todo', 'tasks', 'workshop-brief', 'messages', 'incoming'].includes(view)) return true;
     if (view === 'stations') return STATIONS.some(st => canSeeView(st.view as TaxidermyView));
     // department managers also handle client conversations
     if (isManager && view === 'client-inbox') return true;
@@ -357,6 +359,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       { view: 'hunt-archive',         label: 'Archive' },
     ] },
     { key: 'workshop', label: 'Workshop', icon: Scissors, tabs: [
+      { view: 'incoming',       label: 'Incoming' },
       { view: 'workshop-brief', label: 'Job cards' },
       { view: 'stations',       label: 'Stations' },
       { view: 'dispatch',       label: 'Assign work' },
@@ -415,6 +418,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'document-types':  return <DocumentTypesEditor />;
       case 'permit-numbers':  return <PermitNumbers />;
       case 'outfitter-chat':  return <OutfitterInbox key={navClientId ?? 'all'} initialHuntId={navClientId} onOpenDocs={(id) => navigate('documents', id)} />;
+      case 'incoming':        return <IncomingCards />;
       case 'dept-progress':   return <DepartmentProgress onNavigate={navigate} />;
       case 'progress-check':  return <ProgressCheck key={navClientId ?? 'all'} initialHuntId={navClientId} onNavigate={navigate} />;
       case 'quotes':          return <Quotes key={navClientId ?? 'all'} initialHuntId={navClientId} />;

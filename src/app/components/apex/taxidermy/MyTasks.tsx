@@ -9,6 +9,7 @@ import { Textarea } from '../../ui/textarea';
 import { AlertDashboard } from './AlertDashboard';
 import { cachedFetch, pendingActions } from '../../../../lib/offline/outbox';
 import { JobPhotosButton } from '../shared/TrophyPhotos';
+import { IncomingCards } from './IncomingCards';
 import { completeStage as completeStageAction } from '../../../../lib/offline/completeStage';
 import { PRIORITY_META, dueState, taskStatus, useChecklists, markJobOpened, markJobStarted } from '../../../../lib/hooks/useTaskFlow';
 
@@ -436,6 +437,9 @@ export function MyTasks() {
           <p className="text-sm mt-1 text-[#7AADB8]">No trophies in your queue right now. Check back after new arrivals.</p>
         </div>
       )}
+
+      {/* Cards waiting for the lead to accept (shows only for leads, only when there are some) */}
+      <IncomingCards compact onChanged={load} />
 
       {/* Task count */}
       {!loading && tasks.length > 0 && (

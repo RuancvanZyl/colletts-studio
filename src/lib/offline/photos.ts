@@ -38,6 +38,32 @@ export async function shrinkPhoto(file: File, maxSide = 1800, quality = 0.82): P
   } catch { return file; }
 }
 
+/**
+ * Print the date, time, department and name onto the picture itself, along the bottom, so it can be seen on the photo wherever it ends up.
+ * Used for Mounting and Finishing, where a photo is the proof the stage was done. Falls back to the plain photo if the browser cannot draw it.
+ */
+export async function stampPhoto(file: Blob, text: string): Promise<Blob> {
+  try {
+    if (!file.type.startsWith('image/')) return file;
+    const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' } as any);
+    const canvas = document.createElement('canvas');
+    canvas.width = bmp.width; canvas.height = bmp.height;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(bmp, 0, 0);
+    const size = Math.max(16, Math.round(bmp.height / 34));
+    ctx.font = `bold ${size}px sans-serif`;
+    const pad = Math.round(size * 0.6);
+    ctx.fillStyle = 'rgba(0,0,0,0.62)';
+    ctx.fillRect(0, bmp.height - size - pad * 2, bmp.width, size + pad * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, pad, bmp.height - size / 2 - pad);
+    bmp.close?.();
+    const out: Blob | null = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.85));
+    return out ?? file;
+  } catch { return file; }
+}
+
 export const photoPath = (clientId: string, id: string) => `trophy-photos/${clientId}/${id}.jpg`;
 
 export const addPhotosExecutor: Executor = async a => {

@@ -8,7 +8,7 @@ CREATE TABLE public.client_hunts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
 CREATE TABLE public.hunt_documents (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), hunt_id uuid REFERENCES public.client_hunts(id), doc_type text, title text,
   status text DEFAULT 'in_progress', current_department text, form_data jsonb DEFAULT '{}', assigned_to uuid REFERENCES public.staff_profiles(id),
-  admin_notes text, last_moved_at timestamptz, completion_notes text);
+  admin_notes text, last_moved_at timestamptz, completion_notes text, completion_photo_paths text[] DEFAULT '{}');
 CREATE TABLE public.client_messages (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), client_id uuid NOT NULL REFERENCES public.clients(id), hunt_id uuid REFERENCES public.client_hunts(id),
   direction text NOT NULL, channel text DEFAULT 'email', subject text, body text NOT NULL, html_body text, sent_by uuid REFERENCES public.staff_profiles(id),
