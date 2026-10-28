@@ -1,55 +1,58 @@
 /**
- * The condition report done when an animal arrives: the visual check (fresh, salted...) and anything wrong that was seen.
+ * The condition report done when an animal arrives. The only thing that must be chosen is Fresh or Salted.
+ * Everything else is optional: if it is not ticked it is simply not recorded.
  * It is part of the animal's receiving record so it can be printed, shown to the hunter and looked at again if there is a query.
  */
 
-/** The visual check of the preservation state (the "Visual check" column on the receiving sheet). */
+/** The one required choice. */
 export const VISUAL_CHECKS: { value: string; label: string }[] = [
-  { value: 'fresh',      label: 'Fresh' },
-  { value: 'frozen',     label: 'Frozen' },
-  { value: 'salted',     label: 'Salted' },
-  { value: 'dry_salted', label: 'Dry salted' },
-  { value: 'wet_salted', label: 'Wet salted' },
-  { value: 'dry',        label: 'Dry' },
-  { value: 'other',      label: 'Other' },
+  { value: 'fresh',  label: 'Fresh' },
+  { value: 'salted', label: 'Salted' },
+];
+/** Older check-ins used other words; they still display correctly. */
+const LEGACY_STATES: Record<string, string> = { frozen: 'Frozen', dry_salted: 'Dry salted', wet_salted: 'Wet salted', dry: 'Dry', other: 'Other' };
+
+export const SALT_QUALITY: { value: string; label: string }[] = [
+  { value: 'clean', label: 'Clean salt' },
+  { value: 'dirty', label: 'Dirty salt' },
 ];
 
-/** Things to look for and tick if seen. If any is ticked, a photo is required as evidence. */
+/** Tick if seen. Nothing ticked means nothing is recorded. */
 export const CONDITION_ISSUES: { value: string; label: string }[] = [
-  { value: 'hair_slip',     label: 'Hair slip' },
-  { value: 'holes_cuts',    label: 'Holes or cuts in the skin' },
   { value: 'bullet_damage', label: 'Bullet damage' },
-  { value: 'maggots',       label: 'Flies or maggots' },
-  { value: 'smell',         label: 'Smell (starting to rot)' },
-  { value: 'freezer_burn',  label: 'Freezer burn' },
-  { value: 'poorly_salted', label: 'Not properly salted' },
-  { value: 'cape_short',    label: 'Cape cut too short' },
-  { value: 'horn_damage',   label: 'Horns damaged or loose' },
-  { value: 'skull_damage',  label: 'Skull damaged' },
-  { value: 'missing_parts', label: 'Parts missing' },
+  { value: 'ears_not_turned', label: 'Ears not turned' },
+  { value: 'hair_slip',     label: 'Hair slip' },
+  { value: 'bug_damage',    label: 'Bug damage' },
+];
+
+export const SKULL_CONDITION: { value: string; label: string }[] = [
+  { value: 'good', label: 'Good' },
+  { value: 'fair', label: 'Fair (minimal damage)' },
+  { value: 'bad',  label: 'Bad' },
 ];
 
 export interface ConditionReport {
-  state: string;            // one of VISUAL_CHECKS
-  none: boolean;            // "no problems seen"
-  issues: string[];         // ticked from CONDITION_ISSUES
+  state: string;            // fresh | salted
+  salt?: string;            // clean | dirty (only when salted)
+  issues: string[];
+  skull?: string;           // good | fair | bad
   notes: string;
   recorded_by: string;
   recorded_at: string;
 }
 
 const label = (list: { value: string; label: string }[], v: string) => list.find(x => x.value === v)?.label ?? v;
-export const visualCheckLabel = (v: string | null | undefined) => v ? label(VISUAL_CHECKS, v) : '';
+export const visualCheckLabel = (v: string | null | undefined) => v ? (label(VISUAL_CHECKS, v) === v ? (LEGACY_STATES[v] ?? v) : label(VISUAL_CHECKS, v)) : '';
 export const issueLabel = (v: string) => label(CONDITION_ISSUES, v);
 
-/** A report is complete when the visual check is chosen and the person said either "no problems" or what they saw. */
-export const conditionOk = (c: { condition: string; noIssues: boolean; issues: string[]; photos: unknown[] }) =>
-  !!c.condition && (c.noIssues || c.issues.length > 0) && (c.issues.length === 0 || c.photos.length > 0);
+/** A report is complete as soon as Fresh or Salted is chosen. */
+export const conditionOk = (c: { condition: string }) => !!c.condition;
 
-/** One line for a printout or a hunter's screen: "Salted · no problems seen" / "Fresh · hair slip, smell". */
+/** One line for a printout or a hunter's screen: "Salted (dirty salt) · hair slip · skull fair". */
 export function conditionSummary(report: Partial<ConditionReport> | null | undefined, fallbackState?: string | null): string {
   const state = visualCheckLabel(report?.state ?? fallbackState);
-  if (!report || (!report.none && !(report.issues ?? []).length)) return state;
-  const seen = report.none ? 'no problems seen' : (report.issues ?? []).map(issueLabel).join(', ').toLowerCase();
-  return [state, seen].filter(Boolean).join(' · ');
+  const parts = [state && report?.salt ? `${state} (${label(SALT_QUALITY, report.salt).toLowerCase()})` : state];
+  if ((report?.issues ?? []).length) parts.push((report!.issues ?? []).map(issueLabel).join(', ').toLowerCase());
+  if (report?.skull) parts.push(`skull ${label(SKULL_CONDITION, report.skull).replace(/ \(.*\)/, '').toLowerCase()}`);
+  return parts.filter(Boolean).join(' · ');
 }

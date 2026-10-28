@@ -13,6 +13,7 @@ import { supabase } from '../../../../lib/supabase';
 import { useAuth } from '../../../../lib/auth';
 import { toast } from 'sonner';
 import { JobPhotosButton } from './TrophyPhotos';
+import { SoakReportButton } from '../taxidermy/SoakReportButton';
 import type { DeptJob } from '../../../../lib/hooks/useDeptJobs';
 import { completeStage as completeStageAction } from '../../../../lib/offline/completeStage';
 import { PRIORITY_META, dueState, taskStatus, useChecklists, markJobOpened, markJobStarted } from '../../../../lib/hooks/useTaskFlow';
@@ -272,6 +273,7 @@ export function DeptJobList({
                 {job.clientName}
               </p>
               <JobPhotosButton className="mt-2" docId={job.docId} dept={job.currentDept} huntId={job.huntId} title={`${job.species} — ${job.clientName}`} />
+              {job.currentDept === 'tannery' && <SoakReportButton docId={job.docId} huntId={job.huntId} species={job.species} />}
             </div>
           </div>
 

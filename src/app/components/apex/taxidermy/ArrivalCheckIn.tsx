@@ -20,13 +20,13 @@ import { InvitePanel } from '../shared/InvitePanel';
 import { SpeciesField } from '../shared/AnimalPicker';
 import { TrophyLabels } from './TrophyLabels';
 import type { TrophyPart } from '../../../../lib/trophyParts';
-import { CONDITION_ISSUES, VISUAL_CHECKS, conditionOk, conditionSummary } from '../../../../lib/condition';
+import { CONDITION_ISSUES, SALT_QUALITY, SKULL_CONDITION, VISUAL_CHECKS, conditionOk, conditionSummary } from '../../../../lib/condition';
 
 interface FoundClient { id: string; full_name: string; email: string | null; phone: string | null; client_number: string | null; client_type: string | null; auth_user_id: string | null }
-interface Animal { id: string; docId?: string; mount?: string; species: string; tag: string; condition: string; noIssues: boolean; issues: string[]; parts: string[]; other: string; notes: string; photos: File[]; previews: string[] }
+interface Animal { id: string; docId?: string; mount?: string; species: string; tag: string; condition: string; salt: string; skull: string; issues: string[]; parts: string[]; other: string; notes: string; photos: File[]; previews: string[] }
 interface OpenHunt { id: string; ref_number: string | null; year: string; status: string | null }
 
-const emptyAnimal = (): Animal => ({ id: crypto.randomUUID(), species: '', tag: '', condition: '', noIssues: false, issues: [], parts: [], other: '', notes: '', photos: [], previews: [] });
+const emptyAnimal = (): Animal => ({ id: crypto.randomUUID(), species: '', tag: '', condition: '', salt: '', skull: '', issues: [], parts: [], other: '', notes: '', photos: [], previews: [] });
 
 const field = 'w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-3 min-h-11 text-base placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0073ea]';
 const label = 'block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1';
@@ -170,7 +170,7 @@ export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
           received_parts: a.parts.map(code => ({ code, label: RECEIVED_PARTS.find(p => p.code === code)?.label ?? code })),
           received_other: a.other.trim(), received_at: receivedAt, received_by: profile?.full_name ?? '',
           tag_number: a.tag.trim(), condition: a.condition, notes: a.notes.trim(),
-          condition_report: { state: a.condition, none: a.noIssues && a.issues.length === 0, issues: a.issues, notes: a.notes.trim(), recorded_by: profile?.full_name ?? '', recorded_at: receivedAt },
+          condition_report: { state: a.condition, ...(a.condition === 'salted' && a.salt ? { salt: a.salt } : {}), issues: a.issues, ...(a.skull ? { skull: a.skull } : {}), notes: a.notes.trim(), recorded_by: profile?.full_name ?? '', recorded_at: receivedAt },
         };
         let docId: string; let docHunt = huntId;
         if (a.docId) {
@@ -217,7 +217,7 @@ export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
   const dropOff = (r: NonNullable<typeof result>): DropOffPrint => ({
     clientName: r.name, clientNumber: r.number, huntRef: r.huntRef, receivedBy: profile?.full_name ?? '', workshop: WORKSHOP,
     inviteLink: r.registered ? null : r.link,
-    animals: r.animals.map(a => ({ species: a.species, tag: a.tag, condition: conditionSummary({ state: a.condition, none: a.noIssues, issues: a.issues }), parts: a.parts, other: a.other, notes: a.notes })),
+    animals: r.animals.map(a => ({ species: a.species, tag: a.tag, condition: conditionSummary({ state: a.condition, salt: a.condition === 'salted' ? a.salt : undefined, issues: a.issues, skull: a.skull || undefined }), parts: a.parts, other: a.other, notes: a.notes })),
   });
 
   // ── done ───────────────────────────────────────────────────────────────────
@@ -403,19 +403,29 @@ export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
                   <p className="font-bold text-slate-900 dark:text-slate-100">Condition report</p>
                   <div>
                     <label className={label}>Visual check *</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {VISUAL_CHECKS.map(v => <button key={v.value} type="button" aria-pressed={a.condition === v.value} onClick={() => patch(a.id, { condition: v.value, salt: v.value === 'salted' ? a.salt : '' })} className={`min-h-14 rounded-xl border-2 text-lg font-bold ${a.condition === v.value ? 'border-green-600 bg-green-600 text-white' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}>{v.label}</button>)}
+                    </div>
+                  </div>
+                  {a.condition === 'salted' && (
+                    <div className="flex gap-2">
+                      {SALT_QUALITY.map(v => <button key={v.value} type="button" aria-pressed={a.salt === v.value} onClick={() => patch(a.id, { salt: a.salt === v.value ? '' : v.value })} className={`flex-1 min-h-12 rounded-lg border-2 text-sm font-semibold ${a.salt === v.value ? 'border-sky-600 bg-sky-600 text-white' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}>{v.label}</button>)}
+                    </div>
+                  )}
+                  <div>
+                    <label className={label}>Tick anything you see <span className="font-normal">(optional)</span></label>
                     <div className="flex flex-wrap gap-2">
-                      {VISUAL_CHECKS.map(v => <button key={v.value} type="button" aria-pressed={a.condition === v.value} onClick={() => patch(a.id, { condition: v.value })} className={`min-h-11 px-3 rounded-lg border-2 text-sm font-semibold ${a.condition === v.value ? 'border-green-600 bg-green-600 text-white' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}>{v.label}</button>)}
+                      {CONDITION_ISSUES.map(i => { const on = a.issues.includes(i.value); return <button key={i.value} type="button" aria-pressed={on} onClick={() => patch(a.id, { issues: on ? a.issues.filter(x => x !== i.value) : [...a.issues, i.value] })} className={`min-h-11 px-3 rounded-lg border-2 text-sm font-semibold ${on ? 'border-amber-500 bg-amber-500 text-white' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}>{on ? '✓ ' : ''}{i.label}</button>; })}
                     </div>
                   </div>
                   <div>
-                    <label className={label}>Anything wrong? Tick what you see *</label>
-                    <button type="button" aria-pressed={a.noIssues && a.issues.length === 0} onClick={() => patch(a.id, { noIssues: !a.noIssues, issues: [] })} className={`w-full min-h-12 rounded-lg border-2 text-base font-semibold mb-2 ${a.noIssues && a.issues.length === 0 ? 'border-green-600 bg-green-600 text-white' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}>{a.noIssues && a.issues.length === 0 ? '✓ ' : ''}No problems seen</button>
+                    <label className={label}>Skull condition <span className="font-normal">(optional)</span></label>
                     <div className="flex flex-wrap gap-2">
-                      {CONDITION_ISSUES.map(i => { const on = a.issues.includes(i.value); return <button key={i.value} type="button" aria-pressed={on} onClick={() => patch(a.id, { noIssues: false, issues: on ? a.issues.filter(x => x !== i.value) : [...a.issues, i.value] })} className={`min-h-11 px-3 rounded-lg border-2 text-sm font-semibold ${on ? 'border-amber-500 bg-amber-500 text-white' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}>{on ? '✓ ' : ''}{i.label}</button>; })}
+                      {SKULL_CONDITION.map(v => <button key={v.value} type="button" aria-pressed={a.skull === v.value} onClick={() => patch(a.id, { skull: a.skull === v.value ? '' : v.value })} className={`min-h-11 px-3 rounded-lg border-2 text-sm font-semibold ${a.skull === v.value ? 'border-sky-600 bg-sky-600 text-white' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}>{v.label}</button>)}
                     </div>
-                    {a.issues.length > 0 && a.photos.length === 0 && <p className="text-sm font-semibold text-amber-700 dark:text-amber-400 mt-2">Add a photo of what you see. It is needed as evidence.</p>}
                   </div>
-                  <div><label className={label}>Notes {a.issues.length > 0 ? '(describe it)' : '(optional)'}</label><input className={field} value={a.notes} onChange={e => patch(a.id, { notes: e.target.value })} /></div>
+                  <div><label className={label}>Notes <span className="font-normal">(optional)</span></label><input className={field} value={a.notes} onChange={e => patch(a.id, { notes: e.target.value })} /></div>
+                  {(a.issues.length > 0 || a.skull === 'bad') && a.photos.length === 0 && <p className="text-sm text-amber-700 dark:text-amber-400">A photo of the damage helps if there is ever a query.</p>}
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap">
@@ -447,7 +457,7 @@ export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
             {animals.map((a, i) => (
               <div key={a.id} className="px-4 py-3 text-sm">
                 <p className="font-semibold text-slate-900 dark:text-slate-100">{i + 1}. {speciesEmoji(a.species)} {a.species}{a.tag ? <span className="text-slate-400 font-normal"> · {a.tag}</span> : null}</p>
-                <p className="text-slate-600 dark:text-slate-300">{listParts(a.parts, a.other)} · {conditionSummary({ state: a.condition, none: a.noIssues, issues: a.issues })}{a.photos.length ? ` · ${a.photos.length} photo${a.photos.length > 1 ? 's' : ''}` : ''}</p>
+                <p className="text-slate-600 dark:text-slate-300">{listParts(a.parts, a.other)} · {conditionSummary({ state: a.condition, salt: a.condition === 'salted' ? a.salt : undefined, issues: a.issues, skull: a.skull || undefined })}{a.photos.length ? ` · ${a.photos.length} photo${a.photos.length > 1 ? 's' : ''}` : ''}</p>
               </div>
             ))}
           </div>

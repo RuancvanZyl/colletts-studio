@@ -8,6 +8,7 @@ import { CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../../../lib/supabase';
 import { deptLabel } from './progressUi';
+import { SoakReviewList } from './SoakReviewList';
 
 interface Incoming { doc_id: string; hunt_id: string; client: string | null; species: string | null; mount: string | null; department: string; sent_at: string; hours_waiting: number }
 const LATE_HOURS = 24;
@@ -15,6 +16,7 @@ const ago = (h: number) => h < 1 ? 'just now' : h < 24 ? `${h} h ago` : `${Math.
 
 export function IncomingCards({ compact = false, onChanged }: { compact?: boolean; onChanged?: () => void }) {
   const [rows, setRows] = useState<Incoming[] | null>(null);
+  const [reviews, setReviews] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
   const load = useCallback(async () => { const { data } = await (supabase as any).rpc('my_incoming_cards'); setRows(data ?? []); }, []);
   useEffect(() => { load(); const t = setInterval(load, 60_000); return () => clearInterval(t); }, [load]);
@@ -32,7 +34,7 @@ export function IncomingCards({ compact = false, onChanged }: { compact?: boolea
   }
 
   if (!rows) return compact ? null : <div className="flex items-center gap-2 text-slate-400"><Loader2 className="w-5 h-5 animate-spin" />Loading…</div>;
-  if (rows.length === 0 && compact) return null;
+  if (rows.length === 0 && reviews === 0 && compact) return null;
 
   const depts = [...new Set(rows.map(r => r.department))];
   return (
@@ -43,7 +45,8 @@ export function IncomingCards({ compact = false, onChanged }: { compact?: boolea
           <button onClick={load} className="min-h-11 min-w-11 flex items-center justify-center rounded-lg border border-slate-700 text-slate-300" aria-label="Refresh"><RefreshCw className="w-5 h-5" /></button>
         </div>
       )}
-      {rows.length === 0 && <p className="rounded-2xl border border-dashed border-slate-600 p-8 text-center text-slate-400">Nothing is waiting for you to accept.</p>}
+      <SoakReviewList onCount={setReviews} onChanged={onChanged} />
+      {rows.length === 0 && reviews === 0 && <p className="rounded-2xl border border-dashed border-slate-600 p-8 text-center text-slate-400">Nothing is waiting for you to accept.</p>}
       {depts.map(d => {
         const list = rows.filter(r => r.department === d);
         const late = list.filter(r => r.hours_waiting >= LATE_HOURS).length;

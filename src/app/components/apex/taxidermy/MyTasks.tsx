@@ -10,6 +10,7 @@ import { AlertDashboard } from './AlertDashboard';
 import { cachedFetch, pendingActions } from '../../../../lib/offline/outbox';
 import { JobPhotosButton } from '../shared/TrophyPhotos';
 import { IncomingCards } from './IncomingCards';
+import { SoakReportButton } from './SoakReportButton';
 import { completeStage as completeStageAction } from '../../../../lib/offline/completeStage';
 import { PRIORITY_META, dueState, taskStatus, useChecklists, markJobOpened, markJobStarted } from '../../../../lib/hooks/useTaskFlow';
 
@@ -542,6 +543,7 @@ export function MyTasks() {
                     {task.clientName}
                   </p>
                   <JobPhotosButton dark className="mt-2" docId={task.docId} dept={task.currentDept} title={`${task.species || 'Trophy'} — ${task.clientName}`} />
+                  {task.currentDept === 'tannery' && <SoakReportButton docId={task.docId} species={task.species} />}
                 </div>
                 {task.receivedAt && (
                   <div className="flex items-center gap-1 text-xs text-[#7AADB8]/60 shrink-0">

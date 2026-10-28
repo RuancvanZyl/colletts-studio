@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp, Loader2, Plus } from 'lucide-react';
 import { useOutfitter, animalState, type OHunt } from '../../../../lib/hooks/useOutfitter';
 import { money } from '../../../../lib/hooks/useQuotes';
 import { sciName } from '../../../../lib/species';
+import { OutfitterCases } from './OutfitterCases';
 
 const QUOTE_LABEL: Record<string, string> = { sent: 'Quote sent to the hunter', accepted: 'Accepted, waiting for payment', deposit_paid: 'Deposit paid', paid: 'Paid in full', declined: 'Hunter asked for changes' };
 
@@ -25,6 +26,8 @@ export function OutfitterHunts({ onRegister }: { onRegister: () => void }) {
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">{data.outfitter.name}</h1>
         <p className="text-sm text-slate-600 dark:text-slate-300">Your hunters, their animals and where everything stands.</p>
       </div>
+
+      <OutfitterCases />
 
       {!active && <div className="rounded-2xl border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/30 p-4 text-slate-900 dark:text-slate-100"><p className="font-bold">Your account is waiting to be activated</p><p className="text-sm">The workshop will activate it shortly. You can register hunts as soon as they do.</p></div>}
 

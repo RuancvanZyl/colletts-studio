@@ -3,6 +3,8 @@ export const WORKSHOP = {
   name: "Collett's Wildlife Artistry",
   platform: 'Apex Trophy Solutions',
   portalUrl: 'https://app.apextrophysolutions.com',
+  /** The workshop's WhatsApp number in international digits, for example 27821234567. Outfitters use it to reach the workshop about a rejected skin. */
+  whatsapp: '',
 };
 
 /** The link a hunter opens to create their profile (one per client, safe to resend). */

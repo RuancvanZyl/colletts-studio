@@ -51,6 +51,7 @@ import { InstallBanner } from './shared/InstallApp';
 import { DepartmentProgress } from './taxidermy/DepartmentProgress';
 import { ProgressCheck } from './taxidermy/ProgressCheck';
 import { IncomingCards } from './taxidermy/IncomingCards';
+import { RejectionCases } from './taxidermy/RejectionCases';
 import { Quotes } from './taxidermy/Quotes';
 import { Outfitters } from './taxidermy/Outfitters';
 import { PaymentsLedger } from './taxidermy/PaymentsLedger';
@@ -122,7 +123,8 @@ type TaxidermyView =
   | 'permit-numbers'
   | 'dept-progress'
   | 'progress-check'
-  | 'incoming';
+  | 'incoming'
+  | 'rejections';
 
 interface NavItem {
   view: TaxidermyView;
@@ -324,6 +326,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     // department managers also handle client conversations
     if (isManager && view === 'client-inbox') return true;
     if (isManager && view === 'dept-progress') return true;
+    if (isManager && view === 'rejections') return true;
     if (isBookkeeper) {
       return ['summary', 'whiteboard', 'dashboard', 'client-inbox', 'payment-confirmation', 'invoices', 'inventory', 'clients', 'hunt-archive', 'client-care', 'deadline-watch', 'awaiting-instruction', 'status-board', 'quotes', 'documents', 'outfitter-chat'].includes(view);
     }
@@ -360,6 +363,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     ] },
     { key: 'workshop', label: 'Workshop', icon: Scissors, tabs: [
       { view: 'incoming',       label: 'Incoming' },
+      { view: 'rejections',     label: 'Rejected skins' },
       { view: 'workshop-brief', label: 'Job cards' },
       { view: 'stations',       label: 'Stations' },
       { view: 'dispatch',       label: 'Assign work' },
@@ -419,6 +423,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'permit-numbers':  return <PermitNumbers />;
       case 'outfitter-chat':  return <OutfitterInbox key={navClientId ?? 'all'} initialHuntId={navClientId} onOpenDocs={(id) => navigate('documents', id)} />;
       case 'incoming':        return <IncomingCards />;
+      case 'rejections':      return <RejectionCases key={navClientId ?? 'all'} initialCaseId={navClientId} onNavigate={navigate} />;
       case 'dept-progress':   return <DepartmentProgress onNavigate={navigate} />;
       case 'progress-check':  return <ProgressCheck key={navClientId ?? 'all'} initialHuntId={navClientId} onNavigate={navigate} />;
       case 'quotes':          return <Quotes key={navClientId ?? 'all'} initialHuntId={navClientId} />;

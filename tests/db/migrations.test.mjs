@@ -25,7 +25,7 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql']) {
+for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
@@ -717,6 +717,71 @@ ok((await q(`SELECT current_department d FROM hunt_documents WHERE id='${HD}'`))
 await as(ids.admin);
 await db.query(`SELECT public.job_force_advance('${HD}', 'zzdept3', 'in_progress', 'Test override')`);
 ok((await q(`SELECT override_reason FROM job_card_legs WHERE job_doc_id='${HD}' AND department='finishing'`))[0].override_reason !== null, 'a management override is recorded on the leg');
+
+console.log('\nSoak report and rejection');
+const SK = 'e8000000-0000-0000-0000-000000000001';
+await as(null);
+await db.exec(`INSERT INTO hunt_documents (id, hunt_id, doc_type, title, status, current_department, form_data) VALUES ('${SK}','${rh}','job_card','Soak test','in_progress','salting','{"species":"Kudu","mount_type":"Shoulder Mount"}')`);
+await db.exec(`UPDATE staff_profiles SET manages_departments = ARRAY['tannery'], works_in = ARRAY['tannery'] WHERE id='${ids.mgr2}'`);
+await db.exec(`UPDATE hunt_documents SET current_department='tannery' WHERE id='${SK}'`);
+const good = { bullet_damage: false, ears: 'turned', eyes: 'good', lips: 'good', nose: 'good', hair_slip: false, bug_damage: false, rubbery: false };
+await as(ids.mgr2);
+ok((await fails(`SELECT public.soak_submit('${SK}', 'in_house', NULL, $1::jsonb, 2, NULL, NULL)`, [JSON.stringify(good)]))?.includes('must accept this card first'), 'a soak report cannot be done before the lead has accepted the card');
+await db.query(`SELECT public.job_accept('${SK}')`);
+ok((await fails(`SELECT public.soak_submit('${SK}', 'in_house', NULL, $1::jsonb, 2, NULL, NULL)`, [JSON.stringify({ ...good, ears: null })]))?.includes('ears'), 'the in-house checklist needs the ears recorded');
+ok((await fails(`SELECT public.soak_submit('${SK}', 'in_house', NULL, $1::jsonb, 2, NULL, NULL)`, [JSON.stringify({ ...good, rubbery: 'maybe' })]))?.includes('rubbery'), 'and a yes or no for every other check');
+ok((await fails(`SELECT public.soak_submit('${SK}', 'in_house', NULL, $1::jsonb, NULL, NULL, NULL)`, [JSON.stringify(good)]))?.includes('holes'), 'and the number of holes');
+ok((await fails(`SELECT public.soak_submit('${SK}', 'third_party', '', '{}'::jsonb, NULL, NULL, NULL)`))?.includes('which tannery'), 'a third-party soak needs the tannery named');
+ok((await fails(`SELECT public.soak_submit('${SK}', 'third_party', 'Cape Tanning', '{}'::jsonb, NULL, NULL, NULL)`))?.includes('Attach'), 'and their report or what it says');
+const bad = { ...good, hair_slip: true, rubbery: true };
+const rep1 = (await q(`SELECT public.soak_submit('${SK}', 'in_house', NULL, $1::jsonb, 14, NULL, 'More than ten holes') id`, [JSON.stringify(bad)]))[0].id;
+ok((await fails(`SELECT public.soak_submit('${SK}', 'in_house', NULL, $1::jsonb, 1, NULL, NULL)`, [JSON.stringify(good)]))?.includes('already waiting'), 'only one soak report can wait for a decision at a time');
+for (const it of await q(`SELECT id FROM department_checklist_items WHERE dept_key='tannery' AND is_active`)) await db.query(`SELECT public.job_check_item('${SK}', '${it.id}', true)`);
+ok((await fails(`UPDATE hunt_documents SET current_department='mounting' WHERE id='${SK}'`))?.includes('soak report must be done and accepted'), 'a card cannot leave the tannery without an accepted soak report');
+await as(ids.worker);
+ok((await fails(`SELECT public.soak_review('${rep1}', true)`))?.includes('tannery lead'), 'only the tannery lead or management can accept or reject');
+await as(ids.mgr2);
+ok((await fails(`SELECT public.soak_review('${rep1}', false, NULL)`))?.includes('at least one reason'), 'a rejection needs reasons');
+ok((await q(`SELECT public.my_soak_reviews() j`))[0].j.some(x => x.id === rep1 && x.holes === 14 && x.species === 'Kudu'), 'the lead sees the report waiting for a decision');
+const caseId = (await q(`SELECT public.soak_review('${rep1}', false, ARRAY['Hair slip','Rubbery','More than 10 holes'], 'Not suitable to tan') id`))[0].id;
+ok(caseId && (await q(`SELECT status FROM soak_reports WHERE id='${rep1}'`))[0].status === 'rejected', 'rejecting opens a case');
+await as(ids.admin);
+const cs = (await q(`SELECT outfitter_id IS NOT NULL o, outfitter_notified_at IS NOT NULL n, outfitter_ack_at, status, reasons FROM quality_cases WHERE id='${caseId}'`))[0];
+ok(cs.o && cs.n && cs.outfitter_ack_at === null && cs.status === 'open' && cs.reasons.length === 3, 'the case belongs to the hunt\'s outfitter, who is notified and has not yet acknowledged it');
+ok((await q(`SELECT count(*)::int n FROM outfitter_messages WHERE case_id='${caseId}' AND channel='system' AND body LIKE '%Rubbery%'`))[0].n === 1, 'the reasons are put in the case thread for the outfitter');
+await as(OUT2);
+ok((await q(`SELECT jsonb_array_length(public.outfitter_cases()) n`))[0].n === 0, 'another outfitter sees nothing of it');
+ok((await fails(`SELECT public.outfitter_ack_case('${caseId}')`))?.includes('not yours'), 'and cannot acknowledge it');
+await as(OUT1);
+const oc = (await q(`SELECT public.outfitter_cases() j`))[0].j.find(x => x.id === caseId);
+ok(oc && oc.reasons.includes('Hair slip') && oc.species === 'Kudu' && oc.ack_at === null, 'the outfitter sees the case with the reasons');
+await db.query(`SELECT public.outfitter_ack_case('${caseId}')`);
+await db.query(`SELECT public.send_outfitter_message($1, 'We will send a replacement', NULL, $2)`, [rh, caseId]);
+ok((await q(`SELECT public.outfitter_cases() j`))[0].j.find(x => x.id === caseId).ack_at !== null, 'acknowledging is stamped with the time, for the record');
+await as(ids.admin);
+await db.query(`SELECT public.log_case_whatsapp('${caseId}', 'outfitter', 'On WhatsApp: they can replace it by Friday')`);
+const wa = (await q(`SELECT sender, channel, sender_name FROM outfitter_messages WHERE case_id='${caseId}' AND channel='whatsapp'`))[0];
+ok(wa.sender === 'outfitter' && wa.sender_name.includes('WhatsApp, logged by Ann Admin'), 'what was said on WhatsApp is logged into the case, showing who logged it');
+await as(ids.worker);
+ok((await fails(`SELECT public.case_set_outcome('${caseId}', 'outfitter_replacement')`))?.includes('tannery lead'), 'only the lead or management sets the outcome');
+await as(ids.admin);
+ok((await fails(`SELECT public.case_set_outcome('${caseId}', 'something_else')`))?.includes('three outcomes'), 'the outcome is one of the three');
+ok((await fails(`SELECT public.case_set_outcome('${caseId}', 'stock_replacement')`))?.includes('from stock'), 'a stock replacement says which skin');
+ok((await fails(`SELECT public.case_resolve('${caseId}')`))?.includes('outcome'), 'a case cannot be closed before an outcome is set');
+await db.query(`SELECT public.case_set_outcome('${caseId}', 'client_decision', 'Outfitter cannot replace it')`);
+ok((await fails(`SELECT public.case_record_client('${caseId}', 'outfitter', 'maybe')`))?.includes('change the order or scrap'), 'the client either changes the order or scraps it');
+await db.query(`SELECT public.case_record_client('${caseId}', 'workshop', 'scrap', 'The outfitter did not tell the client, so the workshop did')`);
+const cc = (await q(`SELECT client_informed_by, client_decision, needs_job_card_change, needs_quote_change FROM quality_cases WHERE id='${caseId}'`))[0];
+ok(cc.client_informed_by === 'workshop' && cc.client_decision === 'scrap' && cc.needs_job_card_change && cc.needs_quote_change, 'a client decision records who told them and flags the job card and quote for change');
+await db.query(`SELECT public.case_resolve('${caseId}', 'Skin scrapped, credit to follow')`);
+ok((await q(`SELECT status FROM quality_cases WHERE id='${caseId}'`))[0].status === 'resolved', 'the case is closed with a note');
+
+// a fresh soak report (third party) is accepted and the card can move on
+await as(ids.mgr2);
+const rep2 = (await q(`SELECT public.soak_submit('${SK}', 'third_party', 'Cape Tanning', '{}'::jsonb, NULL, ARRAY['hunt/soak.pdf'], NULL) id`))[0].id;
+await db.query(`SELECT public.soak_review('${rep2}', true)`);
+await db.query(`UPDATE hunt_documents SET current_department='mounting' WHERE id='${SK}'`);
+ok((await q(`SELECT current_department d FROM hunt_documents WHERE id='${SK}'`))[0].d === 'mounting', 'once the soak report is accepted the card moves on');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
