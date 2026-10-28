@@ -2,7 +2,7 @@
  * TodayScreen — the manager's morning view, in plain sentences:
  *   what needs you, what is in the workshop, how the month is going.
  */
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../../../../lib/supabase';
 import { ArrowRight, CheckCircle2, ClipboardCheck, RefreshCw, Search, Loader2 } from 'lucide-react';
 import { useAuth } from '../../../../lib/auth';
@@ -16,6 +16,7 @@ import { DEPT_TO_VIEW } from '../../../../lib/stations';
 import { useQuotePipeline } from '../../../../lib/hooks/useQuotes';
 import { useWorkshopProgress } from '../../../../lib/hooks/useWorkshopProgress';
 import { informDaysLeft } from '../../../../lib/cases';
+import { useLiveRefresh } from '../../../../lib/liveRefresh';
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -32,7 +33,7 @@ export function TodayScreen({ onNavigate }: { onNavigate: (view: string, clientI
   const awaitingPay = quoteRows.filter(r => r.stage === 'awaiting_deposit').length;
 
   const [docs, setDocs] = useState({ toCheck: 0, fromOutfitter: 0, unreadChat: 0, unverified: 0, lateAccept: 0, notAcked: 0, needOutcome: 0, clientOverdue: 0, heldAside: 0 });
-  useEffect(() => {
+  const loadCounts = useCallback(() => {
     (async () => {
       const db = supabase as any;
       const { data: v } = await db.from('v_hunt_documents').select('to_check, waiting_outfitter');
@@ -43,6 +44,8 @@ export function TodayScreen({ onNavigate }: { onNavigate: (view: string, clientI
       setDocs({ heldAside: (qc ?? []).filter((x: any) => x.order_override_at).length, clientOverdue: (qc ?? []).filter((x: any) => informDaysLeft(x) !== null && (informDaysLeft(x) as number) < 0).length, notAcked: (qc ?? []).filter((x: any) => x.outfitter_id && !x.outfitter_ack_at).length, needOutcome: (qc ?? []).filter((x: any) => x.status === 'open').length, lateAccept: late ?? 0, unverified: unv ?? 0, toCheck: (v ?? []).reduce((n: number, r: any) => n + +r.to_check, 0), fromOutfitter: (v ?? []).filter((r: any) => +r.waiting_outfitter > 0).length, unreadChat: count ?? 0 });
     })().catch(() => {});
   }, []);
+  useEffect(() => { loadCounts(); }, [loadCounts]);
+  useLiveRefresh(['hunt_requirements', 'quality_cases', 'job_card_legs', 'registered_numbers'], loadCounts);
 
   const { hunts: progress } = useWorkshopProgress();
   const redCount = progress.filter(h => h.a.auto === 'red').length;

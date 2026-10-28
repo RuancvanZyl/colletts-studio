@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, Loader2, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../../../lib/supabase';
+import { useLiveRefresh } from '../../../../lib/liveRefresh';
 import { WORKSHOP } from '../../../../lib/workshop';
 import { OutfitterThread } from '../shared/OutfitterThread';
 import { informDaysLeft, informDeadline } from '../../../../lib/cases';
@@ -16,6 +17,7 @@ export function OutfitterCases() {
   const [open, setOpen] = useState<string | null>(null);
   const load = useCallback(async () => { const { data } = await (supabase as any).rpc('outfitter_cases'); setCases((data ?? []).filter((c: C) => c.status !== 'resolved')); }, []);
   useEffect(() => { load(); const t = setInterval(load, 60_000); return () => clearInterval(t); }, [load]);
+  useLiveRefresh(['quality_cases'], load);
   if (cases.length === 0) return null;
 
   async function told(c: C) {

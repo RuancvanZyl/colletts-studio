@@ -10,6 +10,7 @@ import { AlertDashboard } from './AlertDashboard';
 import { cachedFetch, pendingActions } from '../../../../lib/offline/outbox';
 import { JobPhotosButton } from '../shared/TrophyPhotos';
 import { IncomingCards } from './IncomingCards';
+import { useLiveRefresh } from '../../../../lib/liveRefresh';
 import { SoakReportButton } from './SoakReportButton';
 import { completeStage as completeStageAction } from '../../../../lib/offline/completeStage';
 import { PRIORITY_META, dueState, taskStatus, useChecklists, markJobOpened, markJobStarted } from '../../../../lib/hooks/useTaskFlow';
@@ -278,6 +279,7 @@ export function MyTasks() {
   }, [myDepts.join(',')]);
 
   useEffect(() => { load(); }, [load]);
+  useLiveRefresh(['hunt_documents', 'job_card_legs', 'job_checklist_progress'], load);
 
   // ── Task flow: checklists, opened / started tracking ──────────────────────────
   const checklist = useChecklists(tasks.map(t => t.currentDept), tasks.map(t => t.docId));

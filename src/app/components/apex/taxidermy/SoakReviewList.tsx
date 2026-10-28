@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, Eye, Loader2, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../../../lib/supabase';
+import { useLiveRefresh } from '../../../../lib/liveRefresh';
 import { openHuntFile } from '../../../../lib/docs';
 import { soakProblems, soakSummary, type SoakFindings } from '../../../../lib/soak';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
@@ -16,6 +17,7 @@ export function SoakReviewList({ onCount, onChanged }: { onCount?: (n: number) =
   const [busy, setBusy] = useState<string | null>(null);
   const load = useCallback(async () => { const { data } = await (supabase as any).rpc('my_soak_reviews'); setRows(data ?? []); onCount?.((data ?? []).length); }, [onCount]);
   useEffect(() => { load(); const t = setInterval(load, 60_000); return () => clearInterval(t); }, [load]);
+  useLiveRefresh(['soak_reports'], load);
   if (rows.length === 0) return null;
 
   async function accept(r: Review) {

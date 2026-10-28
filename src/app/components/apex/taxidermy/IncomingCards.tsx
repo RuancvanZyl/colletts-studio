@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../../../lib/supabase';
+import { useLiveRefresh } from '../../../../lib/liveRefresh';
 import { deptLabel } from './progressUi';
 import { SoakReviewList } from './SoakReviewList';
 
@@ -20,6 +21,7 @@ export function IncomingCards({ compact = false, onChanged }: { compact?: boolea
   const [busy, setBusy] = useState<string | null>(null);
   const load = useCallback(async () => { const { data } = await (supabase as any).rpc('my_incoming_cards'); setRows(data ?? []); }, []);
   useEffect(() => { load(); const t = setInterval(load, 60_000); return () => clearInterval(t); }, [load]);
+  useLiveRefresh(['hunt_documents', 'job_card_legs', 'soak_reports'], load);
 
   async function accept(ids: string[], key: string) {
     setBusy(key);

@@ -27,11 +27,26 @@
       },
       onRegisteredSW(_url, reg) {
         registration = reg;
-        // look for a new version every 30 minutes while the app stays open
-        if (reg) setInterval(() => { reg.update().catch(() => {}); }, 30 * 60 * 1000);
+        // look for a new version every 2 minutes while the app stays open (a tiny request), so a change reaches everyone quickly
+        if (reg) setInterval(() => { reg.update().catch(() => {}); }, 2 * 60 * 1000);
       },
     });
     registerUpdater({ apply: () => { updateSW(true); }, check: async () => { await registration?.update(); } });
+
+    // a waiting version is applied once the person has been idle for 45 seconds, unless they are in the middle of something
+    // (a pop-up is open, or they are typing in a box). Queued photos and actions are kept on the device, so a reload loses nothing.
+    let lastActive = Date.now();
+    for (const ev of ["pointerdown", "keydown", "touchstart", "scroll", "input"]) window.addEventListener(ev, () => { lastActive = Date.now(); }, { passive: true });
+    const busy = () => {
+      if (document.querySelector('[role="dialog"]')) return true;
+      const el = document.activeElement as HTMLElement | null;
+      if (!el) return false;
+      const typing = el.tagName === "TEXTAREA" || el.isContentEditable || (el.tagName === "INPUT" && !["button", "checkbox", "radio", "submit"].includes((el as HTMLInputElement).type));
+      return typing && !!((el as HTMLInputElement).value ?? el.textContent);
+    };
+    setInterval(() => {
+      if (updateWaiting() && document.visibilityState === "visible" && Date.now() - lastActive > 45_000 && !busy()) updateSW(true);
+    }, 15_000);
 
     // coming back to the app: look for a new version, and apply it if the app has been away for a while
     document.addEventListener("visibilitychange", () => {

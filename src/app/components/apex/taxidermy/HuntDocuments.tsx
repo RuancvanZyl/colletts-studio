@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Camera, CheckCircle2, Eye, FileText, Loader2, MessageSquare, Plus, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../../../lib/supabase';
+import { useLiveRefresh } from '../../../../lib/liveRefresh';
 import { useAuth } from '../../../../lib/auth';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
 import { OutfitterThread } from '../shared/OutfitterThread';
@@ -33,6 +34,7 @@ export function HuntDocuments({ initialHuntId }: { initialHuntId?: string }) {
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
+  useLiveRefresh(['hunt_requirements', 'client_hunts'], load);
 
   const groups = useMemo(() => {
     const g: { key: string; title: string; hint: string; items: BoardRow[] }[] = [

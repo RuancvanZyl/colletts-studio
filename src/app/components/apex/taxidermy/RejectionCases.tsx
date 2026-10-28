@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ChevronDown, ChevronUp, Copy, Loader2, MessageCircle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../../../lib/supabase';
+import { useLiveRefresh } from '../../../../lib/liveRefresh';
 import { useAuth } from '../../../../lib/auth';
 import { WORKSHOP } from '../../../../lib/workshop';
 import { whatsappUrl } from '../../../../lib/invite';
@@ -47,6 +48,7 @@ export function RejectionCases({ initialCaseId, onNavigate }: { initialCaseId?: 
     setCases(data ?? []);
   }, []);
   useEffect(() => { load(); }, [load]);
+  useLiveRefresh(['quality_cases', 'outfitter_messages'], load);
 
   if (!cases) return <div className="flex items-center gap-2 text-slate-400"><Loader2 className="w-5 h-5 animate-spin" />Loading…</div>;
   const held = (c: Case) => c.status !== 'resolved' && !!c.order_override_at;

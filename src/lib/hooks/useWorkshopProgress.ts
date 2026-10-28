@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../supabase';
 import { fetchAllRows } from '../supabaseHelpers';
 import { getPipeline } from '../pipeline';
+import { useLiveRefresh } from '../liveRefresh';
 import { assess, type Assessment, type AnimalPos, type MilestoneState } from '../progress';
 
 export interface LastReview { status: 'on_track' | 'behind'; note: string | null; held_up_in: string | null; reviewed_by_name: string | null; reviewed_at: string }
@@ -69,5 +70,6 @@ export function useWorkshopProgress() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  useLiveRefresh(['hunt_documents', 'client_hunts', 'quality_cases', 'milestone_feedback', 'hunt_progress_reviews'], load);
   return { hunts, loading, error, refresh: load };
 }
