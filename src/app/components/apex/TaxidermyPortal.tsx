@@ -48,6 +48,7 @@ import { DocumentTypesEditor } from './taxidermy/DocumentTypesEditor';
 import { OutfitterInbox } from './taxidermy/OutfitterInbox';
 import { PermitNumbers } from './taxidermy/PermitNumbers';
 import { InstallBanner } from './shared/InstallApp';
+import { AppVersion, UpdateBanner } from './shared/AppVersion';
 import { DepartmentProgress } from './taxidermy/DepartmentProgress';
 import { ProgressCheck } from './taxidermy/ProgressCheck';
 import { IncomingCards } from './taxidermy/IncomingCards';
@@ -541,6 +542,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
               <LogOut className="w-4 h-4" />
             </button>
           </div>
+          <AppVersion className="mt-2 text-[#7AADB8]" />
         </div>
       </aside>
 
@@ -595,6 +597,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
         {/* Page content */}
         <main className="flex-1 min-w-0 p-4 md:p-6 pb-28 lg:pb-6 overflow-x-auto bg-[#080C0C]">
           <OfflineBanner />
+          <UpdateBanner />
           <InstallBanner />
           {activeSection && (
             <>

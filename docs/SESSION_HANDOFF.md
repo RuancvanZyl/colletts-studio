@@ -120,3 +120,8 @@
 - **Job card change** (`case_update_card`, management only): keep the job card as it is, or change its mount; a replacement for another animal gets a new job card through the amendment. Clears the case's flags.
 - Not yet: refund recording, Xero credit note / invoice sync (the amendment data is shaped for it), stock levels for hides (stock reference is free text).
 - Run supabase/launch/release_061_credit_and_amend_invoice.sql after 060.
+
+## 2026-10-28 — Everyone on the same version
+- Cause of "Steve does not see the changes": updates were set to prompt (a pop-up with "Update now") and an installed or long-open app can stay on an old copy for days.
+- Now: a new version is applied automatically right after the app is opened (first 20 seconds) or when it returns from the background after 5+ minutes; otherwise an amber **Update banner** (staff, outfitter and hunter portals) and the pop-up offer it. Staff sidebar and the outfitter Account page show **Version <git sha> · <build time>** and a **Check for updates** button (`lib/appUpdate.ts`, `shared/AppVersion.tsx`; the version comes from `VERCEL_GIT_COMMIT_SHA` at build time). The app also looks for a new version whenever it comes back to the foreground.
+- The other reason two people see different screens is their ROLE (staff_profiles.role): management (admin / studio manager) sees everything; bookkeeper sees money and documents; department staff see their own stations, and leads (manages_departments) also see Incoming, Rejected skins and Departments.

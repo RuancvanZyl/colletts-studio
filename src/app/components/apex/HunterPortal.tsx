@@ -27,6 +27,7 @@ import { useHunterHunts } from '../../../lib/hooks/useHunterHunts';
 import { useAuth } from '../../../lib/auth';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { InstallBanner } from './shared/InstallApp';
+import { UpdateBanner } from './shared/AppVersion';
 
 const PHASE_PROGRESS: Record<string, number> = {
   intake: 10, skin_processing: 20, skull_processing: 30,
@@ -213,6 +214,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
 
       {/* Content */}
       <main className="md:ml-64 px-4 py-6 pb-24 md:pb-6 min-w-0 overflow-x-hidden">
+        <UpdateBanner />
         <InstallBanner />
         {renderView()}
       </main>

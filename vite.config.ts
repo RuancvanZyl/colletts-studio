@@ -35,6 +35,11 @@ function figmaVersionedImportResolver() {
 }
 
 export default defineConfig({
+  // which version this build is, shown in the app so it is easy to see who is on what
+  define: {
+    __APP_VERSION__: JSON.stringify((process.env.VERCEL_GIT_COMMIT_SHA ?? 'dev').slice(0, 7)),
+    __APP_BUILT__: JSON.stringify(new Date().toISOString()),
+  },
   plugins: [
     figmaVersionedImportResolver(),
     figmaAssetResolver(),
