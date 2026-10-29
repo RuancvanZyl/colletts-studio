@@ -32,35 +32,11 @@ export function LoginScreen({
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [forgotSent, setForgotSent] = useState(false);
-  const [mkOpen, setMkOpen] = useState(false);
-  const [mkPin, setMkPin] = useState('');
-  const [mkError, setMkError] = useState(false);
-  const mkInputRef = useRef<HTMLInputElement>(null);
   const emailInputRef = useRef<HTMLInputElement>(null);
 
   // Staff sign in with their own email + password — no workshop PIN.
   const isStaffPortal = portalType === 'taxidermy' || portalType === 'admin';
-  const pinVerified = true;
 
-  const handleMasterKey = () => {
-    setMkOpen(true);
-    setMkPin('');
-    setMkError(false);
-    setTimeout(() => mkInputRef.current?.focus(), 50);
-  };
-
-  const submitMasterKey = async () => {
-    const correctPin = import.meta.env.VITE_MASTER_PIN;
-
-    if (mkPin === correctPin) {
-      setMkOpen(false);
-      onLogin();
-    } else {
-      setMkError(true);
-      setMkPin('');
-      setTimeout(() => mkInputRef.current?.focus(), 50);
-    }
-  };
   const { theme, toggleTheme } = useTheme();
   const { signIn } = useAuth();
 
@@ -121,49 +97,6 @@ export function LoginScreen({
   const config = getPortalConfig();
   const PortalIcon = config.icon;
 
-  // Staff portal: show PIN gate first, then individual login
-  if (isStaffPortal && !pinVerified) {
-    return (
-      <div className="min-h-screen bg-[#080C0C] flex items-center justify-center p-4 relative overflow-hidden">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-[#3AAECC]/5 rounded-full blur-[120px] pointer-events-none" />
-        <div className="relative z-10 w-full max-w-sm space-y-8">
-          <div className="text-center">
-            <img src="/apex-logo.png" alt="Apex Trophy Solutions" className="w-24 h-24 object-contain mx-auto mb-5 drop-shadow-[0_0_30px_rgba(58,174,204,0.3)]" />
-            <h1 className="text-xl font-bold tracking-[0.25em] text-white mb-1">STAFF ACCESS</h1>
-            <p className="text-[#3AAECC] text-xs tracking-[0.3em] uppercase">Taxidermy Workshop</p>
-            <p className="text-[#7AADB8] text-sm mt-3">Enter your workshop PIN to continue</p>
-          </div>
-          <div className="bg-[#0F1A1C] border border-[rgba(58,174,204,0.2)] rounded-2xl p-7 shadow-2xl space-y-5">
-            <input
-              ref={mkInputRef}
-              type="password"
-              inputMode="numeric"
-              maxLength={4}
-              value={mkPin}
-              onChange={e => { setMkPin(e.target.value.replace(/\D/g, '')); setMkError(false); }}
-              onKeyDown={e => { if (e.key === 'Enter') submitMasterKey(); }}
-              placeholder="• • • •"
-              className={`w-full text-center text-3xl tracking-[0.8em] border-2 rounded-xl px-4 py-4 bg-[#142028] text-white outline-none transition-colors ${
-                mkError ? 'border-red-500' : 'border-[rgba(58,174,204,0.3)] focus:border-[#3AAECC]'
-              }`}
-              autoFocus
-            />
-            {mkError && <p className="text-center text-xs text-red-400 font-medium">Incorrect PIN — access denied</p>}
-            <button
-              onClick={submitMasterKey}
-              className="w-full h-11 rounded-lg bg-[#3AAECC] hover:bg-[#2E9EB8] text-[#080C0C] font-bold text-sm tracking-wider transition-all shadow-[0_0_20px_rgba(58,174,204,0.3)]"
-            >
-              ENTER WORKSHOP
-            </button>
-          </div>
-          <button onClick={onBack} className="flex items-center gap-1.5 text-[#7AADB8] hover:text-[#EDF6F9] text-sm transition-colors mx-auto">
-            <ArrowLeft className="w-4 h-4" /> Back
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-[#080C0C] flex items-center justify-center p-4 relative overflow-hidden">
 
@@ -191,7 +124,7 @@ export function LoginScreen({
         <div className="bg-[#0F1A1C] border border-[rgba(58,174,204,0.2)] rounded-2xl p-7 shadow-2xl wildtrack-animate-slide wildtrack-animate-delay-1">
           <form onSubmit={handleSubmit} className="space-y-5">
 
-            {/* Portal Selector — hide for staff (already PIN-gated) */}
+            {/* Portal Selector */}
             {onPortalChange && !isStaffPortal && (
               <div className="space-y-1.5">
                 <Label className="text-[#7AADB8] text-xs uppercase tracking-wider">Portal</Label>
@@ -321,50 +254,9 @@ export function LoginScreen({
           </button>
           <p className="text-[#4a6a75] text-xs">
             Secure authentication
-            {!isStaffPortal && (
-              <span
-                onClick={handleMasterKey}
-                className="ml-1 inline-block w-1 h-1 rounded-full bg-transparent cursor-default select-none"
-                aria-hidden="true"
-              />
-            )}
           </p>
         </div>
 
-        {/* PIN modal — hidden admin override for non-staff portals */}
-        {mkOpen && !isStaffPortal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-            <div className="bg-[#0F1A1C] border border-[rgba(58,174,204,0.25)] rounded-2xl shadow-2xl p-8 w-80 space-y-5">
-              <div className="text-center">
-                <img src="/apex-logo.png" alt="" className="w-12 h-12 object-contain mx-auto mb-3 opacity-80" />
-                <h3 className="font-bold text-[#EDF6F9] text-lg tracking-wide">Master Access</h3>
-                <p className="text-xs text-[#7AADB8] mt-1">Authorised personnel only</p>
-              </div>
-              <input
-                ref={mkInputRef}
-                type="password"
-                inputMode="numeric"
-                maxLength={4}
-                value={mkPin}
-                onChange={e => { setMkPin(e.target.value.replace(/\D/g, '')); setMkError(false); }}
-                onKeyDown={e => { if (e.key === 'Enter') submitMasterKey(); if (e.key === 'Escape') setMkOpen(false); }}
-                placeholder="Enter PIN"
-                className={`w-full text-center text-2xl tracking-[0.5em] border-2 rounded-xl px-4 py-3 bg-[#142028] text-white outline-none transition-colors ${
-                  mkError ? 'border-red-500' : 'border-[rgba(58,174,204,0.3)] focus:border-[#3AAECC]'
-                }`}
-              />
-              {mkError && <p className="text-center text-xs text-red-400 font-medium">Incorrect PIN — access denied</p>}
-              <div className="flex gap-3">
-                <button onClick={() => setMkOpen(false)} className="flex-1 py-2.5 rounded-xl border border-[rgba(58,174,204,0.2)] text-sm text-[#7AADB8] hover:bg-[rgba(58,174,204,0.07)] transition-colors">
-                  Cancel
-                </button>
-                <button onClick={submitMasterKey} className="flex-1 py-2.5 rounded-xl bg-[#3AAECC] hover:bg-[#2E9EB8] text-[#080C0C] text-sm font-bold transition-colors">
-                  Unlock
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

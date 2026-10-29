@@ -178,3 +178,6 @@
 - `CLAUDE.md` rewritten: it still described an old, different version of the app. It now covers the real architecture, commands, release steps, the plain-language rule and the business rules.
 - `tools/devmock/` keeps the fake-data tool used for these walk-throughs (not part of the app).
 - **For the owner to decide:** the hidden "Master Access" box on the hunter/outfitter sign-in page checks a 4-digit PIN that is built into the public app files (anyone who views the page source can read it). It only opens an empty hunter/outfitter shell (the database still blocks all real data), so it does nothing useful today. Recommend removing it; it needs the owner's yes.
+
+### Master Access removed (owner decision)
+- The hidden "Master Access" PIN box and its 4-digit PIN are gone from the sign-in page and from the app files; `VITE_MASTER_PIN` removed from the local `.env`. The owner should also delete `VITE_MASTER_PIN` from the Vercel environment variables (Project → Settings → Environment Variables). `VITE_MASTER_EMAIL` / `VITE_MASTER_PASSWORD` in `.env` are not used by any code and can be deleted too (change that master password if it was ever real).

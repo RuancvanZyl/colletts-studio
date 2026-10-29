@@ -33,7 +33,7 @@ Taxidermy workshop management system for **Apex Trophy Solutions** (formerly Col
 2. **Run migration 033** if not already done (`supabase/migrations/033_client_journey_updates.sql`) — enables the automatic client journey notifications. (Had one bug fixed already — `SELECT *` → `SELECT t.title, t.body` in `client_stage_message()` — the version in the repo is correct.)
 3. **Client portal invitation flow** — was mid-design when session ended. Decision needed: send automatically at check-in, tick-box on Review step (recommended), or manual "Invite to Portal" button on client record.
 4. **Security items from earlier audit** (not yet done):
-   - `VITE_MASTER_PIN`/`VITE_DROPBOX_TOKEN` are baked into the public JS bundle (any `VITE_*` var is). Move PIN verification and Dropbox calls server-side (Edge Functions) before relying on them for real security.
+   - `VITE_DROPBOX_TOKEN` is baked into the public JS bundle (any `VITE_*` var is). Move Dropbox calls server-side (Edge Functions) before relying on them for real security.
    - CORS on Edge Functions is `*` — should be locked to the app's domain.
    - Password minimum length inconsistent (10 chars at registration, 8 at reset) — standardize.
    - No consent checkbox / privacy policy link at hunter registration (POPIA).
