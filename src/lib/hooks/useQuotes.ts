@@ -1,5 +1,5 @@
 /** Quotes: the manager's pipeline and the hunter's own quotes. */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { supabase } from '../supabase';
 
 export const money = (n: number | null | undefined, currency: string) =>
@@ -19,11 +19,12 @@ export const STAGE_LABEL: Record<string, string> = {
 export function useQuotePipeline() {
   const [rows, setRows] = useState<PipelineRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const loadedOnce = useRef(false);   // only the first load shows a spinner; refreshes update quietly
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!loadedOnce.current) setLoading(true);
     const { data } = await (supabase as any).from('v_quote_pipeline').select('*').order('client_name');
     setRows((data ?? []).map((r: any) => ({ ...r, animals: Number(r.animals), chosen: Number(r.chosen), total: r.total == null ? null : Number(r.total), amount_paid: Number(r.amount_paid ?? 0), amount_due_now: r.amount_due_now == null ? null : Number(r.amount_due_now), deposit_percent: r.deposit_percent == null ? null : Number(r.deposit_percent) })));
-    setLoading(false);
+    setLoading(false); loadedOnce.current = true;
   }, []);
   useEffect(() => { load(); }, [load]);
   return { rows, loading, refresh: load };

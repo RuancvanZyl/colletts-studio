@@ -1,5 +1,5 @@
 /** useWorkshopProgress — every active order with its trophies, measured against the milestones (counted from the day the invoice was paid). */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { supabase } from '../supabase';
 import { fetchAllRows } from '../supabaseHelpers';
 import { getPipeline } from '../pipeline';
@@ -24,10 +24,11 @@ const FINISHED = new Set(['completed', 'complete', 'cancelled']);
 export function useWorkshopProgress() {
   const [hunts, setHunts] = useState<HuntProgress[]>([]);
   const [loading, setLoading] = useState(true);
+  const loadedOnce = useRef(false);   // only the first load shows a spinner; refreshes update quietly
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true); setError(null);
+    if (!loadedOnce.current) setLoading(true); setError(null);
     try {
       const db = supabase as any;
       const [cards, huntRows, reviewRows, feedbackRows, caseRows] = await Promise.all([
@@ -66,7 +67,7 @@ export function useWorkshopProgress() {
       }
       setHunts(out);
     } catch (e: any) { setError(e.message ?? 'Could not load'); }
-    setLoading(false);
+    setLoading(false); loadedOnce.current = true;
   }, []);
 
   useEffect(() => { load(); }, [load]);

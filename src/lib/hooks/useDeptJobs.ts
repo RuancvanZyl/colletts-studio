@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../supabase';
 import { getNextDepartment } from '../pipeline';
 import { useAuth } from '../auth';
@@ -33,12 +33,13 @@ export function useDeptJobs(dept: string | string[]) {
   const { profile } = useAuth();
   const [jobs, setJobs] = useState<DeptJob[]>([]);
   const [loading, setLoading] = useState(true);
+  const loadedOnce = useRef(false);   // only the first load shows a spinner; refreshes update quietly
   const [completing, setCompleting] = useState<string | null>(null);
 
   const depts = Array.isArray(dept) ? dept : [dept];
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!loadedOnce.current) setLoading(true);
     try {
       const fetched = await cachedFetch<any[]>(`deptjobs:${depts.join(',')}`, async () => {
       const { data, error } = await (supabase as any)
@@ -99,7 +100,7 @@ export function useDeptJobs(dept: string | string[]) {
     } catch (err: any) {
       toast.error('Failed to load: ' + err.message);
     } finally {
-      setLoading(false);
+      setLoading(false); loadedOnce.current = true;
     }
   }, [depts.join(',')]);
 

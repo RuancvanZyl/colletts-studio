@@ -138,3 +138,13 @@
 ## 2026-10-29 — Job cards by client
 - Workshop → Job cards is now organised BY CLIENT, not by animal. Top level: one row per client (number, name, a one-line department breakdown such as "Mounting 27 · Packing 3", count of trophies, problem and instruction markers, Print). Filter chips by department ("All departments", "Mounting · 27" ...) and a find box. Tap a client to open their FULL job card: header (client, hunt year, outfitter, departments), then every animal as a block showing species, mount, tag, current department, what was received, the condition report, the client's instructions and any special request (always visible, not hidden), the red rejected-skin marker, photos, print, the tannery soak-report button, and "Complete this stage" (photo + Mark Done). Previously a department with only one client fell back to a flat list of animals, which is why 27 animals of one client filled the screen.
 - Works for staff too (their own departments only). Updates live (hunt_documents, quality_cases).
+
+## 2026-10-29 — Full walk-through pass #1 (bugs found by using the app as a first-time user)
+- Screens no longer blink or vanish when data refreshes: job cards, My tasks, Documents board and the hunter/staff data hooks (`useHunterAnimals`, `useHunterHunts`, `useDeptJobs`, quotes, progress, outfitter, care, deadline, board) only show the spinner on the FIRST load; later refreshes (a live update from someone else, or after saving) update in place. Before, a hunter saving a mount choice or a worker finishing a stage threw away the screen they were on.
+- Job cards: an opened client now always shows ALL their animals, even if a department filter is on.
+- `Input` component now forwards refs (the Scan parts box could not be focused automatically; React warned on every visit).
+- Bottom phone menu labels no longer overlap on small screens.
+- Red error pop-ups now speak plainly (`src/lib/plainError.ts`, applied to every `toast.error`; tests added). Raw database words such as "invalid input syntax for type uuid" are replaced; the original goes to the console. Pop-ups show at the top so they never cover the bottom menu.
+- Sign-in: Show/Hide password button; labels linked to fields.
+- Letters/e-mails to hunters now say Apex Trophy Solutions (`WORKSHOP.name`), per the brand rule.
+- `src/vite-env.d.ts` added (fixes ~28 false `import.meta.env` type errors).

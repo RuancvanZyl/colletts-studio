@@ -5,7 +5,7 @@
  * lose track of a client who is genuinely overdue.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../supabase';
 
 export type DeadlineStatus = 'overdue' | 'due-soon' | 'on-track' | 'not-started';
@@ -33,9 +33,10 @@ const DAY = 86_400_000;
 export function useDeadlineWatch() {
   const [hunts, setHunts]     = useState<DeadlineWatchHunt[]>([]);
   const [loading, setLoading] = useState(true);
+  const loadedOnce = useRef(false);   // only the first load shows a spinner; refreshes update quietly
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!loadedOnce.current) setLoading(true);
 
     const { data } = await (supabase as any)
       .from('client_hunts')
@@ -84,7 +85,7 @@ export function useDeadlineWatch() {
     result.sort((a, b) => a.clientName.localeCompare(b.clientName));
 
     setHunts(result);
-    setLoading(false);
+    setLoading(false); loadedOnce.current = true;
   }, []);
 
   useEffect(() => { load(); }, [load]);

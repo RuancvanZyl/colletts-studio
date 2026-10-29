@@ -4,7 +4,10 @@
   import "./lib/install";
   import { registerSW } from "virtual:pwa-register";
   import { toast } from "sonner";
+  import { installPlainErrors } from "./lib/plainError";
   import { markUpdateWaiting, registerUpdater, updateWaiting } from "./lib/appUpdate";
+
+  installPlainErrors(toast);
 
   createRoot(document.getElementById("root")!).render(<App />);
 

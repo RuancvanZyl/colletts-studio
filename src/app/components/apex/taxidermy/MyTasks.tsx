@@ -196,8 +196,10 @@ export function MyTasks() {
 
   const myDepts = getStaffDepartments(profile?.full_name ?? '', profile?.department_name, profile?.works_in);
 
+  const loadedOnce = useRef(false);
   const load = useCallback(async () => {
-    setLoading(true);
+    // only the first load shows the spinner; later refreshes (someone else's change) update quietly
+    if (!loadedOnce.current) setLoading(true);
     try {
       // Prefer assigned tasks; fall back to department-based tasks for unassigned jobs
       const userId = profile?.id ?? (await (supabase as any).auth.getUser()).data?.user?.id;
@@ -275,6 +277,7 @@ export function MyTasks() {
       toast.error('Failed to load tasks: ' + err.message);
     } finally {
       setLoading(false);
+      loadedOnce.current = true;
     }
   }, [myDepts.join(',')]);
 

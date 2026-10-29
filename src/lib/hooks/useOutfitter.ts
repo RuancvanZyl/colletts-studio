@@ -1,5 +1,5 @@
 /** The signed-in outfitter's own hunts, animals and money (from the outfitter_overview function). */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { supabase } from '../supabase';
 import { DEPT_LABELS } from '../pipeline';
 
@@ -18,10 +18,11 @@ export const animalState = (a: OAnimal): { label: string; tone: 'wait' | 'work' 
 export function useOutfitter() {
   const [data, setData] = useState<OOverview | null>(null);
   const [loading, setLoading] = useState(true);
+  const loadedOnce = useRef(false);   // only the first load shows a spinner; refreshes update quietly
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!loadedOnce.current) setLoading(true);
     const { data: d } = await (supabase as any).rpc('outfitter_overview');
-    setData(d ?? null); setLoading(false);
+    setData(d ?? null); setLoading(false); loadedOnce.current = true;
   }, []);
   useEffect(() => { load(); }, [load]);
   return { data, loading, refresh: load };

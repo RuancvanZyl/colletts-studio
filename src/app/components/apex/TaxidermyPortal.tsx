@@ -618,15 +618,15 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
             const active = activeSection?.key === sec.key;
             const badge = sectionBadge(sec);
             return (
-              <button key={sec.key} onClick={() => openSection(sec)} className={`relative flex flex-col items-center justify-center gap-0.5 min-h-16 text-xs font-semibold ${active ? 'text-[#3AAECC]' : 'text-[#B5D3DB]'}`}>
-                <sec.icon className="w-6 h-6" />{sec.label}
+              <button key={sec.key} onClick={() => openSection(sec)} className={`relative flex flex-col items-center justify-center gap-0.5 min-h-16 px-0.5 text-[11px] sm:text-xs font-semibold ${active ? 'text-[#3AAECC]' : 'text-[#B5D3DB]'}`}>
+                <sec.icon className="w-6 h-6 shrink-0" /><span className="max-w-full truncate whitespace-nowrap">{sec.label}</span>
                 {badge > 0 && <span className="absolute top-1.5 left-1/2 ml-2 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-4 h-4 px-1 flex items-center justify-center">{badge > 9 ? '9+' : badge}</span>}
               </button>
             );
           })}
           {sections.length > 5 && (
-            <button onClick={() => setSidebarOpen(true)} className="flex flex-col items-center justify-center gap-0.5 min-h-16 text-xs font-semibold text-[#B5D3DB]">
-              <MoreHorizontal className="w-6 h-6" />More
+            <button onClick={() => setSidebarOpen(true)} className="flex flex-col items-center justify-center gap-0.5 min-h-16 px-0.5 text-[11px] sm:text-xs font-semibold text-[#B5D3DB]">
+              <MoreHorizontal className="w-6 h-6 shrink-0" />More
             </button>
           )}
         </nav>

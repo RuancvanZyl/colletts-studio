@@ -29,6 +29,7 @@ export function LoginScreen({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [forgotSent, setForgotSent] = useState(false);
   const [mkOpen, setMkOpen] = useState(false);
@@ -217,9 +218,10 @@ export function LoginScreen({
 
             {/* Email */}
             <div className="space-y-1.5">
-              <Label className="text-[#7AADB8] text-xs uppercase tracking-wider">Email</Label>
+              <Label htmlFor="email" className="text-[#7AADB8] text-xs uppercase tracking-wider">Email</Label>
               <input
                 ref={emailInputRef}
+                autoComplete="email"
                 id="email"
                 type="email"
                 value={email}
@@ -232,16 +234,26 @@ export function LoginScreen({
 
             {/* Password */}
             <div className="space-y-1.5">
-              <Label className="text-[#7AADB8] text-xs uppercase tracking-wider">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="h-11 bg-[#142028] border-[rgba(58,174,204,0.2)] text-[#EDF6F9] placeholder:text-[#4a7a8a] focus:border-[#3AAECC]"
-                required
-              />
+              <Label htmlFor="password" className="text-[#7AADB8] text-xs uppercase tracking-wider">Password</Label>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Your password"
+                  autoComplete="current-password"
+                  className="h-11 pr-16 bg-[#142028] border-[rgba(58,174,204,0.2)] text-[#EDF6F9] placeholder:text-[#4a7a8a] focus:border-[#3AAECC]"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(v => !v)}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-9 px-3 text-sm font-semibold text-[#3AAECC]"
+                >
+                  {showPassword ? 'Hide' : 'Show'}
+                </button>
+              </div>
             </div>
 
             {/* Sign In Button */}

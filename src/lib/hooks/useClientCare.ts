@@ -8,7 +8,7 @@
  *   - are they waiting on a reply from us?
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../supabase';
 import { DEPT_LABELS } from '../pipeline';
 
@@ -44,9 +44,10 @@ function daysBetween(iso: string | null): number | null {
 export function useClientCare() {
   const [clients, setClients] = useState<CareClient[]>([]);
   const [loading, setLoading] = useState(true);
+  const loadedOnce = useRef(false);   // only the first load shows a spinner; refreshes update quietly
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!loadedOnce.current) setLoading(true);
 
     // 1. Active job cards, with their hunt + client
     const { data: docs } = await (supabase as any)
@@ -98,7 +99,7 @@ export function useClientCare() {
     }
 
     const clientIds = Object.keys(byClient);
-    if (clientIds.length === 0) { setClients([]); setLoading(false); return; }
+    if (clientIds.length === 0) { setClients([]); setLoading(false); loadedOnce.current = true; return; }
 
     // 2. Message history for those clients
     const { data: msgs } = await (supabase as any)
@@ -161,7 +162,7 @@ export function useClientCare() {
         (b.daysSinceContact ?? 9999) - (a.daysSinceContact ?? 9999)
       )
     );
-    setLoading(false);
+    setLoading(false); loadedOnce.current = true;
   }, []);
 
   useEffect(() => { load(); }, [load]);

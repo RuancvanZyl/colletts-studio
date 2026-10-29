@@ -4,7 +4,7 @@
  * Used by the Hunter Portal's tracking views.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../supabase';
 import { useAuth } from '../auth';
 import { getPipeline, DEPT_LABELS, STALL_HOURS } from '../pipeline';
@@ -48,6 +48,7 @@ export function useHunterHunts() {
   const [clientId, setClientId] = useState<string | null>(null);
   const [hunts,    setHunts]    = useState<HunterHunt[]>([]);
   const [loading,  setLoading]  = useState(true);
+  const loadedOnce = useRef(false);
 
   // Resolve client record from auth user
   useEffect(() => {
@@ -64,7 +65,9 @@ export function useHunterHunts() {
 
   const load = useCallback(async () => {
     if (!clientId) { setLoading(false); return; }
-    setLoading(true);
+    // Only the first load blanks the portal with a spinner. Later refreshes (after the hunter accepts a quote,
+    // uploads a document, and so on) update in place so the screen they are on is not thrown away.
+    if (!loadedOnce.current) setLoading(true);
 
     // Step 1: get this client's hunt IDs
     const { data: huntRows } = await (supabase as any)
@@ -73,7 +76,7 @@ export function useHunterHunts() {
       .eq('client_id', clientId)
       .order('year', { ascending: false });
 
-    if (!huntRows || huntRows.length === 0) { setHunts([]); setLoading(false); return; }
+    if (!huntRows || huntRows.length === 0) { setHunts([]); setLoading(false); loadedOnce.current = true; return; }
 
     const huntIds = huntRows.map((h: any) => h.id);
 
@@ -160,6 +163,7 @@ export function useHunterHunts() {
 
     setHunts(result);
     setLoading(false);
+    loadedOnce.current = true;
   }, [clientId]);
 
   useEffect(() => { load(); }, [load]);

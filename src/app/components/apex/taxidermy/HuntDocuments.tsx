@@ -27,11 +27,13 @@ export function HuntDocuments({ initialHuntId }: { initialHuntId?: string }) {
   const [open, setOpen] = useState<string | null>(initialHuntId ?? null);
   const [search, setSearch] = useState('');
 
+  const loadedOnce = useRef(false);
   const load = async () => {
-    setLoading(true);
+    if (!loadedOnce.current) setLoading(true);
     const { data } = await (supabase as any).from('v_hunt_documents').select('*').order('client_name');
     setRows((data ?? []).map((r: any) => ({ ...r, required: +r.required, approved: +r.approved, waiting_outfitter: +r.waiting_outfitter, waiting_hunter: +r.waiting_hunter, waiting_other: +r.waiting_other, to_check: +r.to_check, rejected: +r.rejected })));
     setLoading(false);
+    loadedOnce.current = true;
   };
   useEffect(() => { load(); }, []);
   useLiveRefresh(['hunt_requirements', 'client_hunts'], load);

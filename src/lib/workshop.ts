@@ -1,6 +1,6 @@
 /** Who we are in letters and emails. Change it here and every letter, email and printout follows. */
 export const WORKSHOP = {
-  name: "Collett's Wildlife Artistry",
+  name: 'Apex Trophy Solutions',
   platform: 'Apex Trophy Solutions',
   portalUrl: 'https://app.apextrophysolutions.com',
   /** The workshop's WhatsApp number in international digits, for example 27821234567. Outfitters use it to reach the workshop about a rejected skin. */

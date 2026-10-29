@@ -3,7 +3,7 @@
  * chose, and where each one is now. (One row per job card.)
  */
 import type { ConditionReport } from '../condition';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../supabase';
 import { useAuth } from '../auth';
 import { selectIn } from '../supabaseHelpers';
@@ -24,10 +24,11 @@ export function useHunterAnimals() {
   const [client, setClient] = useState<HunterClient | null>(null);
   const [animals, setAnimals] = useState<HunterAnimal[]>([]);
   const [loading, setLoading] = useState(true);
+  const loadedOnce = useRef(false);   // only the first load shows a spinner; refreshes update quietly
 
   const load = useCallback(async () => {
     if (!user) { setLoading(false); return; }
-    setLoading(true);
+    if (!loadedOnce.current) setLoading(true);
     try {
       const { data: c } = await (supabase as any).from('clients').select('id, full_name, email, client_type').eq('auth_user_id', user.id).maybeSingle();
       if (!c) { setClient(null); setAnimals([]); return; }
@@ -52,7 +53,7 @@ export function useHunterAnimals() {
           history: fd.stage_history ?? [],
         } as HunterAnimal;
       }).sort((a, b) => b.huntYear.localeCompare(a.huntYear) || a.huntRef.localeCompare(b.huntRef) || a.species.localeCompare(b.species)));
-    } finally { setLoading(false); }
+    } finally { setLoading(false); loadedOnce.current = true; }
   }, [user]);
 
   useEffect(() => { load(); }, [load]);

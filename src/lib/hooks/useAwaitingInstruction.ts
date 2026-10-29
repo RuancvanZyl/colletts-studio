@@ -4,7 +4,7 @@
  * Tracks the 2-week reminder cadence so nobody goes silent unnoticed.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../supabase';
 
 export interface AwaitingInstructionHunt {
@@ -25,9 +25,10 @@ export interface AwaitingInstructionHunt {
 export function useAwaitingInstruction() {
   const [hunts, setHunts]     = useState<AwaitingInstructionHunt[]>([]);
   const [loading, setLoading] = useState(true);
+  const loadedOnce = useRef(false);   // only the first load shows a spinner; refreshes update quietly
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!loadedOnce.current) setLoading(true);
     const { data } = await (supabase as any)
       .from('v_awaiting_instruction')
       .select('*')
@@ -47,7 +48,7 @@ export function useAwaitingInstruction() {
       daysSinceLastContact:   h.days_since_last_contact ?? 0,
       reminderDue:            h.reminder_due,
     })));
-    setLoading(false);
+    setLoading(false); loadedOnce.current = true;
   }, []);
 
   useEffect(() => { load(); }, [load]);

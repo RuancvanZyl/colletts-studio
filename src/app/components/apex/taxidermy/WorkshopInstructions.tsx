@@ -48,6 +48,7 @@ export function WorkshopInstructions() {
   const [cards, setCards]         = useState<JobCard[]>([]);
   const [pendingCards, setPendingCards] = useState<JobCard[]>([]);
   const [loading, setLoading]     = useState(true);
+  const loadedOnce = useRef(false);
   const [expanded, setExpanded]   = useState<string | null>(null);
   const [openClient, setOpenClient] = useState<string | null>(null);
   const [deptFilter, setDeptFilter] = useState<string>('all');
@@ -68,7 +69,9 @@ export function WorkshopInstructions() {
   const myDepts = profile?.full_name ? getStaffDepartments(profile.full_name, profile.department_name, profile.works_in) : [];
 
   async function load() {
-    setLoading(true);
+    // Only the very first load shows the big spinner. Later refreshes (the refresh button, or a change made by
+    // someone else) update quietly so the screen the person is working on never blinks or disappears.
+    if (!loadedOnce.current) setLoading(true);
 
     // One joined query per page (client + hunt come with each job card) — no long id lists in the URL,
     // and paged so more than 1000 job cards still load.
@@ -100,7 +103,7 @@ export function WorkshopInstructions() {
     ]);
 
     const allDocs = [...docs, ...pendingDocs];
-    if (allDocs.length === 0) { setCards([]); setPendingCards([]); setLoading(false); return; }
+    if (allDocs.length === 0) { setCards([]); setPendingCards([]); setLoading(false); loadedOnce.current = true; return; }
 
     const custByHunt: Record<string, string[]> = {};
     for (const c of custDocs) {
@@ -141,6 +144,7 @@ export function WorkshopInstructions() {
     setCards(docs.map((d: any) => toCard(d, false)));
     setPendingCards(pendingDocs.map((d: any) => toCard(d, true)));
     setLoading(false);
+    loadedOnce.current = true;
   }
 
   async function activateJob(card: JobCard) {
@@ -188,7 +192,7 @@ export function WorkshopInstructions() {
     if (r.error) {
       if (/checklist incomplete/i.test(r.error) && isAdmin) {
         // admins may override, but must say why (it is recorded on the job card)
-        const reason = window.prompt(`${r.error}\n\nAs an admin you can move this job on anyway. Why? (this is recorded)`);
+        const reason = window.prompt(`${r.error}\n\nAs a manager you can still move this job on. Please type the reason. It is saved on the job card.`);
         if (reason && reason.trim()) {
           const { error: ovErr } = await (supabase as any).rpc('job_force_advance', {
             p_doc: card.docId, p_next: next ?? 'done', p_status: next ? 'in_progress' : 'completed', p_reason: reason.trim(),
@@ -249,7 +253,9 @@ export function WorkshopInstructions() {
   for (const c of filtered) { const k = c.clientNumber !== '—' ? c.clientNumber : c.clientName; (clientsMap.get(k) ?? clientsMap.set(k, []).get(k)!).push(c); }
   const clients = [...clientsMap.entries()].sort((a, b) => a[1][0].clientName.localeCompare(b[1][0].clientName));
   const deptsPresent = ALL_DEPARTMENTS.filter(d => cards.some(c => c.department === d));
-  const openCards = openClient ? (clientsMap.get(openClient) ?? null) : null;
+  const clientKey = (c: JobCard) => c.clientNumber !== '—' ? c.clientNumber : c.clientName;
+  const openList = openClient ? cards.filter(c => clientKey(c) === openClient) : [];
+  const openCards = openList.length > 0 ? openList : null;
 
   const view = { expanded, toggle, completing, markDone, photos, addPhotos, removePhoto, fileRefs, problems };
 

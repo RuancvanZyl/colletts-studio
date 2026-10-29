@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
 
 export type FlagKey = 'noJobCard' | 'instruction' | 'deposit' | 'waiting' | 'profile';
@@ -72,9 +72,10 @@ async function fetchAll(build: () => any): Promise<any[]> {
 export function useClientBoard() {
   const [entries, setEntries] = useState<ClientBoardEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const loadedOnce = useRef(false);   // only the first load shows a spinner; refreshes update quietly
 
   async function load() {
-    setLoading(true);
+    if (!loadedOnce.current) setLoading(true);
     try {
       const [clients, hunts, jobCards, invoices, resolutionRows] = await Promise.all([
         fetchAll(() => (supabase as any).from('clients')
@@ -194,7 +195,7 @@ export function useClientBoard() {
     } catch (err) {
       console.error('Client board failed to load', err);
     } finally {
-      setLoading(false);
+      setLoading(false); loadedOnce.current = true;
     }
   }
 
