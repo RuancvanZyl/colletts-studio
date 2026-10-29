@@ -22,6 +22,7 @@ export function InviteScreen({ token, onDone, onSignIn, onAccountCreated }: { to
   const [step, setStep] = useState<'account' | 'details' | 'check-email'>('account');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPw, setShowPw] = useState(false);
   const [phone, setPhone] = useState('');
   const [country, setCountry] = useState('');
   const [address, setAddress] = useState('');
@@ -31,7 +32,7 @@ export function InviteScreen({ token, onDone, onSignIn, onAccountCreated }: { to
   useEffect(() => {
     (async () => {
       const { data } = await (supabase as any).rpc('get_invite_info', { p_token: token });
-      setInfo(data ?? null);
+      setInfo(data ? { ...data, animals: data.animals ?? [] } : null);
       if (data) { setEmail(data.email ?? ''); setPhone(data.phone ?? ''); }
     })();
   }, [token]);
@@ -150,7 +151,7 @@ export function InviteScreen({ token, onDone, onSignIn, onAccountCreated }: { to
     <form onSubmit={createAccount} className="space-y-4">
       <p className="text-sm text-slate-600">Create your profile, then you can choose how you want each animal mounted.</p>
       <div><label className={label}>E-mail</label><input className={field} type="email" inputMode="email" required value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" /></div>
-      <div><label className={label}>Choose a password</label><input className={field} type="password" required minLength={8} value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password" placeholder="At least 8 characters" /></div>
+      <div><label className={label}>Choose a password</label><input className={field} type={showPw ? 'text' : 'password'} required minLength={8} value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password" placeholder="At least 8 characters" /><button type="button" onClick={() => setShowPw(v => !v)} className="mt-1 min-h-11 text-sm font-semibold text-green-800">{showPw ? 'Hide my password' : 'Show my password so I can check it'}</button></div>
       {error && <p className="text-sm text-red-600">{plainError(error)}</p>}
       <button className={primary} disabled={busy}>{busy && <Loader2 className="w-5 h-5 animate-spin" />}Create my profile</button>
       <button type="button" className="w-full text-sm text-slate-500 min-h-11" onClick={onSignIn}>I already have an account</button>

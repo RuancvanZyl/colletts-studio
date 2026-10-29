@@ -171,3 +171,10 @@
 - Developer words removed from messages staff see ("has migration 045 been run?").
 - Removed 46 unused leftover files (old demo portals and screens with fake data: admin/*, AdminPortal, Chapter*/Character*, outfitter demo screens, mock data files, old hooks). Nothing imported them; build, tests and the type check are unchanged.
 - Local test data for walking the app: not committed (a throw-away `public/__devmock.js`, only for local trials).
+
+### Walk-through pass #5
+- New hunters and outfitters can tap "Show my password so I can check it" when choosing a password on their invitation page.
+- The invitation page no longer crashes if the hunter has no animals listed yet.
+- `CLAUDE.md` rewritten: it still described an old, different version of the app. It now covers the real architecture, commands, release steps, the plain-language rule and the business rules.
+- `tools/devmock/` keeps the fake-data tool used for these walk-throughs (not part of the app).
+- **For the owner to decide:** the hidden "Master Access" box on the hunter/outfitter sign-in page checks a 4-digit PIN that is built into the public app files (anyone who views the page source can read it). It only opens an empty hunter/outfitter shell (the database still blocks all real data), so it does nothing useful today. Recommend removing it; it needs the owner's yes.

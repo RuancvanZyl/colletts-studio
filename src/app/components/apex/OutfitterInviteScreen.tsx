@@ -11,7 +11,7 @@ const primary = 'w-full rounded-xl bg-green-700 hover:bg-green-800 text-white fo
 
 export function OutfitterInviteScreen({ token, onDone, onSignIn }: { token: string; onDone: () => void; onSignIn: () => void }) {
   const [info, setInfo] = useState<{ name: string; contact_name: string | null; email: string | null; registered: boolean } | null | undefined>(undefined);
-  const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [showPw, setShowPw] = useState(false); const [phone, setPhone] = useState('');
   const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null); const [checkMail, setCheckMail] = useState(false); const [created, setCreated] = useState(false);
 
   useEffect(() => { (async () => {
@@ -53,7 +53,7 @@ export function OutfitterInviteScreen({ token, onDone, onSignIn }: { token: stri
     <form onSubmit={create} className="space-y-4">
       <div><label className="block text-sm font-semibold text-slate-700 mb-1">E-mail</label><input className={field} type="email" required value={email} onChange={e => setEmail(e.target.value)} /></div>
       <div><label className="block text-sm font-semibold text-slate-700 mb-1">Mobile / WhatsApp</label><input className={field} inputMode="tel" value={phone} onChange={e => setPhone(e.target.value)} /></div>
-      <div><label className="block text-sm font-semibold text-slate-700 mb-1">Choose a password</label><input className={field} type="password" required minLength={8} value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 8 characters" /></div>
+      <div><label className="block text-sm font-semibold text-slate-700 mb-1">Choose a password</label><input className={field} type={showPw ? 'text' : 'password'} required minLength={8} value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 8 characters" /><button type="button" onClick={() => setShowPw(v => !v)} className="mt-1 min-h-11 text-sm font-semibold text-green-800">{showPw ? 'Hide my password' : 'Show my password so I can check it'}</button></div>
       {error && <p className="text-sm text-red-600">{plainError(error)}</p>}
       <button className={primary} disabled={busy}>{busy && <Loader2 className="w-5 h-5 animate-spin" />}Create my account</button>
       <button type="button" className="w-full text-sm text-slate-500 min-h-11" onClick={onSignIn}>I already have an account</button>

@@ -1,117 +1,57 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for working in this repository.
 
-## Project
+## What this is
 
-**Collett's Studio** — a taxidermy workshop management system for Collett's Wildlife Artistry. Manages the full trophy lifecycle: client intake → receiving → production phases → QC → shipping. Three user portals: Taxidermy Staff, Hunter (client), and Outfitter.
+**Apex Trophy Solutions**: a taxidermy workshop management app (installable phone app / PWA) with three portals:
+- **Staff / Taxidermy** (`TaxidermyPortal.tsx`): check-in, job cards, departments, milestones, quotes and payments, shipping, setup.
+- **Hunter** (`HunterPortal.tsx`, `LocalHunterPortal.tsx` for hunters whose trophies stay in South Africa).
+- **Outfitter** (`OutfitterPortal.tsx`).
+
+The people using it are **not technical**. Everything must be super easy to use and easy to understand: plain everyday words, one obvious next step per screen, big tap targets, say what will happen before the person taps, no database or developer words in anything a person can see. Review the wording of every screen and message you add. Screen titles must match the menu tab that opens them.
+
+Read `docs/SESSION_HANDOFF.md` first: it is the running log of what was built, what is still open, and what the owner has to do (run SQL, deploy functions, supply details).
 
 ## Commands
 
-pnpm is installed locally, not system-wide. Always prefix with the PATH export:
+pnpm is installed locally, not system-wide:
 
 ```bash
 export PATH=~/.npm-global/bin:$PATH
-pnpm dev --host --port 3001     # dev server (LAN-accessible)
-pnpm build                       # production build
-pnpm preview                     # preview production build
+pnpm dev --port 3002              # dev server
+./node_modules/.bin/vite build    # production build
+pnpm test                         # unit tests (node --test, tests/*.test.ts)
+pnpm test:db                      # database tests: every migration in a throw-away Postgres (PGlite), tests/db/
+./node_modules/.bin/tsc --noEmit  # type check. About 120 older errors remain in legacy files (Supabase types out of date); they are noise. Do not add new ones.
 ```
 
-There are no lint or test scripts configured. TypeScript type-checking can be done via `tsc --noEmit`.
+Run the type check, unit tests, database tests and a build before every commit.
 
-The app runs at `http://127.0.0.1:3001`. Others on the same WiFi use `http://10.0.0.156:3001`.
+## Releasing
 
-## Environment
-
-Copy `.env.example` to `.env` and fill in credentials from the Supabase dashboard (Settings → API):
-
-```
-VITE_SUPABASE_URL=https://kpbtydfkqrrtbpwxvbep.supabase.co
-VITE_SUPABASE_ANON_KEY=<anon key>
-```
-
-If `.env` is missing, the app gracefully skips all Supabase calls and shows the landing page without crashing — the `HAS_SUPABASE` flag in `src/lib/auth.tsx` gates all Supabase initialization.
-
-## Database
-
-The Supabase project is at `https://kpbtydfkqrrtbpwxvbep.supabase.co`. Three migration files in `supabase/migrations/` must be run **in order** in the Supabase SQL Editor before the app can read/write real data:
-
-1. `001_initial_schema.sql` — all tables
-2. `002_rls_policies.sql` — row-level security
-3. `003_views_and_functions.sql` — `v_active_alerts` view, `get_dashboard_summary()` RPC, production-clock trigger
-
-To regenerate TypeScript types after schema changes:
-```bash
-npx supabase gen types typescript --project-id kpbtydfkqrrtbpwxvbep > src/lib/database.types.ts
-```
+- The owner is not a developer. Database changes are SQL files in `supabase/migrations/` (+ a copy or combined script in `supabase/launch/`) that the owner pastes into the Supabase SQL Editor. Give exact click-by-click steps. Test every script in the PGlite harness first (`tests/db/migrations.test.mjs`, `tests/db/bootstrap.sql`).
+- Edge Functions (`supabase/functions/*`) are pasted into the Supabase dashboard by the owner ("Via Editor"). Secrets (e.g. `ANTHROPIC_API_KEY`) are added by the owner.
+- Commit and push with the explicit URL, then verify with `git ls-remote`: `git push git@github.com:RuancvanZyl/colletts-studio.git HEAD:main`. The live site rebuilds from `main`; every phone and laptop updates itself (see `src/lib/appUpdate.ts`, `src/main.tsx`).
+- Add an entry to `docs/SESSION_HANDOFF.md` after each step.
 
 ## Architecture
 
-### Routing
-Navigation is **state-based**, not URL-based. `src/app/App.tsx` switches between views using `useState<AppView>` and `useState<PortalType>`. There is no React Router `<Routes>` tree — `react-router` is installed but not used for routing. To add a new screen: add a case to the portal's `renderView()` switch and a nav button in its sidebar.
+- React 18 + Vite + Tailwind v4 + TypeScript. Navigation is state based (no router): the staff portal uses `navigate(view, id?)` in `TaxidermyPortal.tsx`; the menu is the `allSections` list there (a few plain sections with tabs).
+- Supabase: Postgres with row-level security; rules are enforced in the database (triggers, SECURITY DEFINER functions), the app calls `supabase.rpc(...)`. Realtime via `src/lib/liveRefresh.ts` (`useLiveRefresh`).
+- Data hooks live in `src/lib/hooks/`. Screens that reload (live updates, after saving) must **not** show the full-screen spinner again: use the `loadedOnce` ref pattern (spinner on the first load only). Screens must never blink or throw away what the person is doing.
+- Offline: queued actions and photos in IndexedDB (`src/lib/offline/`); `completeStage` is the one way a job card moves on.
+- Errors: every `toast.error` goes through `src/lib/plainError.ts` (installed in `main.tsx`), which turns database/network wording into plain words. Write your own messages in plain words anyway, and wrap any inline `{error}` text with `plainError(...)`.
+- Brand: always "Apex Trophy Solutions" (`WORKSHOP.name` in `src/lib/workshop.ts`). Never expose the master PIN.
+- The `src/app/components/ui/` folder is shadcn/ui; edit only when a real bug needs it (e.g. `input.tsx` forwards refs).
 
-### Auth
-`src/lib/auth.tsx` provides `AuthProvider` + `useAuth()`. On login, it fetches the user's `staff_profiles` row and exposes it as `profile`. Authenticated staff are auto-redirected to the taxidermy portal on landing. The `user` object is from Supabase Auth; `profile` adds the application-level role (`StaffRole`).
+## Business rules (decided with the owner)
 
-### Data Layer
-All Supabase queries live in custom hooks under `src/lib/hooks/`. Each hook is responsible for one domain:
+- The **order clock** starts the day the invoice is paid (`client_hunts.timeline_started_at`). Milestones: M1 skin & skull prep day 90, M2 tannery day 150, M3 completion day 180 (small) / 270 (medium) or production complete 365 (large), M4 dispatch & clearing day 425 (large). Green = all due milestones met; yellow = one overdue; red = two or more overdue or deadline passed; every missed milestone needs management feedback. Department time is a record for management only; the clock never stops.
+- Only a department **lead** accepts a job card (name + time stamp); 24-hour acceptance flag; Mounting and Finishing need a time-stamped photo.
+- Receiving condition report: only Fresh or Salted is required. Tannery soak report (in-house checklist or third-party) is accepted or rejected by a lead; a rejected skin notifies the outfitter, who must acknowledge it; outcomes: outfitter replacement, workshop stock, or client decides; management can let the other trophies carry on; a held trophy stays red until replaced or cancelled. The hunt register never changes; the job card and invoice do (credit note, then amended invoice).
+- Quotes are the invoices; payments recorded by hand today (Xero link not built).
 
-| Hook | Domain | Status |
-|------|--------|--------|
-| `useDashboard` | KPI summary + activity feed + alerts | ✅ wired |
-| `useReceiving` | Receiving batch creation + specimen intake | ✅ wired |
-| `useClients` | Client list and profiles | stub |
-| `useSpecimens` | Specimens by job | stub |
-| `useJobs` | Job status and phase history | stub |
-| `useInventory` | Stock levels + reorder thresholds | stub |
-| `useInvoices` | Invoices and payments | stub |
+## Trying the screens with fake data
 
-When wiring a screen to real data, import the relevant hook — don't query Supabase directly inside components.
-
-### Components
-```
-src/app/components/
-  apex/
-    taxidermy/       # 12 workshop screens (the primary portal)
-    hunter/          # Hunter portal (mostly mock data)
-    outfitter/       # Outfitter portal (mostly mock data)
-    admin/           # Reception / admin sub-screens
-    shared/          # PortalBreadcrumb, QuickActions, UniversalAIAssistant
-    mockData.ts      # Mock data used by unwired screens
-    mockAnimalData.ts
-    mockOutfitterData.ts
-    mockPaymentData.ts
-  ui/                # shadcn/ui components — do not edit these
-  figma/             # ImageWithFallback helper from Figma Make
-```
-
-The `@` alias resolves to `src/app/` — so `import { Button } from '@/components/ui/button'`.
-
-### Database Schema Key Concepts
-
-- **`specimens`** — individual physical trophies. Each has a `tag_number` for physical labelling and a `status` of `expected` (pre-arrival) or `received`.
-- **`jobs`** — one production order per specimen. Tracks `current_phase` (the `JobPhase` enum), `assigned_department_id`, and `production_started_at`. The production clock is set automatically by a Postgres trigger when **both** the deposit invoice is paid **and** the specimen is physically received.
-- **`job_phase_history`** — audit trail of every phase transition. The `useDashboard` hook queries this for the activity feed.
-- **`phase_checkpoints`** — QC gates: a photo or comment is required before a job can advance phases. Enforced at the DB level.
-- **`parts`** — individual components of a job (skull, cape skin, horns, etc.), each with its own `current_phase` and `current_location`.
-- **`v_active_alerts`** — Postgres view that surfaces overdue, stalled, and missing-date jobs. Queried by the dashboard.
-- **`get_dashboard_summary()`** — RPC function returning KPI counts. Called via `supabase.rpc('get_dashboard_summary')`.
-
-### Vite Config
-Two custom plugins handle Figma Make export quirks:
-- `figmaVersionedImportResolver` — strips version suffixes from imports like `sonner@2.0.3`
-- `figmaAssetResolver` — resolves `figma:asset/filename` imports from `src/assets/`
-
-### Theming
-`ThemeProvider` (`src/app/components/apex/ThemeProvider.tsx`) manages light/dark mode via `localStorage`. `PortalThemeProvider` applies portal-specific colour accents (`hunter`, `outfitter`, `admin`, `unified`). Both wrap `AppInner` in `App.tsx`.
-
-## What's Not Built Yet
-
-Screens that still use mock data and need wiring to real hooks:
-- `PartScanningStation`, `SkinProcessing`, `SkullProcessing`, `StorageManagement`, `MountingStation`, `FinishingStation`, `QualityInspection`, `PackingShipping`, `InventoryView`, `AdminConfiguration`
-
-Modules not yet built:
-- Invoicing UI (create invoice, line items, record payment)
-- Client management screen
-- PayFast webhook (planned as a Supabase Edge Function)
-- Vercel deployment config
+`tools/devmock/README.md` explains how to open every portal locally with made-up data (no real sign-in). Walk new screens on a phone-size window as a first-time user would. Remove the temporary files before committing.
