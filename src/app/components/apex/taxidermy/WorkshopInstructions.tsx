@@ -2,7 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import { completeStage as completeStageAction } from '../../../../lib/offline/completeStage';
 import { supabase } from '../../../../lib/supabase';
 import { useAuth } from '../../../../lib/auth';
-import { getNextDepartment, getStaffDepartments, DEPT_LABELS } from '../../../../lib/pipeline';
+import { getNextDepartment, getStaffDepartments, DEPT_LABELS, ALL_DEPARTMENTS } from '../../../../lib/pipeline';
+import { conditionSummary } from '../../../../lib/condition';
+import { CaseTag, type OpenCase } from './CaseTag';
+import { SoakReportButton } from './SoakReportButton';
+import { useLiveRefresh } from '../../../../lib/liveRefresh';
 import { Button } from '../../ui/button';
 import { PrintButton } from '../shared/PrintButton';
 import { JobPhotosButton } from '../shared/TrophyPhotos';
@@ -10,7 +14,7 @@ import { printJobCards } from '../../../../lib/print';
 import { toast } from 'sonner';
 import {
   RefreshCw, Loader2, Sparkles, ChevronDown, ChevronUp,
-  Camera, CheckCircle2, X, Clock, Filter,
+  Camera, CheckCircle2, X, ArrowLeft, Search,
 } from 'lucide-react';
 
 interface StageHistory {
@@ -30,6 +34,7 @@ interface JobCard {
   mountType: string;
   instructions: string;
   received: string;
+  condition: string;
   specialRequests: string[];
   department: string;
   stageHistory: StageHistory[];
@@ -44,7 +49,10 @@ export function WorkshopInstructions() {
   const [pendingCards, setPendingCards] = useState<JobCard[]>([]);
   const [loading, setLoading]     = useState(true);
   const [expanded, setExpanded]   = useState<string | null>(null);
-  const [expandedClient, setExpandedClient] = useState<string | null>(null);
+  const [openClient, setOpenClient] = useState<string | null>(null);
+  const [deptFilter, setDeptFilter] = useState<string>('all');
+  const [find, setFind] = useState('');
+  const [problems, setProblems] = useState<Record<string, OpenCase>>({});
   const [completing, setCompleting] = useState<string | null>(null);
   const [activating, setActivating] = useState<string | null>(null);
   const [photos, setPhotos]       = useState<Record<string, File[]>>({});
@@ -116,6 +124,7 @@ export function WorkshopInstructions() {
         mountType:       fd.mount_type    ?? '—',
         instructions:    fd.instructions  ?? '',
         received:        (fd.received_parts ?? []).length ? (fd.received_parts as any[]).map(p => p.label ?? p.code).join(', ') + (fd.received_other ? ` (${fd.received_other})` : '') : '',
+        condition:       conditionSummary(fd.condition_report, fd.condition),
         specialRequests: custByHunt[doc.hunt_id] ?? [],
         department:      doc.current_department ?? 'receiving',
         stageHistory:    fd.stage_history ?? [],
@@ -125,6 +134,10 @@ export function WorkshopInstructions() {
       };
     };
 
+    const { data: qc } = await (supabase as any).from('quality_cases').select('id, job_doc_id, reasons, order_override_at, order_override_reason').neq('status', 'resolved');
+    const pm: Record<string, OpenCase> = {};
+    for (const c of qc ?? []) pm[c.job_doc_id] = { id: c.id, reasons: c.reasons ?? [], held: !!c.order_override_at, overrideReason: c.order_override_reason ?? null };
+    setProblems(pm);
     setCards(docs.map((d: any) => toCard(d, false)));
     setPendingCards(pendingDocs.map((d: any) => toCard(d, true)));
     setLoading(false);
@@ -143,6 +156,7 @@ export function WorkshopInstructions() {
   }
 
   useEffect(() => { load(); }, [profile?.full_name]);
+  useLiveRefresh(['hunt_documents', 'quality_cases'], load);
 
   function toggle(id: string) {
     setExpanded(prev => prev === id ? null : id);
@@ -227,17 +241,20 @@ export function WorkshopInstructions() {
     return `${Math.round(mins / 1440)}d`;
   }
 
-  // Group cards by department for boss/admin view
-  const grouped: Record<string, JobCard[]> = {};
-  for (const card of cards) {
-    if (!grouped[card.department]) grouped[card.department] = [];
-    grouped[card.department].push(card);
-  }
+  // ── by client: one row per client, then the client's full job card ───────────
+  const stageOrder = (d: string) => { const i = ALL_DEPARTMENTS.indexOf(d); return i < 0 ? 99 : i; };
+  const filtered = cards.filter(c => (deptFilter === 'all' || c.department === deptFilter)
+    && (!find.trim() || `${c.clientName} ${c.clientNumber} ${c.species}`.toLowerCase().includes(find.trim().toLowerCase())));
+  const clientsMap = new Map<string, JobCard[]>();
+  for (const c of filtered) { const k = c.clientNumber !== '—' ? c.clientNumber : c.clientName; (clientsMap.get(k) ?? clientsMap.set(k, []).get(k)!).push(c); }
+  const clients = [...clientsMap.entries()].sort((a, b) => a[1][0].clientName.localeCompare(b[1][0].clientName));
+  const deptsPresent = ALL_DEPARTMENTS.filter(d => cards.some(c => c.department === d));
+  const openCards = openClient ? (clientsMap.get(openClient) ?? null) : null;
 
-  const deptKeys = Object.keys(grouped).sort();
+  const view = { expanded, toggle, completing, markDone, photos, addPhotos, removePhoto, fileRefs, problems };
 
   return (
-    <div className="space-y-4 max-w-2xl">
+    <div className="space-y-4 max-w-3xl">
 
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -261,7 +278,7 @@ export function WorkshopInstructions() {
       </div>
 
       {/* Pending hunter submissions — admin only */}
-      {seeAll && pendingCards.length > 0 && (
+      {seeAll && pendingCards.length > 0 && !openCards && (
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-3 px-1">
             <span className="text-xs font-bold text-amber-500 uppercase tracking-wider">Incoming from Hunters</span>
@@ -275,12 +292,7 @@ export function WorkshopInstructions() {
                   <div className="text-sm text-slate-500">{card.clientName} · {card.huntYear ?? '—'} · {card.operator ?? 'No outfitter'}</div>
                   {card.instructions && <div className="text-xs text-slate-400 mt-1 truncate">{card.instructions}</div>}
                 </div>
-                <Button
-                  size="sm"
-                  onClick={() => activateJob(card)}
-                  disabled={activating === card.docId}
-                  className="shrink-0 bg-amber-500 hover:bg-amber-600 text-white"
-                >
+                <Button size="sm" onClick={() => activateJob(card)} disabled={activating === card.docId} className="shrink-0 bg-amber-500 hover:bg-amber-600 text-white">
                   {activating === card.docId ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Activate'}
                 </Button>
               </div>
@@ -290,128 +302,64 @@ export function WorkshopInstructions() {
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center py-24">
-          <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
-        </div>
+        <div className="flex items-center justify-center py-24"><Loader2 className="w-8 h-8 animate-spin text-slate-400" /></div>
       ) : cards.length === 0 ? (
         <div className="bg-white dark:bg-[#1c2b3a] rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 py-20 text-center">
-          <p className="text-slate-500 font-medium">
-            {myDepts.length === 0 && !seeAll ? 'No department assigned to your profile' : 'No active jobs at your station'}
-          </p>
+          <p className="text-slate-500 font-medium">{myDepts.length === 0 && !seeAll ? 'No department assigned to your profile' : 'No active jobs at your station'}</p>
         </div>
-      ) : seeAll ? (
-        // ── Boss/Admin: grouped by department ──
-        deptKeys.map(dept => (
-          <div key={dept}>
-            <div className="flex items-center gap-2 mb-2 px-1">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                {DEPT_LABELS[dept] ?? dept}
-              </span>
-              <span className="text-xs bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded-full">
-                {grouped[dept].length}
-              </span>
-              <PrintButton compact label="Print" className="ml-auto" onPrint={() => printJobCards({ docIds: grouped[dept].map(c => c.docId) })} />
+      ) : openCards ? (
+        // ── one client: the full job card ──
+        <div className="space-y-4">
+          <button onClick={() => setOpenClient(null)} className="inline-flex items-center gap-1.5 text-base font-semibold text-[#0073ea] min-h-11"><ArrowLeft className="w-4 h-4" />All clients</button>
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1c2b3a] p-4 flex items-start gap-3">
+            <span className="font-mono text-xs font-bold text-white bg-slate-700 px-2 py-1 rounded shrink-0 mt-1">{openCards[0].clientNumber}</span>
+            <div className="flex-1 min-w-0">
+              <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 leading-tight">{openCards[0].clientName}</h2>
+              <p className="text-sm text-slate-500">{openCards.length} trophies{openCards[0].huntYear ? ` · ${openCards[0].huntYear} hunt` : ''}{openCards[0].operator ? ` · ${openCards[0].operator}` : ''}</p>
+              <div className="flex flex-wrap gap-1.5 mt-2">{[...new Set(openCards.map(c => c.department))].sort((x, y) => stageOrder(x) - stageOrder(y)).map(d => <span key={d} className="text-xs font-semibold rounded-full px-2.5 py-0.5 bg-[#0073ea]/10 text-[#0073ea]">{DEPT_LABELS[d] ?? d} · {openCards.filter(c => c.department === d).length}</span>)}</div>
             </div>
-            <ClientGroupedCardList
-              cards={grouped[dept]}
-              expanded={expanded}
-              toggle={toggle}
-              expandedClient={expandedClient}
-              setExpandedClient={setExpandedClient}
-              completing={completing}
-              markDone={markDone}
-              photos={photos}
-              addPhotos={addPhotos}
-              removePhoto={removePhoto}
-              fileRefs={fileRefs}
-              timeInDept={timeInDept}
-            />
+            <PrintButton label="Print the full job card" onPrint={() => printJobCards({ docIds: openCards.map(c => c.docId) })} />
           </div>
-        ))
+          {[...openCards].sort((x, y) => stageOrder(x.department) - stageOrder(y.department) || x.species.localeCompare(y.species)).map(card => <AnimalBlock key={card.docId} card={card} {...view} />)}
+        </div>
       ) : (
-        // ── Staff: flat list, their department only ──
-        <ClientGroupedCardList
-          cards={cards}
-          expanded={expanded}
-          toggle={toggle}
-          expandedClient={expandedClient}
-          setExpandedClient={setExpandedClient}
-          completing={completing}
-          markDone={markDone}
-          photos={photos}
-          addPhotos={addPhotos}
-          removePhoto={removePhoto}
-          fileRefs={fileRefs}
-          timeInDept={timeInDept}
-        />
+        // ── all clients: one row each ──
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => setDeptFilter('all')} className={`min-h-11 px-4 rounded-full border-2 text-sm font-bold ${deptFilter === 'all' ? 'border-[#0073ea] bg-[#0073ea] text-white' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}>All departments</button>
+            {deptsPresent.map(d => <button key={d} onClick={() => setDeptFilter(d)} className={`min-h-11 px-4 rounded-full border-2 text-sm font-bold ${deptFilter === d ? 'border-[#0073ea] bg-[#0073ea] text-white' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}>{DEPT_LABELS[d] ?? d} · {cards.filter(c => c.department === d).length}</button>)}
+          </div>
+          <div className="relative"><Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" /><input value={find} onChange={e => setFind(e.target.value)} placeholder="Find a client or an animal" className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 pl-9 pr-3 min-h-11 text-base" /></div>
+          {clients.length === 0 && <p className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 p-8 text-center text-slate-500">No clients match.</p>}
+          {clients.map(([key, list]) => {
+            const withInstr = list.filter(c => c.instructions || c.specialRequests.length > 0).length;
+            const flagged = list.filter(c => problems[c.docId]).length;
+            const byDept = [...new Set(list.map(c => c.department))].sort((x, y) => stageOrder(x) - stageOrder(y));
+            return (
+              <div key={key} className="bg-white dark:bg-[#1c2b3a] rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden flex items-center">
+                <button onClick={() => setOpenClient(key)} className="flex-1 min-w-0 flex items-center gap-3 px-4 py-3.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/40 min-h-16">
+                  <span className="font-mono text-xs font-bold text-white bg-slate-700 px-2 py-0.5 rounded shrink-0">{list[0].clientNumber}</span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block font-bold text-slate-900 dark:text-slate-100 truncate">{list[0].clientName}</span>
+                    <span className="block text-xs text-slate-500 truncate">{byDept.map(d => `${DEPT_LABELS[d] ?? d} ${list.filter(c => c.department === d).length}`).join(' · ')}</span>
+                  </span>
+                  {flagged > 0 && <span className="text-[11px] font-bold rounded-full px-2 py-0.5 bg-red-600 text-white shrink-0">{flagged} problem</span>}
+                  {withInstr > 0 && <span className="hidden sm:inline text-[11px] text-blue-500 shrink-0">{withInstr} with instructions</span>}
+                  <span className="text-xs bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 px-2 py-0.5 rounded-full shrink-0">{list.length} trophies</span>
+                  <ChevronDown className="w-4 h-4 text-slate-400 -rotate-90 shrink-0" />
+                </button>
+                <PrintButton compact label="Print" className="mr-3 shrink-0" onPrint={() => printJobCards({ docIds: list.map(c => c.docId) })} />
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
 }
 
-// ── Client-grouped wrapper — collapses a big order into one summary row ────────
-interface ClientGroupedCardListProps extends Omit<CardListProps, 'cards'> {
-  cards: JobCard[];
-  expandedClient: string | null;
-  setExpandedClient: (id: string | null) => void;
-}
-
-function ClientGroupedCardList({ cards, expandedClient, setExpandedClient, ...rest }: ClientGroupedCardListProps) {
-  const byClient: Record<string, JobCard[]> = {};
-  for (const card of cards) {
-    const key = card.clientNumber !== '—' ? card.clientNumber : card.clientName;
-    if (!byClient[key]) byClient[key] = [];
-    byClient[key].push(card);
-  }
-  const clientKeys = Object.keys(byClient).sort((a, b) => byClient[b].length - byClient[a].length);
-
-  // Single-client group (e.g. staff view already filtered) — skip the extra header
-  if (clientKeys.length <= 1) {
-    return <CardList cards={cards} {...rest} />;
-  }
-
-  return (
-    <div className="space-y-2">
-      {clientKeys.map(key => {
-        const clientCards = byClient[key];
-        const isOpen = expandedClient === key;
-        const withInstructions = clientCards.filter(c => c.instructions || c.specialRequests.length > 0).length;
-        return (
-          <div key={key} className="bg-white dark:bg-[#1c2b3a] rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-            <div className="flex items-center">
-            <button
-              onClick={() => setExpandedClient(isOpen ? null : key)}
-              className="flex-1 min-w-0 flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40"
-            >
-              <span className="font-mono text-xs font-bold text-white bg-slate-700 dark:bg-slate-600 px-2 py-0.5 rounded flex-shrink-0">
-                {clientCards[0].clientNumber}
-              </span>
-              <span className="font-bold text-slate-900 dark:text-slate-100 text-sm flex-1 truncate">{clientCards[0].clientName}</span>
-              <span className="text-xs bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded-full flex-shrink-0">
-                {clientCards.length} trophies
-              </span>
-              {withInstructions > 0 && (
-                <span className="text-[10px] text-blue-500 flex-shrink-0 hidden sm:block">{withInstructions} with instructions</span>
-              )}
-              {isOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-            </button>
-            <PrintButton compact label="Print" className="mr-3 shrink-0" onPrint={() => printJobCards({ docIds: clientCards.map(c => c.docId) })} />
-            </div>
-            {isOpen && (
-              <div className="border-t border-slate-100 dark:border-slate-800">
-                <CardList cards={clientCards} {...rest} />
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ── Shared card list ──────────────────────────────────────────────────────────
-interface CardListProps {
-  cards: JobCard[];
+// ── One animal on the client's job card: what it is, what was received, the instructions, and the work ──
+interface ViewProps {
   expanded: string | null;
   toggle: (id: string) => void;
   completing: string | null;
@@ -420,116 +368,76 @@ interface CardListProps {
   addPhotos: (id: string, files: FileList | null) => void;
   removePhoto: (id: string, idx: number) => void;
   fileRefs: React.MutableRefObject<Record<string, HTMLInputElement | null>>;
-  timeInDept: (card: JobCard) => string | null;
+  problems: Record<string, OpenCase>;
 }
 
-function CardList({ cards, expanded, toggle, completing, markDone, photos, addPhotos, removePhoto, fileRefs, timeInDept }: CardListProps) {
+function AnimalBlock({ card, expanded, toggle, completing, markDone, photos, addPhotos, removePhoto, fileRefs, problems }: ViewProps & { card: JobCard }) {
+  const isOpen = expanded === card.docId;
+  const isDoing = completing === card.docId;
+  const cardPhotos = photos[card.docId] ?? [];
+  const problem = problems[card.docId];
   return (
-    <div className="bg-white dark:bg-[#1c2b3a] rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800">
-      {cards.map(card => {
-        const isOpen     = expanded === card.docId;
-        const isDoing    = completing === card.docId;
-        const timeSpent  = timeInDept(card);
-        const cardPhotos = photos[card.docId] ?? [];
-
-        return (
-          <div key={card.docId}>
-            {/* Summary row */}
-            <button
-              onClick={() => toggle(card.docId)}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40 ${isOpen ? 'bg-slate-50 dark:bg-slate-800/40' : ''}`}
-            >
-              <span className="font-mono text-xs font-bold text-white bg-slate-700 dark:bg-slate-600 px-2 py-0.5 rounded flex-shrink-0">
-                {card.clientNumber}
-              </span>
-              <span className="font-bold text-slate-900 dark:text-slate-100 text-sm flex-1 truncate">{card.species}</span>
-              <span className="text-xs text-slate-400 hidden sm:block flex-shrink-0">{card.mountType}</span>
-              {card.tagNumber && <span className="font-mono text-xs text-slate-400 flex-shrink-0">#{card.tagNumber}</span>}
-              {timeSpent && (
-                <span className="text-[10px] text-slate-400 flex items-center gap-0.5 flex-shrink-0">
-                  <Clock className="w-3 h-3" />{timeSpent}
-                </span>
-              )}
-              <div className="flex items-center gap-1.5 flex-shrink-0">
-                {card.specialRequests.length > 0 && <Sparkles className="w-3.5 h-3.5 text-amber-500" />}
-                {card.instructions && <span className="w-2 h-2 rounded-full bg-blue-400" />}
-                {isOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-              </div>
-            </button>
-
-            {/* Expanded */}
-            {isOpen && (
-              <div className="px-4 pb-5 pt-2 bg-slate-50 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800 space-y-3">
-                <div className="flex items-center justify-between gap-2 pt-1">
-                  <p className="text-xs text-slate-400">{card.clientName} · {card.mountType}</p>
-                  <div className="flex gap-2">
-                    <JobPhotosButton docId={card.docId} dept={card.department} huntId={card.huntId} title={`${card.species} — ${card.clientName}`} />
-                    <PrintButton compact label="Print job card" onPrint={() => printJobCards({ docIds: [card.docId] })} />
-                  </div>
-                </div>
-
-                {card.received && <p className="text-sm text-slate-700 dark:text-slate-200"><span className="font-semibold">Received:</span> {card.received}</p>}
-                {card.instructions ? (
-                  <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-xl px-4 py-3">
-                    <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wider mb-1.5">Client Instructions</p>
-                    <p className="text-sm text-blue-900 dark:text-blue-100 leading-relaxed">{card.instructions}</p>
-                  </div>
-                ) : (
-                  !card.specialRequests.length && (
-                    <p className="text-xs text-slate-400 italic">No special instructions — standard mount</p>
-                  )
-                )}
-
-                {card.specialRequests.length > 0 && (
-                  <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3">
-                    <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
-                      <Sparkles className="w-3 h-3" />Special Request — Price TBC
-                    </p>
-                    {card.specialRequests.map((r, i) => (
-                      <p key={i} className="text-sm text-amber-900 dark:text-amber-200 leading-relaxed">{r}</p>
-                    ))}
-                  </div>
-                )}
-
-                {/* Completion */}
-                <div className="border-t border-slate-200 dark:border-slate-700 pt-3 space-y-3">
-                  <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                    Upload photo <span className="font-normal text-slate-400">(optional)</span>
-                  </p>
-
-                  {cardPhotos.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {cardPhotos.map((f, i) => (
-                        <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 flex-shrink-0">
-                          <img src={URL.createObjectURL(f)} alt="" className="w-full h-full object-cover" />
-                          <button onClick={() => removePhoto(card.docId, i)} className="absolute top-0.5 right-0.5 w-4 h-4 bg-black/60 rounded-full flex items-center justify-center">
-                            <X className="w-2.5 h-2.5 text-white" />
-                          </button>
-                        </div>
-                      ))}
-                      <button onClick={() => fileRefs.current[card.docId]?.click()} className="w-16 h-16 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center text-slate-400 flex-shrink-0">
-                        <Camera className="w-5 h-5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <button onClick={() => fileRefs.current[card.docId]?.click()} className="w-full border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl py-4 flex flex-col items-center gap-1.5 text-slate-400 hover:border-slate-300 transition-colors">
-                      <Camera className="w-5 h-5" />
-                      <span className="text-xs">Tap to add photo</span>
-                    </button>
-                  )}
-
-                  <input ref={el => { fileRefs.current[card.docId] = el; }} type="file" accept="image/*" multiple capture="environment" className="hidden" onChange={e => addPhotos(card.docId, e.target.files)} />
-
-                  <Button onClick={() => markDone(card)} disabled={!!isDoing} className="w-full bg-green-600 hover:bg-green-700 text-white font-bold text-base py-3 rounded-xl">
-                    {isDoing ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving…</> : <><CheckCircle2 className="w-5 h-5 mr-2" />Mark Done</>}
-                  </Button>
-                  <p className="text-[10px] text-center text-slate-400">Time &amp; date stamp recorded automatically</p>
-                </div>
-              </div>
-            )}
+    <section className={`rounded-2xl border bg-white dark:bg-[#1c2b3a] overflow-hidden ${problem ? 'border-red-500' : 'border-slate-200 dark:border-slate-700'}`}>
+      <div className="px-4 pt-4 pb-3 space-y-2.5">
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 leading-tight">{card.species}</h3>
+            <p className="text-base text-slate-700 dark:text-slate-300">{card.mountType}{card.tagNumber ? <span className="font-mono text-sm text-slate-500"> · tag #{card.tagNumber}</span> : null}</p>
           </div>
-        );
-      })}
-    </div>
+          <span className="shrink-0 text-xs font-bold rounded-full px-3 py-1 bg-[#0073ea]/10 text-[#0073ea]">{DEPT_LABELS[card.department] ?? card.department}</span>
+        </div>
+        {problem && <CaseTag c={problem} />}
+        {(card.received || card.condition) && (
+          <p className="text-sm text-slate-700 dark:text-slate-200">
+            {card.received && <><span className="font-semibold">Received:</span> {card.received}</>}
+            {card.received && card.condition ? ' · ' : ''}{card.condition && <><span className="font-semibold">Condition:</span> {card.condition}</>}
+          </p>
+        )}
+        {card.instructions ? (
+          <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-xl px-4 py-3">
+            <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wider mb-1">Client instructions</p>
+            <p className="text-base text-blue-900 dark:text-blue-100 leading-relaxed whitespace-pre-wrap">{card.instructions}</p>
+          </div>
+        ) : !card.specialRequests.length && <p className="text-sm text-slate-400 italic">No special instructions: standard mount</p>}
+        {card.specialRequests.length > 0 && (
+          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3">
+            <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1.5 mb-1"><Sparkles className="w-3 h-3" />Special request (price to be confirmed)</p>
+            {card.specialRequests.map((r, i) => <p key={i} className="text-base text-amber-900 dark:text-amber-200 leading-relaxed">{r}</p>)}
+          </div>
+        )}
+        <div className="flex flex-wrap items-center gap-2 pt-0.5">
+          <JobPhotosButton docId={card.docId} dept={card.department} huntId={card.huntId} title={`${card.species} — ${card.clientName}`} />
+          <PrintButton compact label="Print this card" onPrint={() => printJobCards({ docIds: [card.docId] })} />
+          {card.department === 'tannery' && <SoakReportButton docId={card.docId} huntId={card.huntId} species={card.species} />}
+          <button onClick={() => toggle(card.docId)} className="ml-auto min-h-11 px-4 rounded-lg border-2 border-green-600 text-green-700 dark:text-green-300 font-bold text-sm inline-flex items-center gap-1.5">{isOpen ? <ChevronUp className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}{isOpen ? 'Close' : 'Complete this stage'}</button>
+        </div>
+      </div>
+
+      {isOpen && (
+        <div className="px-4 pb-5 pt-3 bg-slate-50 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800 space-y-3">
+          <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+            Upload photo <span className="font-normal text-slate-400">({['mounting', 'finishing'].includes(card.department) ? 'required here; the date, time and your name are printed on it' : 'optional'})</span>
+          </p>
+          {cardPhotos.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {cardPhotos.map((f, i) => (
+                <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 flex-shrink-0">
+                  <img src={URL.createObjectURL(f)} alt="" className="w-full h-full object-cover" />
+                  <button onClick={() => removePhoto(card.docId, i)} className="absolute top-0.5 right-0.5 w-4 h-4 bg-black/60 rounded-full flex items-center justify-center"><X className="w-2.5 h-2.5 text-white" /></button>
+                </div>
+              ))}
+              <button onClick={() => fileRefs.current[card.docId]?.click()} className="w-16 h-16 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center text-slate-400 flex-shrink-0"><Camera className="w-5 h-5" /></button>
+            </div>
+          ) : (
+            <button onClick={() => fileRefs.current[card.docId]?.click()} className="w-full border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl py-4 flex flex-col items-center gap-1.5 text-slate-400 hover:border-slate-300 transition-colors"><Camera className="w-5 h-5" /><span className="text-xs">Tap to add photo</span></button>
+          )}
+          <input ref={el => { fileRefs.current[card.docId] = el; }} type="file" accept="image/*" multiple capture="environment" className="hidden" onChange={e => addPhotos(card.docId, e.target.files)} />
+          <Button onClick={() => markDone(card)} disabled={!!isDoing} className="w-full bg-green-600 hover:bg-green-700 text-white font-bold text-base py-3 rounded-xl">
+            {isDoing ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving…</> : <><CheckCircle2 className="w-5 h-5 mr-2" />Mark Done</>}
+          </Button>
+          <p className="text-[10px] text-center text-slate-400">Time &amp; date stamp recorded automatically</p>
+        </div>
+      )}
+    </section>
   );
 }
