@@ -115,8 +115,7 @@ function CaseCard({ c, open, toggle, canDecide, isMgmt, reload, onNavigate }: { 
   return (
     <div className="rounded-2xl border border-slate-700 bg-[#111c26] overflow-hidden">
       <button onClick={toggle} className="w-full text-left px-4 py-3 flex items-center gap-3 min-h-16">
-        <span className="flex-1 min-w-0"><span className="block text-lg font-bold text-slate-100">{species} <span className="font-normal text-slate-400">· {client}</span></span><span className="block text-sm text-slate-400">{c.outfitter ? `via ${c.outfitter.name} · ` : ''}rejected {fmt(c.created_at)} · {c.reasons.join(', ')}</span></span>
-        <span className={`rounded-full px-3 py-1 text-xs font-bold whitespace-nowrap ${chip[1]}`}>{chip[0]}</span>
+        <span className="flex-1 min-w-0"><span className="block text-lg font-bold text-slate-100 leading-snug">{species}</span><span className="block text-base text-slate-300">{client}</span><span className="block text-sm text-slate-400">{c.outfitter ? `via ${c.outfitter.name} · ` : ''}rejected {fmt(c.created_at)} · {c.reasons.join(', ')}</span><span className={`mt-2 inline-block rounded-full px-3 py-1 text-xs font-bold ${chip[1]}`}>{chip[0]}</span></span>
         {open ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
       </button>
       {open && (
@@ -160,7 +159,7 @@ function CaseCard({ c, open, toggle, canDecide, isMgmt, reload, onNavigate }: { 
               ) : (
                 <>
                   <p className="text-sm text-slate-300">Until this is solved the order cannot be shipped. If the other trophies are good, management can let them carry on.</p>
-                  {isMgmt ? <button disabled={busy} onClick={async () => { const r = ask('Why can the order carry on without this trophy? (this is recorded)'); if (r) await call('case_override_order', { p_case: c.id, p_reason: r }, 'The order will carry on without this trophy'); }} className="min-h-12 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold disabled:opacity-50">Carry on with the good trophies (management override)</button> : <p className="text-xs text-slate-500">Only management can override this.</p>}
+                  {isMgmt ? <button disabled={busy} onClick={async () => { const r = ask('Why can the order carry on without this trophy? (this is recorded)'); if (r) await call('case_override_order', { p_case: c.id, p_reason: r }, 'The order will carry on without this trophy'); }} className="min-h-12 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold disabled:opacity-50">Let the other trophies carry on without this one</button> : <p className="text-xs text-slate-500">Only management can override this.</p>}
                 </>
               )}
               <p className="text-sm text-slate-300">It is solved when:</p>

@@ -43,7 +43,7 @@ export function IncomingCards({ compact = false, onChanged }: { compact?: boolea
     <div className={compact ? 'space-y-3' : 'max-w-3xl space-y-4'}>
       {!compact && (
         <div className="flex items-start justify-between gap-3">
-          <div><h1 className="text-3xl font-bold text-slate-100">Incoming</h1><p className="text-base text-slate-400 mt-1">Job cards that have arrived in your department. Accept each one to take responsibility for it. It cannot be completed until it is accepted.</p></div>
+          <div><h1 className="text-3xl font-bold text-slate-100">Cards to accept</h1><p className="text-base text-slate-400 mt-1">Job cards that have arrived in your department. Accept each one to take responsibility for it. It cannot be completed until it is accepted.</p></div>
           <button onClick={load} className="min-h-11 min-w-11 flex items-center justify-center rounded-lg border border-slate-700 text-slate-300" aria-label="Refresh"><RefreshCw className="w-5 h-5" /></button>
         </div>
       )}

@@ -148,3 +148,12 @@
 - Sign-in: Show/Hide password button; labels linked to fields.
 - Letters/e-mails to hunters now say Apex Trophy Solutions (`WORKSHOP.name`), per the brand rule.
 - `src/vite-env.d.ts` added (fixes ~28 false `import.meta.env` type errors).
+
+### Walk-through pass #2 (same day) — tested with fake data in the browser at phone size
+- Job cards: client rows and the opened client's header no longer crush the name on a phone (name first, details underneath, print button is an icon on phones).
+- Removed the floating "AI assistant" bubble from the hunter portals: it only gave canned replies, said it was "connecting you to support" (not true) and sat on top of the Profile button. Hunters use "Ask us" (real messages).
+- Outfitter portal: red number badges on the menu (rejected skins to acknowledge, documents still owed, unread messages); documents say "You supply this" instead of "The outfitter supplies this".
+- Workshop tab "Incoming" renamed "To accept" (it was easy to confuse with the "incoming from hunters" count on Job cards, now "waiting to be activated").
+- Progress check and Rejected skins cards stack their status label under the name on phones.
+- "Management override" wording replaced with "Let the other trophies carry on without this one".
+- Hunter bottom menu: shorter labels so they fit; local hunters now also get the update banner.

@@ -13,6 +13,7 @@ import { MyPermitNumbers } from './outfitter/MyPermitNumbers';
 import { InstallBanner } from './shared/InstallApp';
 import { AppVersion, UpdateBanner } from './shared/AppVersion';
 import { useOutfitter } from '../../../lib/hooks/useOutfitter';
+import { useOutfitterAttention } from '../../../lib/hooks/useOutfitterAttention';
 import { useTheme } from './ThemeProvider';
 import { usePortalTheme } from './PortalThemeProvider';
 
@@ -26,6 +27,8 @@ export function OutfitterPortal({ onLogout }: OutfitterPortalProps) {
   const { theme, toggleTheme } = useTheme();
   const { theme: portalTheme } = usePortalTheme();
   const { data } = useOutfitter();
+  const { attention } = useOutfitterAttention();
+  const badge = (v: OutfitterView) => v === 'hunts' ? attention.hunts : v === 'documents' ? attention.documents : v === 'messages' ? attention.messages : 0;
 
   const items: { v: OutfitterView; icon: React.ComponentType<{ className?: string }>; label: string }[] = [
     { v: 'hunts', icon: Home, label: 'My hunts' },
@@ -74,14 +77,14 @@ export function OutfitterPortal({ onLogout }: OutfitterPortalProps) {
         <div className="grid grid-cols-5 gap-1 p-2">
           {items.map(i => (
             <Button key={i.v} variant={view === i.v ? 'default' : 'ghost'} className="flex flex-col items-center gap-1 h-auto min-h-14 py-2" onClick={() => { setThread(null); setView(i.v); }}>
-              <i.icon className="w-5 h-5" /><span className="text-[11px]">{i.label}</span>
+              <span className="relative"><i.icon className="w-5 h-5" />{badge(i.v) > 0 && <span className="absolute -top-2 -right-3 bg-red-600 text-white text-[10px] font-bold rounded-full min-w-4 h-4 px-1 flex items-center justify-center">{badge(i.v) > 9 ? '9+' : badge(i.v)}</span>}</span><span className="text-[11px]">{i.label}</span>
             </Button>
           ))}
         </div>
       </nav>
       <nav className="hidden md:block fixed left-0 top-16 bottom-0 w-64 bg-white/90 dark:bg-stone-900/90 backdrop-blur-lg border-r border-green-200 dark:border-green-900 p-4 space-y-2">
         {items.map(i => (
-          <Button key={i.v} variant={view === i.v ? 'default' : 'ghost'} className="w-full justify-start min-h-11" onClick={() => { setThread(null); setView(i.v); }}><i.icon className="w-5 h-5 mr-3" />{i.label}</Button>
+          <Button key={i.v} variant={view === i.v ? 'default' : 'ghost'} className="w-full justify-start min-h-11" onClick={() => { setThread(null); setView(i.v); }}><i.icon className="w-5 h-5 mr-3" />{i.label}{badge(i.v) > 0 && <span className="ml-auto bg-red-600 text-white text-xs font-bold rounded-full min-w-5 h-5 px-1.5 flex items-center justify-center">{badge(i.v)}</span>}</Button>
         ))}
       </nav>
     </div>

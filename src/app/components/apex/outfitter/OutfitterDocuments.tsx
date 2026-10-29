@@ -66,7 +66,7 @@ export function OutfitterDocuments({ onAsk }: { onAsk: (huntId: string) => void 
               {h.items.map(i => (
                 <li key={i.id} className="p-4 space-y-2">
                   <div className="flex items-start gap-3">
-                    <div className="flex-1 min-w-0"><p className="font-semibold text-slate-900 dark:text-slate-100">{i.name}</p><p className="text-xs text-slate-500">{RESPONSIBLE_LABEL[i.responsible]} supplies this{i.needs_signature ? ' · signed' : ''}{i.needs_stamp ? ' · stamped' : ''}{['awaiting', 'rejected'].includes(i.status) ? ` · waiting ${waiting(i.requested_at)}` : ''}</p></div>
+                    <div className="flex-1 min-w-0"><p className="font-semibold text-slate-900 dark:text-slate-100">{i.name}</p><p className="text-xs text-slate-500">{i.responsible === 'outfitter' ? 'You supply this' : `${RESPONSIBLE_LABEL[i.responsible] ?? 'Someone else'} supplies this`}{i.needs_signature ? ' · signed' : ''}{i.needs_stamp ? ' · stamped' : ''}{['awaiting', 'rejected'].includes(i.status) ? ` · waiting ${waiting(i.requested_at)}` : ''}</p></div>
                     <span className={`text-xs font-semibold rounded-full px-2.5 py-1 whitespace-nowrap ${STATUS_TONE[i.status]}`}>{STATUS_LABEL[i.status]}</span>
                   </div>
                   {i.status === 'rejected' && i.reason && <p className="rounded-lg bg-red-50 border border-red-200 text-red-800 text-sm p-2.5">The workshop sent this back: {i.reason}</p>}

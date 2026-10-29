@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { InstallBanner } from './shared/InstallApp';
+import { UpdateBanner } from './shared/AppVersion';
 import { LocalTrophyTracking } from './hunter/LocalTrophyTracking';
 import { Notifications } from './hunter/Notifications';
 import { HunterProfile } from './hunter/HunterProfile';
 import { SpecialRequests } from './hunter/SpecialRequests';
 import { TrophyMessages } from './hunter/TrophyMessages';
-import { UniversalAIAssistant } from './shared/UniversalAIAssistant';
 import { HunterTrophies } from './hunter/HunterTrophies';
 import { HunterCollection } from './hunter/HunterCollection';
 import { Button } from '../ui/button';
@@ -67,6 +67,7 @@ export function LocalHunterPortal({ onLogout }: LocalHunterPortalProps) {
 
       {/* Content */}
       <main className="md:ml-56 px-4 py-6 pb-24 md:pb-6 min-w-0 overflow-x-hidden">
+        <UpdateBanner />
         <InstallBanner />
         {renderView()}
       </main>
@@ -75,8 +76,8 @@ export function LocalHunterPortal({ onLogout }: LocalHunterPortalProps) {
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-stone-900/90 backdrop-blur-lg border-t border-amber-200 dark:border-amber-900 z-50">
         <div className="grid grid-cols-5 gap-1 p-2">
           {[
-            { view: 'home' as LocalView,             icon: Home,          label: 'My Trophies' },
-            { view: 'messages' as LocalView,         icon: MessageCircle, label: 'Ask' },
+            { view: 'home' as LocalView,             icon: Home,          label: 'Trophies' },
+            { view: 'messages' as LocalView,         icon: MessageCircle, label: 'Ask us' },
             { view: 'collection' as LocalView,       icon: Trophy,        label: 'Collection' },
             { view: 'notifications' as LocalView,    icon: Bell,          label: 'Alerts', badge: unreadCount },
             { view: 'profile' as LocalView,          icon: User,          label: 'Profile' },
@@ -121,7 +122,6 @@ export function LocalHunterPortal({ onLogout }: LocalHunterPortalProps) {
         ))}
       </nav>
 
-      <UniversalAIAssistant />
     </div>
   );
 }

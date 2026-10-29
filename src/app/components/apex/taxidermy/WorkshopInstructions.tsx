@@ -268,7 +268,7 @@ export function WorkshopInstructions() {
           <h1 className="text-slate-900 dark:text-slate-100 text-xl font-bold">Job Cards</h1>
           <p className="text-slate-500 text-sm">
             {seeAll
-              ? `${cards.length} active job cards · ${new Set(cards.map(c => c.clientName)).size} clients · ${pendingCards.length} incoming`
+              ? `${cards.length} active job cards · ${new Set(cards.map(c => c.clientName)).size} clients · ${pendingCards.length} waiting to be activated`
               : myDepts.length > 0
                 ? `${myDepts.map(d => DEPT_LABELS[d] ?? d).join(', ')} — ${cards.length} job${cards.length !== 1 ? 's' : ''}`
                 : 'No department assigned'
@@ -287,7 +287,7 @@ export function WorkshopInstructions() {
       {seeAll && pendingCards.length > 0 && !openCards && (
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-3 px-1">
-            <span className="text-xs font-bold text-amber-500 uppercase tracking-wider">Incoming from Hunters</span>
+            <span className="text-xs font-bold text-amber-500 uppercase tracking-wider">New from hunters: waiting to be activated</span>
             <span className="text-xs bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded-full font-semibold">{pendingCards.length}</span>
           </div>
           <div className="bg-white dark:bg-[#1c2b3a] rounded-2xl border-2 border-amber-300 dark:border-amber-700 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800">
@@ -317,14 +317,14 @@ export function WorkshopInstructions() {
         // ── one client: the full job card ──
         <div className="space-y-4">
           <button onClick={() => setOpenClient(null)} className="inline-flex items-center gap-1.5 text-base font-semibold text-[#0073ea] min-h-11"><ArrowLeft className="w-4 h-4" />All clients</button>
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1c2b3a] p-4 flex items-start gap-3">
-            <span className="font-mono text-xs font-bold text-white bg-slate-700 px-2 py-1 rounded shrink-0 mt-1">{openCards[0].clientNumber}</span>
-            <div className="flex-1 min-w-0">
-              <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 leading-tight">{openCards[0].clientName}</h2>
-              <p className="text-sm text-slate-500">{openCards.length} trophies{openCards[0].huntYear ? ` · ${openCards[0].huntYear} hunt` : ''}{openCards[0].operator ? ` · ${openCards[0].operator}` : ''}</p>
-              <div className="flex flex-wrap gap-1.5 mt-2">{[...new Set(openCards.map(c => c.department))].sort((x, y) => stageOrder(x) - stageOrder(y)).map(d => <span key={d} className="text-xs font-semibold rounded-full px-2.5 py-0.5 bg-[#0073ea]/10 text-[#0073ea]">{DEPT_LABELS[d] ?? d} · {openCards.filter(c => c.department === d).length}</span>)}</div>
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1c2b3a] p-4 space-y-3">
+            <div>
+              <span className="font-mono text-xs font-bold text-white bg-slate-700 px-2 py-0.5 rounded">{openCards[0].clientNumber}</span>
+              <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 leading-tight mt-1.5">{openCards[0].clientName}</h2>
+              <p className="text-sm text-slate-500 mt-0.5">{openCards.length} trophies{openCards[0].huntYear ? ` · ${openCards[0].huntYear} hunt` : ''}{openCards[0].operator ? ` · ${openCards[0].operator}` : ''}</p>
             </div>
-            <PrintButton label="Print the full job card" onPrint={() => printJobCards({ docIds: openCards.map(c => c.docId) })} />
+            <div className="flex flex-wrap gap-1.5">{[...new Set(openCards.map(c => c.department))].sort((x, y) => stageOrder(x) - stageOrder(y)).map(d => <span key={d} className="text-xs font-semibold rounded-full px-2.5 py-0.5 bg-[#0073ea]/10 text-[#0073ea]">{DEPT_LABELS[d] ?? d} · {openCards.filter(c => c.department === d).length}</span>)}</div>
+            <PrintButton label="Print the full job card" className="w-full justify-center min-h-11" onPrint={() => printJobCards({ docIds: openCards.map(c => c.docId) })} />
           </div>
           {[...openCards].sort((x, y) => stageOrder(x.department) - stageOrder(y.department) || x.species.localeCompare(y.species)).map(card => <AnimalBlock key={card.docId} card={card} {...view} />)}
         </div>
@@ -343,18 +343,18 @@ export function WorkshopInstructions() {
             const byDept = [...new Set(list.map(c => c.department))].sort((x, y) => stageOrder(x) - stageOrder(y));
             return (
               <div key={key} className="bg-white dark:bg-[#1c2b3a] rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden flex items-center">
-                <button onClick={() => setOpenClient(key)} className="flex-1 min-w-0 flex items-center gap-3 px-4 py-3.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/40 min-h-16">
-                  <span className="font-mono text-xs font-bold text-white bg-slate-700 px-2 py-0.5 rounded shrink-0">{list[0].clientNumber}</span>
-                  <span className="flex-1 min-w-0">
-                    <span className="block font-bold text-slate-900 dark:text-slate-100 truncate">{list[0].clientName}</span>
-                    <span className="block text-xs text-slate-500 truncate">{byDept.map(d => `${DEPT_LABELS[d] ?? d} ${list.filter(c => c.department === d).length}`).join(' · ')}</span>
+                <button onClick={() => setOpenClient(key)} className="flex-1 min-w-0 flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/40 min-h-16">
+                  <span className="flex-1 min-w-0 space-y-1">
+                    <span className="flex items-center gap-2 min-w-0">
+                      <span className="font-mono text-[11px] font-bold text-white bg-slate-700 px-1.5 py-0.5 rounded shrink-0">{list[0].clientNumber}</span>
+                      {flagged > 0 && <span className="text-[11px] font-bold rounded-full px-2 py-0.5 bg-red-600 text-white shrink-0">{flagged} problem{flagged > 1 ? 's' : ''}</span>}
+                    </span>
+                    <span className="block font-bold text-slate-900 dark:text-slate-100 text-lg leading-snug">{list[0].clientName}</span>
+                    <span className="block text-sm text-slate-500">{list.length} trophy{list.length > 1 ? 's' : ''} · {byDept.map(d => `${DEPT_LABELS[d] ?? d} ${list.filter(c => c.department === d).length}`).join(' · ')}{withInstr > 0 ? ` · ${withInstr} with instructions` : ''}</span>
                   </span>
-                  {flagged > 0 && <span className="text-[11px] font-bold rounded-full px-2 py-0.5 bg-red-600 text-white shrink-0">{flagged} problem</span>}
-                  {withInstr > 0 && <span className="hidden sm:inline text-[11px] text-blue-500 shrink-0">{withInstr} with instructions</span>}
-                  <span className="text-xs bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 px-2 py-0.5 rounded-full shrink-0">{list.length} trophies</span>
-                  <ChevronDown className="w-4 h-4 text-slate-400 -rotate-90 shrink-0" />
+                  <ChevronDown className="w-5 h-5 text-slate-400 -rotate-90 shrink-0" />
                 </button>
-                <PrintButton compact label="Print" className="mr-3 shrink-0" onPrint={() => printJobCards({ docIds: list.map(c => c.docId) })} />
+                <PrintButton compact iconOnlyOnPhone label="Print" className="mr-3 shrink-0" onPrint={() => printJobCards({ docIds: list.map(c => c.docId) })} />
               </div>
             );
           })}
@@ -407,7 +407,7 @@ function AnimalBlock({ card, expanded, toggle, completing, markDone, photos, add
         ) : !card.specialRequests.length && <p className="text-sm text-slate-400 italic">No special instructions: standard mount</p>}
         {card.specialRequests.length > 0 && (
           <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3">
-            <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1.5 mb-1"><Sparkles className="w-3 h-3" />Special request (price to be confirmed)</p>
+            <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1.5 mb-1"><Sparkles className="w-3 h-3" />Special request for this client (price to be confirmed)</p>
             {card.specialRequests.map((r, i) => <p key={i} className="text-base text-amber-900 dark:text-amber-200 leading-relaxed">{r}</p>)}
           </div>
         )}

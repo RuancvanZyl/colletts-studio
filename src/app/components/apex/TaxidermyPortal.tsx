@@ -363,7 +363,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       { view: 'hunt-archive',         label: 'Archive' },
     ] },
     { key: 'workshop', label: 'Workshop', icon: Scissors, tabs: [
-      { view: 'incoming',       label: 'Incoming' },
+      { view: 'incoming',       label: 'To accept' },
       { view: 'rejections',     label: 'Rejected skins' },
       { view: 'workshop-brief', label: 'Job cards' },
       { view: 'stations',       label: 'Stations' },

@@ -66,7 +66,7 @@ export function ProgressCheck({ initialHuntId, onNavigate }: { initialHuntId?: s
   return (
     <div className="max-w-4xl space-y-4">
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="flex-1 min-w-0">
           <h1 className="text-3xl font-bold text-slate-100">Progress check</h1>
           <p className="text-base text-slate-400 mt-1">Go through each client. See the process their trophies are in and where the milestones say they should be, then mark the order <strong className="text-slate-200">On track</strong> or <strong className="text-slate-200">Behind</strong>.</p>
         </div>
@@ -91,13 +91,13 @@ export function ProgressCheck({ initialHuntId, onNavigate }: { initialHuntId?: s
           const r = h.review;
           return (
             <div key={h.huntId} ref={h.huntId === initialHuntId ? focusRef : undefined} className={`rounded-2xl border bg-[#111c26] p-4 space-y-3 ${h.huntId === initialHuntId ? 'border-[#0073ea]' : 'border-slate-700'}`}>
-              <div className="flex items-start gap-3">
-                <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
+                <div className="flex-1 min-w-[11rem]">
                   <p className="text-xl font-bold text-slate-100 leading-tight">{h.clientName}</p>
                   <p className="text-sm text-slate-400">{[h.size ? SIZE[h.size] : null, h.year ? `${h.year} hunt` : null, `${h.animals.length} trophies`].filter(Boolean).join(' · ')}</p>
                 </div>
-                <div className="flex flex-col items-end gap-1">
-                  <span className={`rounded-full border px-3 py-1 text-sm font-bold whitespace-nowrap ${chip.cls}`}>{chip.label}</span>
+                <div className="flex flex-col items-start sm:items-end gap-1 shrink-0 max-w-full">
+                  <span className={`rounded-full border px-3 py-1 text-sm font-bold ${chip.cls}`}>{chip.label}</span>
                   {h.a.dueSoon && h.a.auto !== 'red' && h.a.next && <span className="text-xs font-semibold text-amber-300">{shortMilestone(h.a.next.label)} due {daysText(h.a.next.daysLeft)}</span>}
                 </div>
               </div>

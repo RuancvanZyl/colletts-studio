@@ -13,7 +13,6 @@ import { TrophyTrackingDashboard } from './hunter/TrophyTrackingDashboard';
 import { TrophyMessages } from './hunter/TrophyMessages';
 import { SpecialRequests } from './hunter/SpecialRequests';
 import { HunterHuntCreationWizard } from './hunter/HunterHuntCreationWizard';
-import { UniversalAIAssistant } from './shared/UniversalAIAssistant';
 import { Button } from '../ui/button';
 import { Home, Award, Bell, User, Moon, Sun, Trophy as TrophyIcon, Plus, MessageCircle } from 'lucide-react';
 import { Badge } from '../ui/badge';
@@ -228,7 +227,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
             onClick={() => setCurrentView('home')}
           >
             <Award className="w-5 h-5" />
-            <span className="text-xs">My Trophies</span>
+            <span className="text-[11px] leading-tight">Trophies</span>
           </Button>
           <Button
             variant={currentView === 'collection' ? 'default' : 'ghost'}
@@ -236,7 +235,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
             onClick={() => setCurrentView('collection')}
           >
             <TrophyIcon className="w-5 h-5" />
-            <span className="text-xs">Collection</span>
+            <span className="text-[11px] leading-tight">Collection</span>
           </Button>
           <Button
             variant={currentView === 'notifications' ? 'default' : 'ghost'}
@@ -249,7 +248,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
                 {unreadCount}
               </span>
             )}
-            <span className="text-xs">Updates</span>
+            <span className="text-[11px] leading-tight">Updates</span>
           </Button>
           <Button
             variant={currentView === 'messages' ? 'default' : 'ghost'}
@@ -257,7 +256,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
             onClick={() => setCurrentView('messages')}
           >
             <MessageCircle className="w-5 h-5" />
-            <span className="text-xs">Ask us</span>
+            <span className="text-[11px] leading-tight">Ask us</span>
           </Button>
           <Button
             variant={currentView === 'profile' ? 'default' : 'ghost'}
@@ -265,7 +264,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
             onClick={() => setCurrentView('profile')}
           >
             <User className="w-5 h-5" />
-            <span className="text-xs">Profile</span>
+            <span className="text-[11px] leading-tight">Profile</span>
           </Button>
         </div>
       </nav>
@@ -293,10 +292,6 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
           </Button>
         </div>
       </nav>
-
-
-      {/* Universal AI Assistant */}
-      <UniversalAIAssistant />
     </div>
   );
 }
