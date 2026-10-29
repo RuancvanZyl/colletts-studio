@@ -15,7 +15,7 @@ export function SkinningStation() {
               Remind: Ask about back skin & leftover hide
             </p>
             <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-              Before advancing — message the client via <strong>Client Messages</strong> to ask what they want done with the back skin and any leftover hide. Options: flat skin, rug mount, biltong bag, knife sheath, hat band.
+              Before advancing — message the hunter in <strong>Messages &rarr; Hunters</strong> to ask what they want done with the back skin and any leftover hide. Options: flat skin, rug mount, biltong bag, knife sheath, hat band.
             </p>
           </div>
         </div>

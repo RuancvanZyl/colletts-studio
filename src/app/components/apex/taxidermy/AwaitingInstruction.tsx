@@ -88,7 +88,7 @@ export function AwaitingInstruction({ onOpenClient }: { onOpenClient?: (clientId
   async function markReceived(huntId: string) {
     const { error } = await (supabase as any).rpc('mark_instruction_received', { p_hunt_id: huntId });
     if (error) { toast.error(error.message); return; }
-    toast.success('Marked as received — moved out of Awaiting Instruction');
+    toast.success('Marked as received — moved out of Waiting for mounts');
     refresh();
   }
 
@@ -96,7 +96,7 @@ export function AwaitingInstruction({ onOpenClient }: { onOpenClient?: (clientId
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Awaiting Instruction</h2>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Waiting for mounts</h2>
           <p className="text-sm text-slate-500">Trophies are in — waiting on the client to say how to mount them</p>
         </div>
         <div className="flex gap-2">

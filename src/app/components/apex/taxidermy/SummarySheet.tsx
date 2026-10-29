@@ -52,20 +52,20 @@ export function SummarySheet({ onNavigate }: SummarySheetProps) {
   const feedbackOrders = orders.filter(h => h.needsFeedback.length > 0).length;
 
   const attentionCards = [
-    { count: attention?.newHunterSubmissions ?? 0, label: 'new hunter submission',  plural: 'new hunter submissions',  action: 'Review in Job Tracker',    view: 'inventory',       color: '#8b5cf6' },
-    { count: attention?.unreadMessages ?? 0,       label: 'unread client message',  plural: 'unread client messages',  action: 'Open Client Messages',     view: 'client-inbox',    color: '#0073ea' },
+    { count: attention?.newHunterSubmissions ?? 0, label: 'new hunter submission',  plural: 'new hunter submissions',  action: 'Open the Job tracker',    view: 'inventory',       color: '#8b5cf6' },
+    { count: attention?.unreadMessages ?? 0,       label: 'unread client message',  plural: 'unread client messages',  action: 'Open Hunter messages',     view: 'client-inbox',    color: '#0073ea' },
     { count: redOrders.length,                     label: 'order is red',           plural: 'orders are red (more than one milestone missed)', action: 'Open Progress check', view: 'progress-check', color: '#ef4444' },
     { count: feedbackOrders,                       label: 'missed milestone needs feedback', plural: 'orders missed a milestone and need management feedback', action: 'Give feedback', view: 'progress-check', color: '#f59e0b' },
     { count: counts.heldAside,                     label: 'trophy held aside',      plural: 'trophies held aside (rejected skins)', action: 'Open Rejected skins', view: 'rejections', color: '#ef4444' },
     { count: counts.notAcked,                      label: 'rejected skin not acknowledged', plural: 'rejected skins the outfitter has not acknowledged', action: 'Open Rejected skins', view: 'rejections', color: '#dc2626' },
     { count: counts.needOutcome,                   label: 'rejected skin needs an outcome', plural: 'rejected skins need an outcome', action: 'Open Rejected skins', view: 'rejections', color: '#f97316' },
-    { count: counts.lateAccept,                    label: 'card waiting over 24h to be accepted', plural: 'cards waiting over 24 hours to be accepted', action: 'Open Incoming', view: 'incoming', color: '#f59e0b' },
+    { count: counts.lateAccept,                    label: 'job card not accepted for over 24 hours', plural: 'job cards not accepted for over 24 hours', action: 'Open Cards to accept', view: 'incoming', color: '#f59e0b' },
     { count: counts.toCheck,                       label: 'document to check',      plural: 'documents to check',      action: 'Open Documents',           view: 'documents',       color: '#0ea5e9' },
     { count: counts.unverified,                    label: 'permit number to verify', plural: 'permit numbers to verify', action: 'Open Permit numbers',     view: 'permit-numbers',  color: '#0ea5e9' },
-    { count: careOverdue,                          label: 'hunter needs contact',   plural: 'hunters need contact',    action: 'Open Client Care',         view: 'client-care',     color: '#ec4899' },
-    { count: careDue,                              label: 'hunter due an update',   plural: 'hunters due an update',   action: 'Open Client Care',         view: 'client-care',     color: '#f97316' },
-    { count: deadlinesOverdue.length,              label: 'hunt past deadline',     plural: 'hunts past deadline',     action: 'Open Deadline Watch',      view: 'deadline-watch',  color: '#dc2626' },
-    { count: instructionsDue.length,               label: 'client silent 2+ weeks', plural: 'clients silent 2+ weeks', action: 'Open Awaiting Instruction', view: 'awaiting-instruction', color: '#d97706' },
+    { count: careOverdue,                          label: 'hunter needs contact',   plural: 'hunters need contact',    action: 'See who needs contact',         view: 'client-care',     color: '#ec4899' },
+    { count: careDue,                              label: 'hunter due an update',   plural: 'hunters due an update',   action: 'See who needs contact',         view: 'client-care',     color: '#f97316' },
+    { count: deadlinesOverdue.length,              label: 'hunt past deadline',     plural: 'hunts past deadline',     action: 'See the past-deadline list',      view: 'deadline-watch',  color: '#dc2626' },
+    { count: instructionsDue.length,               label: 'hunter has not chosen mounts for 2+ weeks', plural: 'hunters have not chosen mounts for 2+ weeks', action: 'See who is waiting for mounts', view: 'awaiting-instruction', color: '#d97706' },
   ].filter(c => c.count > 0);
 
   const kpiCards = [

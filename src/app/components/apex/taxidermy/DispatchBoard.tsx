@@ -167,7 +167,7 @@ export function DispatchBoard() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2"><UserCheck className="w-5 h-5 text-[#0073ea]" /> Dispatch Board</h2>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2"><UserCheck className="w-5 h-5 text-[#0073ea]" /> Assign work</h2>
           <p className="text-sm text-slate-500">Assign job cards, set priority and due dates, and see who has opened and started each one</p>
         </div>
         <Button variant="ghost" size="icon" onClick={load} disabled={loading}><RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /></Button>

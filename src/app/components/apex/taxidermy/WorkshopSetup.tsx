@@ -68,7 +68,7 @@ export function WorkshopSetup() {
   return (
     <div className="space-y-5 max-w-3xl">
       <div>
-        <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Workshop Setup — department checklists</h2>
+        <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Checklists for each department</h2>
         <p className="text-sm text-slate-500">The steps a worker must tick before a job card can move to the next department.</p>
       </div>
 

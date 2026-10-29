@@ -355,27 +355,15 @@ export function DeptJobList({
           {/* Pipeline progress */}
           <div>
             <div className="flex justify-between text-xs text-slate-400 mb-1">
-              <span>Pipeline</span>
-              <span>{stageIdx + 1} / {pipeline.length}</span>
+              <span>Progress</span>
+              <span>Stage {stageIdx + 1} of {pipeline.length}</span>
             </div>
             <div className="h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
               <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${progress}%` }} />
             </div>
-            <div className="flex gap-1 mt-2 flex-wrap">
-              {pipeline.map((stage, i) => {
-                const done    = i < stageIdx;
-                const current = i === stageIdx;
-                return (
-                  <span key={stage} className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                    done    ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' :
-                    current ? `${deptColor} text-white` :
-                              'bg-slate-100 text-slate-400 dark:bg-slate-700'
-                  }`}>
-                    {DEPT_LABELS[stage] ?? stage}
-                  </span>
-                );
-              })}
-            </div>
+            <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+              {stageIdx >= 0 && stageIdx < pipeline.length - 1 ? <>After this stage it goes to <strong>{DEPT_LABELS[pipeline[stageIdx + 1]] ?? pipeline[stageIdx + 1]}</strong>.</> : 'This is its last stage.'}
+            </p>
           </div>
 
           {/* Stage history */}

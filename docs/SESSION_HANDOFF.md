@@ -157,3 +157,8 @@
 - Progress check and Rejected skins cards stack their status label under the name on phones.
 - "Management override" wording replaced with "Let the other trophies carry on without this one".
 - Hunter bottom menu: shorter labels so they fit; local hunters now also get the update banner.
+
+### Walk-through pass #3
+- Every screen title now matches the tab you tapped (Past deadline, Hunters who need contact, Waiting for mounts, Assign work, Job tracker, Checklists, Settings, Status board, Messages from hunters); whiteboard links read "Open Cards to accept", "See who needs contact", etc.
+- Station job cards: the 11-step list of department names is replaced by "Stage 3 of 11" and "After this stage it goes to Cleaning & Bleach" (each card was 30% taller for no gain).
+- All 45 staff screens and all 10 stations were opened with test data on a phone-size screen: none crash.

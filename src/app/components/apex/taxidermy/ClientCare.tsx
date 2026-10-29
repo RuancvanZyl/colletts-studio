@@ -101,7 +101,7 @@ export function ClientCare({ onOpenClient }: { onOpenClient?: (clientId: string)
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Client Care</h2>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Hunters who need contact</h2>
           <p className="text-sm text-slate-500">Who needs to hear from us, and how long it's been</p>
         </div>
         <Button variant="ghost" size="icon" onClick={refresh} disabled={loading} title="Refresh" aria-label="Refresh">

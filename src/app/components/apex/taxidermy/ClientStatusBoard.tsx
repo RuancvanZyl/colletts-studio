@@ -216,7 +216,7 @@ export function ClientStatusBoard({ onNavigate }: ClientStatusBoardProps) {
     <div className="bg-white dark:bg-[#1c2b3a] rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
       <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 dark:border-slate-700">
         <h2 className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-          <Users className="w-4 h-4 text-[#0073ea]" />Client Status Board
+          <Users className="w-4 h-4 text-[#0073ea]" />Status board
         </h2>
         <button onClick={() => onNavigate('clients')} className="text-xs text-[#0073ea] hover:underline flex items-center gap-1">
           Open Clients <ArrowRight className="w-3 h-3" />

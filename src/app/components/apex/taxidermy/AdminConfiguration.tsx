@@ -144,7 +144,7 @@ export function AdminConfiguration() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-slate-900 dark:text-slate-100">Admin Configuration</h1>
+        <h1 className="text-slate-900 dark:text-slate-100">Settings</h1>
         <p className="text-slate-600 dark:text-slate-400">Staff, departments and system settings</p>
       </div>
 

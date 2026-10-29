@@ -234,7 +234,7 @@ export function ClientInbox() {
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-700">
           <div className="flex items-center gap-2">
             <MessageCircle className="w-4 h-4 text-slate-500" />
-            <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">Client Messages</span>
+            <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">Messages from hunters</span>
             {totalUnread > 0 && (
               <Badge className="bg-red-500 text-white text-xs px-1.5 py-0">{totalUnread}</Badge>
             )}

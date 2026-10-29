@@ -58,7 +58,7 @@ export function DeadlineWatch({ onOpenHunt }: DeadlineWatchProps) {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Deadline Watch</h2>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Past deadline</h2>
           <p className="text-sm text-slate-500">Every active export order, checked against its deadline</p>
         </div>
         <Button variant="ghost" size="icon" onClick={refresh} disabled={loading} title="Refresh" aria-label="Refresh">

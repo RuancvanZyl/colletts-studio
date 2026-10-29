@@ -260,7 +260,7 @@ export function JobTracker() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Job Tracker</h2>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Job tracker</h2>
           <p className="text-sm text-slate-500">All hunts and trophy pipeline status</p>
         </div>
         <button onClick={load} disabled={loading} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
