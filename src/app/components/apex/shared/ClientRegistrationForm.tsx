@@ -23,6 +23,7 @@ import {
   User, Phone, Mail, MapPin, FileText, Camera, CheckCircle2,
   ArrowLeft, ArrowRight, Loader2, Upload, X, Globe, CreditCard,
 } from 'lucide-react';
+import { plainError } from '../../../../lib/plainError';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -520,7 +521,7 @@ function Field({ label, error, icon, children }: {
         {icon} {label}
       </Label>
       {children}
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {error && <p className="text-xs text-red-500">{plainError(error)}</p>}
     </div>
   );
 }

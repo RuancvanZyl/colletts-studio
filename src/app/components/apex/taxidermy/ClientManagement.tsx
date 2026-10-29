@@ -26,6 +26,7 @@ import { ClientJobCards } from './ClientJobCards';
 import { CommunicationPanel } from './CommunicationPanel';
 import { ClientRegistrationForm } from '../shared/ClientRegistrationForm';
 import type { Database } from '../../../../lib/database.types';
+import { plainError } from '../../../../lib/plainError';
 
 type Client = Database['public']['Tables']['clients']['Row'];
 type ClientType = 'all' | 'local' | 'export';
@@ -647,7 +648,7 @@ export function ClientManagement({ initialClientId, onOpenQuote }: { initialClie
             <Card className="border-red-200">
               <CardContent className="py-8 text-center">
                 <p className="text-red-500 text-sm font-medium">Error loading clients</p>
-                <p className="text-red-400 text-xs mt-1">{error}</p>
+                <p className="text-red-400 text-xs mt-1">{plainError(error)}</p>
               </CardContent>
             </Card>
           ) : filtered.length === 0 ? (

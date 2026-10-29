@@ -111,7 +111,7 @@ export function AddAnimalsFlow({ clientId, clientType, onClose, onSaved }: { cli
         </>
       )}
 
-      <div className="fixed bottom-0 inset-x-0 z-40 bg-white/95 dark:bg-slate-950/95 border-t border-slate-200 dark:border-slate-700 p-3 md:left-64">
+      <div className="fixed bottom-[4.75rem] md:bottom-0 inset-x-0 z-40 bg-white/95 dark:bg-slate-950/95 border-t border-slate-200 dark:border-slate-700 p-3 md:left-64">
         <div className="max-w-xl mx-auto flex gap-2">
           {step === 'pick' && <button className={`${btn} border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100`} onClick={() => setStep('hunt')}><ArrowLeft className="w-5 h-5" />Back</button>}
           {step === 'hunt'

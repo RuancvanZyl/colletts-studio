@@ -6,6 +6,7 @@ import {
   DialogDescription 
 } from '../ui/dialog';
 import { Trophy, Users, Package, Compass, Shield, Zap, User } from 'lucide-react';
+import { WORKSHOP } from '../../../lib/workshop';
 
 interface AboutDialogProps {
   open: boolean;
@@ -155,29 +156,12 @@ export function AboutDialog({ open, onOpenChange }: AboutDialogProps) {
             </div>
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-3 gap-4 p-4 bg-gradient-to-br from-stone-100 to-stone-50 dark:from-stone-900 dark:to-stone-800 rounded-lg">
-            <div className="text-center">
-              <div className="text-2xl text-green-700 dark:text-green-500 mb-1">150+</div>
-              <div className="text-xs text-slate-600 dark:text-slate-400">Active Users</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl text-amber-700 dark:text-amber-500 mb-1">12</div>
-              <div className="text-xs text-slate-600 dark:text-slate-400">Outfitters</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl text-blue-700 dark:text-blue-500 mb-1">187</div>
-              <div className="text-xs text-slate-600 dark:text-slate-400">Trophies Tracked</div>
-            </div>
-          </div>
-
           {/* Contact */}
           <div className="border-t border-stone-200 dark:border-stone-700 pt-4">
             <h4 className="text-slate-900 dark:text-white mb-2">Contact & Support</h4>
             <div className="space-y-2 text-sm text-slate-600 dark:text-slate-400">
               <p>Email: support@apextrophysolutions.com</p>
-              <p>Phone: +1 (555) 123-4567</p>
-              <p>Hours: Monday - Friday, 8AM - 6PM EST</p>
+              {WORKSHOP.whatsapp && <p>WhatsApp: +{WORKSHOP.whatsapp}</p>}
             </div>
           </div>
         </div>

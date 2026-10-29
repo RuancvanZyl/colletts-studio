@@ -23,7 +23,7 @@ export function WorkshopSetup() {
     setLoading(true);
     const { data, error } = await (supabase as any).from('department_checklist_items')
       .select('id, dept_key, label, requires_photo, sort_order, is_active').order('sort_order');
-    if (error) toast.error('Could not load checklists: ' + error.message + ' (has migration 041 been run?)');
+    if (error) toast.error('Could not load the checklists. Please try again in a moment.');
     const rows: Item[] = data ?? [];
     setItems(rows);
     const c: Record<string, number> = {};

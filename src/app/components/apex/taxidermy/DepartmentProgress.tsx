@@ -7,6 +7,7 @@ import { ChevronDown, ChevronUp, Loader2, RefreshCw } from 'lucide-react';
 import { useWorkshopProgress, type HuntProgress } from '../../../../lib/hooks/useWorkshopProgress';
 import { ALL_DEPARTMENTS, DEPT_COLORS } from '../../../../lib/pipeline';
 import { daysText, deptLabel, fmtDate, shortMilestone, STATUS_CHIP } from './progressUi';
+import { plainError } from '../../../../lib/plainError';
 
 export function DepartmentProgress({ onNavigate }: { onNavigate: (view: string, id?: string) => void }) {
   const { hunts, loading, error, refresh } = useWorkshopProgress();
@@ -41,7 +42,7 @@ export function DepartmentProgress({ onNavigate }: { onNavigate: (view: string, 
         <button onClick={refresh} disabled={loading} className="min-h-11 min-w-11 flex items-center justify-center rounded-lg border border-slate-700 text-slate-300" aria-label="Refresh"><RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} /></button>
       </div>
 
-      {error && <p className="rounded-xl border border-red-700 bg-red-950/30 text-red-200 p-3">{error}</p>}
+      {error && <p className="rounded-xl border border-red-700 bg-red-950/30 text-red-200 p-3">{plainError(error)}</p>}
       {loading && hunts.length === 0 && <div className="flex items-center gap-2 text-slate-400"><Loader2 className="w-5 h-5 animate-spin" />Loading…</div>}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

@@ -9,6 +9,7 @@ import { supabase, clearInviteToken } from '../../../lib/supabase';
 import { WORKSHOP } from '../../../lib/workshop';
 import { PART_LABEL } from '../../../lib/received';
 import { InstallCard } from './shared/InstallApp';
+import { plainError } from '../../../lib/plainError';
 
 interface Info { first_name: string; full_name: string; email: string | null; phone: string | null; client_type: string; registered: boolean; animals: { species: string; parts: { code: string; label?: string }[]; received_at: string }[] }
 
@@ -150,7 +151,7 @@ export function InviteScreen({ token, onDone, onSignIn, onAccountCreated }: { to
       <p className="text-sm text-slate-600">Create your profile, then you can choose how you want each animal mounted.</p>
       <div><label className={label}>E-mail</label><input className={field} type="email" inputMode="email" required value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" /></div>
       <div><label className={label}>Choose a password</label><input className={field} type="password" required minLength={8} value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password" placeholder="At least 8 characters" /></div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600">{plainError(error)}</p>}
       <button className={primary} disabled={busy}>{busy && <Loader2 className="w-5 h-5 animate-spin" />}Create my profile</button>
       <button type="button" className="w-full text-sm text-slate-500 min-h-11" onClick={onSignIn}>I already have an account</button>
     </form>

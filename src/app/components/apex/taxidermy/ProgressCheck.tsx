@@ -13,6 +13,7 @@ import { ALL_DEPARTMENTS } from '../../../../lib/pipeline';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
 import { LegRecords } from './LegRecords';
 import { daysText, deptLabel, fmtDate, processChips, shortMilestone, STATUS_CHIP } from './progressUi';
+import { plainError } from '../../../../lib/plainError';
 
 type Filter = 'all' | 'red' | 'yellow' | 'needs_feedback' | 'problem' | 'green' | 'no_clock' | 'unchecked';
 const SIZE: Record<string, string> = { small: 'Small order', medium: 'Medium order', large: 'Large order' };
@@ -73,7 +74,7 @@ export function ProgressCheck({ initialHuntId, onNavigate }: { initialHuntId?: s
         <button onClick={refresh} disabled={loading} className="min-h-11 min-w-11 flex items-center justify-center rounded-lg border border-slate-700 text-slate-300" aria-label="Refresh"><RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} /></button>
       </div>
       {!canReview && <p className="rounded-xl border border-slate-600 bg-[#111c26] text-slate-300 p-3 text-sm">You can see the progress. Only management can mark an order On track or Behind.</p>}
-      {error && <p className="rounded-xl border border-red-700 bg-red-950/30 text-red-200 p-3">{error}</p>}
+      {error && <p className="rounded-xl border border-red-700 bg-red-950/30 text-red-200 p-3">{plainError(error)}</p>}
 
       <div className="flex gap-2 overflow-x-auto pb-1">
         {FILTERS.map(([k, l]) => <button key={k} onClick={() => setFilter(k)} className={`shrink-0 min-h-11 px-4 rounded-full border-2 text-sm font-bold ${filter === k ? 'border-[#0073ea] bg-[#0073ea] text-white' : 'border-slate-600 text-slate-200'}`}>{l} · {counts[k]}</button>)}

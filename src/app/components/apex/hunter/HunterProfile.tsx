@@ -1,113 +1,54 @@
-import { Card } from '../../ui/card';
-import { Button } from '../../ui/button';
-import { Label } from '../../ui/label';
-import { Switch } from '../../ui/switch';
-import { Separator } from '../../ui/separator';
-import { User, Mail, Phone, Bell, LogOut } from 'lucide-react';
+/** HunterProfile — who the workshop has on file for this hunter, how to get the app on the home screen, and sign out. */
+import { LogOut, Mail, Phone, User, Hash, Globe } from 'lucide-react';
+import { useHunterClient } from '../../../../lib/hooks/useHunterClient';
+import { InstallCard } from '../shared/InstallApp';
+import { AppVersion } from '../shared/AppVersion';
+import { WORKSHOP } from '../../../../lib/workshop';
 
 interface HunterProfileProps {
   onLogout: () => void;
 }
 
 export function HunterProfile({ onLogout }: HunterProfileProps) {
+  const { client, displayName } = useHunterClient();
+  const c: any = client ?? {};
+  const rows = [
+    { icon: Hash, label: 'Your hunter number', value: c.client_number },
+    { icon: Mail, label: 'E-mail', value: c.email },
+    { icon: Phone, label: 'Phone', value: c.phone },
+    { icon: Globe, label: 'Your trophies are', value: c.client_type === 'local' ? 'Staying in South Africa' : c.client_type ? 'Being exported' : null },
+  ].filter(r => r.value);
+
   return (
-    <div className="space-y-6 max-w-2xl">
-      <div>
-        <h1 className="text-stone-900 dark:text-white mb-2">Profile</h1>
-        <p className="text-stone-600 dark:text-stone-400">Manage your account settings</p>
+    <div className="max-w-xl mx-auto space-y-5">
+      <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Your profile</h1>
+
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 space-y-4">
+        <div className="flex items-center gap-4">
+          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-green-700 to-lime-600 flex items-center justify-center shrink-0"><User className="w-8 h-8 text-white" /></div>
+          <div className="min-w-0">
+            <p className="text-xl font-bold text-slate-900 dark:text-slate-100 leading-tight">{displayName || 'Hunter'}</p>
+            {c.created_at && <p className="text-sm text-slate-600 dark:text-slate-300">Hunting with {WORKSHOP.name} since {new Date(c.created_at).toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' })}</p>}
+          </div>
+        </div>
+        {rows.length > 0 && (
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+            {rows.map(r => (
+              <li key={r.label} className="py-3 flex items-center gap-3">
+                <r.icon className="w-5 h-5 text-slate-400 shrink-0" />
+                <div className="min-w-0"><p className="text-sm text-slate-500 dark:text-slate-400">{r.label}</p><p className="text-base text-slate-900 dark:text-slate-100 break-words">{r.value}</p></div>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="text-sm text-slate-600 dark:text-slate-300">Something not right? Tap <strong>Ask us</strong> at the bottom and tell the workshop. We will fix it for you.</p>
       </div>
 
-      {/* Profile Info */}
-      <Card className="p-6 bg-white dark:bg-stone-900 border-stone-200 dark:border-stone-800">
-        <div className="flex items-start gap-4 mb-6">
-          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-green-700 via-green-600 to-lime-600 flex items-center justify-center flex-shrink-0 shadow-lg">
-            <User className="w-10 h-10 text-amber-50" />
-          </div>
-          <div className="flex-1">
-            <h2 className="text-stone-900 dark:text-white mb-1">John Hunter</h2>
-            <p className="text-stone-600 dark:text-stone-400">Client since Oct 2024</p>
-          </div>
-        </div>
+      <InstallCard />
 
-        <Separator className="my-6" />
+      <AppVersion className="text-slate-500" />
 
-        <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <Mail className="w-5 h-5 text-stone-400" />
-            <div>
-              <div className="text-stone-600 dark:text-stone-400">Email</div>
-              <div className="text-stone-900 dark:text-white">john.hunter@email.com</div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <Phone className="w-5 h-5 text-stone-400" />
-            <div>
-              <div className="text-stone-600 dark:text-stone-400">Phone</div>
-              <div className="text-stone-900 dark:text-white">+1 (555) 123-4567</div>
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      {/* Notification Preferences */}
-      <Card className="p-6 bg-white dark:bg-stone-900 border-stone-200 dark:border-stone-800">
-        <div className="flex items-center gap-2 mb-6">
-          <Bell className="w-5 h-5 text-green-700 dark:text-green-400" />
-          <h3 className="text-stone-900 dark:text-white">Notification Preferences</h3>
-        </div>
-
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <Label htmlFor="email-notif">Email Notifications</Label>
-              <p className="text-stone-600 dark:text-stone-400 mt-1">Receive updates via email</p>
-            </div>
-            <Switch id="email-notif" defaultChecked />
-          </div>
-
-          <Separator />
-
-          <div className="flex items-center justify-between">
-            <div>
-              <Label htmlFor="push-notif">Push Notifications</Label>
-              <p className="text-stone-600 dark:text-stone-400 mt-1">Get instant mobile alerts</p>
-            </div>
-            <Switch id="push-notif" defaultChecked />
-          </div>
-
-          <Separator />
-
-          <div className="flex items-center justify-between">
-            <div>
-              <Label htmlFor="sms-notif">SMS Notifications</Label>
-              <p className="text-stone-600 dark:text-stone-400 mt-1">Text message updates</p>
-            </div>
-            <Switch id="sms-notif" />
-          </div>
-
-          <Separator />
-
-          <div className="flex items-center justify-between">
-            <div>
-              <Label htmlFor="shipment-notif">Shipment Updates</Label>
-              <p className="text-stone-600 dark:text-stone-400 mt-1">Tracking and delivery alerts</p>
-            </div>
-            <Switch id="shipment-notif" defaultChecked />
-          </div>
-        </div>
-      </Card>
-
-      {/* Actions */}
-      <Card className="p-6 bg-white dark:bg-stone-900 border-stone-200 dark:border-stone-800">
-        <Button 
-          variant="destructive" 
-          className="w-full"
-          onClick={onLogout}
-        >
-          <LogOut className="w-4 h-4 mr-2" />
-          Logout
-        </Button>
-      </Card>
+      <button onClick={onLogout} className="w-full min-h-12 rounded-xl border-2 border-slate-400 text-slate-900 dark:text-slate-100 font-bold flex items-center justify-center gap-2"><LogOut className="w-5 h-5" />Sign out</button>
     </div>
   );
 }

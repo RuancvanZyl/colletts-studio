@@ -91,7 +91,7 @@ export function DispatchBoard() {
       const { data: st } = await (supabase as any).from('staff_profiles').select('id, full_name').eq('is_active', true).order('full_name');
       setStaff(st ?? []);
     } catch (e: any) {
-      toast.error('Could not load job cards: ' + (e?.message ?? 'unknown error') + ' (has migration 041 been run?)');
+      toast.error('Could not load the job cards. Please try again in a moment.');
     } finally { setLoading(false); }
   }, []);
 

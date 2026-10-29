@@ -162,3 +162,12 @@
 - Every screen title now matches the tab you tapped (Past deadline, Hunters who need contact, Waiting for mounts, Assign work, Job tracker, Checklists, Settings, Status board, Messages from hunters); whiteboard links read "Open Cards to accept", "See who needs contact", etc.
 - Station job cards: the 11-step list of department names is replaced by "Stage 3 of 11" and "After this stage it goes to Cleaning & Bleach" (each card was 30% taller for no gain).
 - All 45 staff screens and all 10 stations were opened with test data on a phone-size screen: none crash.
+
+### Walk-through pass #4 (found by acting as a hunter on a phone)
+- **Showstopper fixed:** on a phone the hunter's "Review my choices / Confirm my choices / Next: choose my animals" bar sat exactly under the bottom menu, so a hunter could not finish choosing mounts or adding animals. The bar now sits above the menu (`bottom-[4.75rem] md:bottom-0` in ChooseMounts and AddAnimalsFlow).
+- Hunter "Profile" screen was a fake page ("John Hunter, john.hunter@email.com, +1 (555)…" plus switches that saved nothing). Now it shows the hunter's real name, number, e-mail, phone, trophy type, the install steps, app version and Sign out.
+- Public About box no longer shows made-up numbers ("150+ users, 187 trophies") or a fake phone and opening hours.
+- Top search box rewritten for the current data (it still searched the old `specimens` table): finds hunters (name, e-mail, phone, hunter number) and animals (species or tag number) and opens the hunter. A magnifier button now opens it on phones too.
+- Developer words removed from messages staff see ("has migration 045 been run?").
+- Removed 46 unused leftover files (old demo portals and screens with fake data: admin/*, AdminPortal, Chapter*/Character*, outfitter demo screens, mock data files, old hooks). Nothing imported them; build, tests and the type check are unchanged.
+- Local test data for walking the app: not committed (a throw-away `public/__devmock.js`, only for local trials).

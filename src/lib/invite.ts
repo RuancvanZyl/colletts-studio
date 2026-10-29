@@ -11,7 +11,7 @@ export interface InviteTarget {
 
 export async function getInviteLink(clientId: string): Promise<string> {
   const { data, error } = await (supabase as any).from('clients').select('invite_token').eq('id', clientId).single();
-  if (error || !data?.invite_token) throw new Error(error?.message ?? 'No invitation link for this client yet (has migration 045 been run?)');
+  if (error || !data?.invite_token) throw new Error(error?.message ?? 'No sign-up link could be made for this hunter. Please tell the office.');
   return inviteUrl(data.invite_token);
 }
 

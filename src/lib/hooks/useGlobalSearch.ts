@@ -1,12 +1,19 @@
+/**
+ * useGlobalSearch — the search box at the top of the staff screens. Finds hunters (name, e-mail, phone, hunter number)
+ * and animals (species or tag number), and says which hunter an animal belongs to and where it is now.
+ */
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
+import { DEPT_LABELS } from '../pipeline';
 
 export interface SearchResult {
-  result_type: 'client' | 'specimen' | 'job';
+  result_type: 'client' | 'animal';
   result_id: string;
   label: string;
   sub_label: string;
+  /** the screen to open and the hunter to open it on */
   nav_hint: string;
+  nav_id?: string;
 }
 
 export function useGlobalSearch(query: string, debounceMs = 300) {
@@ -17,7 +24,8 @@ export function useGlobalSearch(query: string, debounceMs = 300) {
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
 
-    const q = query.trim();
+    // characters that have a meaning inside a search filter are replaced by spaces
+    const q = query.trim().replace(/[,()%*\\]/g, ' ').trim();
     if (q.length < 2) {
       setResults([]);
       setLoading(false);
@@ -26,48 +34,41 @@ export function useGlobalSearch(query: string, debounceMs = 300) {
 
     setLoading(true);
     timerRef.current = setTimeout(async () => {
-      // Search clients, specimens, and jobs in parallel using direct queries
-      const [clientRes, specimenRes, jobRes] = await Promise.all([
-        supabase
-          .from('clients')
-          .select('id, full_name, email, phone, country')
-          .or(`full_name.ilike.%${q}%,email.ilike.%${q}%,phone.ilike.%${q}%,country.ilike.%${q}%`)
-          .limit(5),
-
-        supabase
-          .from('specimens')
-          .select('id, tag_number, species_name, clients(full_name)')
-          .or(`tag_number.ilike.%${q}%,species_name.ilike.%${q}%`)
-          .limit(5),
-
-        supabase
-          .from('specimens')
-          .select('id, tag_number, species_name, jobs(id, current_phase)')
-          .ilike('clients.full_name', `%${q}%`)
-          .not('jobs', 'is', null)
-          .limit(5),
+      const db = supabase as any;
+      const [clientRes, animalRes] = await Promise.all([
+        db.from('clients')
+          .select('id, full_name, email, phone, client_number, country')
+          .or(`full_name.ilike.%${q}%,email.ilike.%${q}%,phone.ilike.%${q}%,client_number.ilike.%${q}%`)
+          .limit(6),
+        db.from('hunt_documents')
+          .select('id, hunt_id, current_department, status, form_data, client_hunts(client_id, clients(full_name, client_number))')
+          .eq('doc_type', 'job_card')
+          .or(`form_data->>species.ilike.%${q}%,form_data->>tag_number.ilike.%${q}%`)
+          .limit(8),
       ]);
 
       const out: SearchResult[] = [];
-
-      for (const c of (clientRes.data ?? [])) {
+      for (const c of (clientRes.data ?? []) as any[]) {
         out.push({
           result_type: 'client',
           result_id: c.id,
           label: c.full_name,
-          sub_label: [c.email, c.country].filter(Boolean).join(' · '),
+          sub_label: [c.client_number, c.email, c.phone].filter(Boolean).join(' · '),
           nav_hint: 'clients',
+          nav_id: c.id,
         });
       }
-
-      for (const s of (specimenRes.data ?? [])) {
-        const client = (s as any).clients;
+      for (const d of (animalRes.data ?? []) as any[]) {
+        const fd = d.form_data ?? {};
+        const owner = d.client_hunts?.clients;
+        const where = d.status === 'completed' ? 'Finished' : d.status === 'awaiting_arrival' ? 'On its way' : (DEPT_LABELS[d.current_department] ?? d.current_department ?? '');
         out.push({
-          result_type: 'specimen',
-          result_id: s.id,
-          label: s.tag_number ?? s.species_name ?? 'Specimen',
-          sub_label: [s.species_name, client?.full_name].filter(Boolean).join(' · '),
-          nav_hint: 'arrival',
+          result_type: 'animal',
+          result_id: d.id,
+          label: `${fd.species ?? 'Animal'}${fd.tag_number ? ` · tag ${fd.tag_number}` : ''}`,
+          sub_label: [owner?.full_name, where].filter(Boolean).join(' · '),
+          nav_hint: 'clients',
+          nav_id: d.client_hunts?.client_id,
         });
       }
 

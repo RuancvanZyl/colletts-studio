@@ -149,6 +149,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [navClientId, setNavClientId] = useState<string | undefined>(undefined);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [myTaskCount, setMyTaskCount] = useState<number | null>(null);
   const [lastTab, setLastTab] = useState<Record<string, string>>({});
   const { theme, toggleTheme } = useTheme();
@@ -581,6 +582,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
 
           {/* Right controls */}
           <div className="ml-auto flex items-center gap-1">
+            <button onClick={() => setSearchOpen(o => !o)} className="md:hidden flex items-center justify-center w-11 h-11 rounded-lg hover:bg-[rgba(58,174,204,0.1)]" aria-label="Find a hunter, an animal or a tag number" title="Find a hunter, an animal or a tag number"><Search className="w-5 h-5 text-[#7AADB8]" /></button>
             <NoticeBoard onNavigate={navigate} />
             <button
               onClick={toggleTheme}
@@ -593,6 +595,11 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
             </button>
           </div>
         </header>
+        {searchOpen && (
+          <div className="md:hidden px-4 py-2 bg-[#0F1A1C] border-b border-[rgba(58,174,204,0.12)] sticky top-14 z-30">
+            <GlobalSearch autoFocus onNavigate={(v, id) => { setSearchOpen(false); navigate(v, id); }} />
+          </div>
+        )}
 
         {/* Page content */}
         <main className="flex-1 min-w-0 p-4 md:p-6 pb-28 lg:pb-6 overflow-x-auto bg-[#080C0C]">

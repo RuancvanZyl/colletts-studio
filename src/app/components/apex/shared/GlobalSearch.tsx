@@ -1,19 +1,19 @@
 import { useRef, useState, useEffect } from 'react';
-import { Search, User, Package, Briefcase, Loader2, X } from 'lucide-react';
+import { Search, User, Package, Loader2, X } from 'lucide-react';
 import { Input } from '../../ui/input';
 import { useGlobalSearch, type SearchResult } from '../../../../lib/hooks/useGlobalSearch';
 
-const TYPE_META: Record<string, { icon: typeof User; color: string; label: string }> = {
-  client:   { icon: User,      color: 'text-blue-500',  label: 'Client'   },
-  specimen: { icon: Package,   color: 'text-green-500', label: 'Specimen' },
-  job:      { icon: Briefcase, color: 'text-amber-500', label: 'Job'      },
+const TYPE_META: Record<string, { icon: typeof User; color: string; label: string; heading: string }> = {
+  client: { icon: User,    color: 'text-blue-500',  label: 'Hunter', heading: 'Hunters' },
+  animal: { icon: Package, color: 'text-green-500', label: 'Animal', heading: 'Animals' },
 };
 
 interface GlobalSearchProps {
-  onNavigate: (view: string) => void;
+  onNavigate: (view: string, id?: string) => void;
+  autoFocus?: boolean;
 }
 
-export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
+export function GlobalSearch({ onNavigate, autoFocus = false }: GlobalSearchProps) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const { results, loading } = useGlobalSearch(query);
@@ -33,7 +33,7 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
   const showDropdown = open && (query.trim().length >= 2);
 
   function handleSelect(r: SearchResult) {
-    onNavigate(r.nav_hint);
+    onNavigate(r.nav_hint, r.nav_id);
     setQuery('');
     setOpen(false);
   }
@@ -44,15 +44,16 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
   }
 
   return (
-    <div ref={containerRef} className="relative w-full max-w-sm">
+    <div ref={containerRef} className="relative w-full max-w-sm md:max-w-sm">
       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
       <Input
+        autoFocus={autoFocus}
         value={query}
         onChange={e => { setQuery(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
         onKeyDown={e => { if (e.key === 'Escape') clear(); }}
-        placeholder="Search clients, tags, species…"
-        className="pl-8 pr-8 h-8 text-sm bg-slate-50 dark:bg-[#2c3d5b] border-slate-200 dark:border-transparent focus:border-[#0073ea] dark:text-white"
+        placeholder="Find a hunter, an animal or a tag number"
+        className="pl-8 pr-8 h-11 md:h-8 text-base md:text-sm bg-slate-50 dark:bg-[#2c3d5b] border-slate-200 dark:border-transparent focus:border-[#0073ea] dark:text-white"
       />
       {query && (
         <button
@@ -77,7 +78,7 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-[#2c3d5b]">
               {/* Group results by type */}
-              {(['client', 'specimen', 'job'] as const).map(type => {
+              {(['client', 'animal'] as const).map(type => {
                 const group = results.filter(r => r.result_type === type);
                 if (!group.length) return null;
                 const meta = TYPE_META[type];
@@ -85,7 +86,7 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
                 return (
                   <div key={type}>
                     <p className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-[#162230]">
-                      {meta.label}s
+                      {meta.heading}
                     </p>
                     {group.map(r => (
                       <button
@@ -117,14 +118,14 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
 
           <div className="px-4 py-2 border-t border-slate-100 dark:border-[#2c3d5b] flex items-center justify-between">
             <p className="text-[10px] text-slate-400">
-              {results.length} result{results.length !== 1 ? 's' : ''} · press <kbd className="font-mono bg-slate-100 dark:bg-[#2c3d5b] px-1 rounded text-[9px]">Esc</kbd> to close
+              {results.length} result{results.length !== 1 ? 's' : ''}
             </p>
             {results.length > 0 && (
               <button
                 onClick={() => { onNavigate('clients'); clear(); }}
-                className="text-[10px] text-[#0073ea] hover:underline"
+                className="text-sm font-semibold text-[#0073ea] hover:underline min-h-9"
               >
-                View all in Clients →
+                See all hunters →
               </button>
             )}
           </div>

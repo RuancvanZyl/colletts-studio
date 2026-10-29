@@ -4,6 +4,7 @@ import { Compass, Loader2, AlertCircle } from 'lucide-react';
 import { supabase, clearInviteToken } from '../../../lib/supabase';
 import { WORKSHOP } from '../../../lib/workshop';
 import { InstallCard } from './shared/InstallApp';
+import { plainError } from '../../../lib/plainError';
 
 const field = 'w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 min-h-12 text-base placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-green-600';
 const primary = 'w-full rounded-xl bg-green-700 hover:bg-green-800 text-white font-bold min-h-12 text-base disabled:opacity-50 flex items-center justify-center gap-2';
@@ -53,7 +54,7 @@ export function OutfitterInviteScreen({ token, onDone, onSignIn }: { token: stri
       <div><label className="block text-sm font-semibold text-slate-700 mb-1">E-mail</label><input className={field} type="email" required value={email} onChange={e => setEmail(e.target.value)} /></div>
       <div><label className="block text-sm font-semibold text-slate-700 mb-1">Mobile / WhatsApp</label><input className={field} inputMode="tel" value={phone} onChange={e => setPhone(e.target.value)} /></div>
       <div><label className="block text-sm font-semibold text-slate-700 mb-1">Choose a password</label><input className={field} type="password" required minLength={8} value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 8 characters" /></div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600">{plainError(error)}</p>}
       <button className={primary} disabled={busy}>{busy && <Loader2 className="w-5 h-5 animate-spin" />}Create my account</button>
       <button type="button" className="w-full text-sm text-slate-500 min-h-11" onClick={onSignIn}>I already have an account</button>
     </form>

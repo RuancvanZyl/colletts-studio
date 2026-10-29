@@ -191,7 +191,7 @@ export function ClientStatusBoard({ onNavigate }: ClientStatusBoardProps) {
     setSaving(true);
     const { error } = await resolveFlag(resolving.entry.clientId, resolving.flag, note, { id: profile?.id, name: profile?.full_name });
     setSaving(false);
-    if (error) { toast.error('Could not save: ' + error + ' (has migration 040 been run?)'); return; }
+    if (error) { toast.error('Could not save. Please try again.'); return; }
     toast.success(`${FLAG_META[resolving.flag].label} marked resolved for ${resolving.entry.fullName}`);
     setResolving(null); setNote('');
   }

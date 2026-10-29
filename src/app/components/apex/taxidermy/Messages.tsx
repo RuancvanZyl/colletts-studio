@@ -270,7 +270,7 @@ function CommunicationLog() {
         <Button variant="outline" size="sm" onClick={exportCsv} className="ml-auto"><Download className="w-3.5 h-3.5 mr-1.5" />Export</Button>
         <Button variant="ghost" size="icon" onClick={reload} title="Refresh" aria-label="Refresh"><RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /></Button>
       </div>
-      {error && <p className="text-sm text-red-400">Could not load the log: {error} (has migration 043 been run?)</p>}
+      {error && <p className="text-sm text-red-400">Could not load the message log. Please try again in a moment.</p>}
       {loading ? <Spinner /> : visible.length === 0 ? <Empty text="Nothing recorded yet." /> : (
         <ul className="rounded-xl border border-[rgba(58,174,204,0.15)] divide-y divide-[rgba(58,174,204,0.1)] bg-[#0F1A1C]">
           {visible.slice(0, limit).map(r => (

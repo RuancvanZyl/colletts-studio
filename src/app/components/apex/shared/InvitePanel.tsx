@@ -7,6 +7,7 @@ import { Copy, Mail, MessageCircle, CheckCircle2, Loader2, Printer } from 'lucid
 import { toast } from 'sonner';
 import { supabase } from '../../../../lib/supabase';
 import { getInviteLink, inviteText, whatsappUrl, markInviteSent, emailInvite, type InviteTarget } from '../../../../lib/invite';
+import { plainError } from '../../../../lib/plainError';
 
 export function InvitePanel({ target, onPrintLetter, compact = false }: { target: InviteTarget; onPrintLetter?: (url: string | null) => void; compact?: boolean }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -66,7 +67,7 @@ export function InvitePanel({ target, onPrintLetter, compact = false }: { target
           </p>
         </div>
       </div>
-      {error ? <p className="text-xs text-red-600">{error}</p> : (
+      {error ? <p className="text-xs text-red-600">{plainError(error)}</p> : (
         <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
           <button className={btn} onClick={whatsapp} disabled={!url}><MessageCircle className="w-4 h-4 text-green-600" />WhatsApp</button>
           <button className={btn} onClick={email} disabled={!url || busy || !target.email}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}E-mail</button>

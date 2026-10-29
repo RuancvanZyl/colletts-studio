@@ -128,7 +128,7 @@ export function ChooseMounts({ animals, clientType, clientId, combinable = [], o
             <p>{unpriced > 0 ? `${unpriced} item${unpriced > 1 ? 's' : ''} (custom mounts, replicas and others) will be quoted separately. ` : ''}Prices are our 2026 price list. The workshop confirms the final quote before work starts.</p>
           </div>
         )}
-        <div className="fixed bottom-0 inset-x-0 z-40 bg-white/95 dark:bg-slate-950/95 border-t border-slate-200 dark:border-slate-700 p-3 md:left-64">
+        <div className="fixed bottom-[4.75rem] md:bottom-0 inset-x-0 z-40 bg-white/95 dark:bg-slate-950/95 border-t border-slate-200 dark:border-slate-700 p-3 md:left-64">
           <div className="max-w-xl mx-auto flex gap-2">
             <button className={`${btn} flex-1 bg-green-700 text-white`} disabled={saving || animals.every(x => !picks[x.docId]?.mount)} onClick={confirm}>
               {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}Confirm my choices
@@ -272,7 +272,7 @@ export function ChooseMounts({ animals, clientType, clientId, combinable = [], o
         </>
       )}
 
-      <div className="fixed bottom-0 inset-x-0 z-40 bg-white/95 dark:bg-slate-950/95 border-t border-slate-200 dark:border-slate-700 p-3 md:left-64">
+      <div className="fixed bottom-[4.75rem] md:bottom-0 inset-x-0 z-40 bg-white/95 dark:bg-slate-950/95 border-t border-slate-200 dark:border-slate-700 p-3 md:left-64">
         <div className="max-w-xl mx-auto flex gap-2">
           {i > 0 && <button className={`${btn} border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100`} onClick={() => setI(i - 1)}><ArrowLeft className="w-5 h-5" />Back</button>}
           {i < animals.length - 1
