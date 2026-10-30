@@ -54,7 +54,6 @@ export function OutfitterCases() {
               <p className="text-xs text-slate-600 dark:text-slate-300">You acknowledged this on {new Date(c.ack_at).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}.</p>
               <div className="flex gap-2">
                 <button className="flex-1 min-h-12 rounded-xl bg-green-700 text-white font-bold" onClick={() => setOpen(open === c.id ? null : c.id)}>{open === c.id ? 'Hide the conversation' : 'Open the conversation'}</button>
-                {WORKSHOP.whatsapp && <a className="min-h-12 px-4 rounded-xl border border-slate-400 text-slate-900 dark:text-slate-100 font-semibold flex items-center gap-2" target="_blank" rel="noopener" href={`https://wa.me/${WORKSHOP.whatsapp}?text=${encodeURIComponent(`About the rejected ${c.species ?? 'skin'} for ${c.client}: `)}`}><MessageCircle className="w-4 h-4 text-green-600" />WhatsApp</a>}
               </div>
               {open === c.id && <OutfitterThread huntId={c.hunt_id} side="outfitter" caseId={c.id} />}
             </div>

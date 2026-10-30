@@ -25,7 +25,7 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql', '063_mount_change_rules.sql']) {
+for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql', '063_mount_change_rules.sql', '064_conversation_topics.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
@@ -964,6 +964,35 @@ ok((await q(`SELECT form_data->>'instructions' i FROM hunt_documents WHERE title
 const rep = (await q(`SELECT form_data->>'replacement_for' r, current_department d, form_data->>'mount_type' m FROM hunt_documents WHERE title='Roan - Full Mount (replacement)'`))[0];
 ok(rep && rep.r === M(5) && rep.d === 'mounting' && rep.m === 'Full Mount', 'a new card starts for the stock skin, and it knows which card it replaces');
 ok((await q(`SELECT sum(amount)::float t FROM quote_lines WHERE quote_id='${QS}'`))[0].t === 3300, 'the invoice: 1000 - 1000 + 800 hide purchase + 2500 full mount');
+
+
+console.log('\nConversation topics');
+await as(null);
+const T1 = (await q(`SELECT id FROM outfitters LIMIT 1`))[0];
+ok(!!T1, 'there is an outfitter to talk to');
+await as(ids.admin);
+const tm = (await q(`SELECT hunt_id h FROM outfitter_messages LIMIT 1`))[0];
+const TH = tm.h;
+await db.query(`SELECT public.send_outfitter_message($1, 'About the quote', NULL, NULL, 'quote')`, [TH]);
+await db.query(`SELECT public.send_outfitter_message($1, 'A plain hello')`, [TH]);
+ok((await q(`SELECT topic FROM outfitter_messages WHERE body='About the quote'`))[0].topic === 'quote', 'a message can be saved on the quote topic');
+ok((await q(`SELECT topic FROM outfitter_messages WHERE body='A plain hello'`))[0].topic === 'general', 'with no topic it is general');
+ok((await q(`SELECT topic FROM outfitter_messages WHERE body='Thanks, we will watch for it'`))[0].topic === 'documents', 'a message tied to a document is on the documents topic');
+ok((await q(`SELECT topic FROM outfitter_messages WHERE body='We will send a replacement'`))[0].topic === 'rejected_skin', 'a message tied to a rejected skin is on that topic');
+ok((await fails(`SELECT public.send_outfitter_message($1, 'x', NULL, NULL, 'gossip')`, [TH]))?.includes('topic does not exist'), 'an unknown topic is refused');
+const anim = (await q(`SELECT id FROM hunt_documents WHERE hunt_id=$1 AND doc_type='job_card' LIMIT 1`, [TH]))[0];
+if (anim) {
+  await db.query(`SELECT public.send_outfitter_message($1, 'About this animal', NULL, NULL, 'job_card', $2)`, [TH, anim.id]);
+  ok((await q(`SELECT job_doc_id FROM outfitter_messages WHERE body='About this animal'`))[0].job_doc_id === anim.id, 'a message can be about one animal');
+}
+ok((await fails(`SELECT public.send_outfitter_message($1, 'x', NULL, NULL, 'job_card', 'ffffffff-ffff-ffff-ffff-ffffffffffff')`, [TH]))?.includes('not on this hunt'), 'but only an animal of that hunt');
+await db.query(`SELECT public.log_outfitter_conversation($1, 'outfitter', 'phone', 'He said the permit goes out on Friday', 'documents')`, [TH]);
+const lg = (await q(`SELECT sender, channel, topic, sender_name FROM outfitter_messages WHERE body LIKE 'He said the permit%'`))[0];
+ok(lg.sender === 'outfitter' && lg.channel === 'phone' && lg.topic === 'documents' && lg.sender_name.includes('phone call'), 'what was said on the phone is written into the conversation on its topic');
+ok((await fails(`SELECT public.log_outfitter_conversation($1, 'outfitter', 'carrier pigeon', 'x')`, [TH]))?.includes('WhatsApp or the phone'), 'only WhatsApp or the phone can be written down');
+await as(ids.worker);
+ok((await fails(`SELECT public.log_outfitter_conversation($1, 'workshop', 'phone', 'x')`, [TH]))?.includes('Only managers'), 'a worker cannot write down a conversation');
+await as(ids.admin);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

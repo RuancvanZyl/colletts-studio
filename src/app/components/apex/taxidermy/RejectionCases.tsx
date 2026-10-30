@@ -128,9 +128,10 @@ function CaseCard({ c, open, toggle, canDecide, isMgmt, reload, onNavigate }: { 
           </div>
 
           {c.outfitter && (
-            <div className="flex flex-wrap gap-2">
-              <button disabled={!c.outfitter.phone} onClick={() => window.open(whatsappUrl(c.outfitter!.phone, message), '_blank', 'noopener')} className="min-h-11 px-4 rounded-lg border border-slate-500 text-slate-100 font-semibold flex items-center gap-2 disabled:opacity-50"><MessageCircle className="w-4 h-4 text-green-400" />Send on WhatsApp</button>
-              <button onClick={async () => { try { await navigator.clipboard.writeText(message); toast.success('Message copied'); } catch { window.prompt('Copy this message:', message); } }} className="min-h-11 px-4 rounded-lg border border-slate-500 text-slate-100 font-semibold flex items-center gap-2"><Copy className="w-4 h-4" />Copy message</button>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="w-full text-sm text-slate-400">The outfitter is already told inside the app. Only use WhatsApp to nudge them to open it. The conversation itself stays below.</p>
+              <button disabled={!c.outfitter.phone} onClick={() => window.open(whatsappUrl(c.outfitter!.phone, message), '_blank', 'noopener')} className="min-h-11 px-4 rounded-lg border border-slate-500 text-slate-100 font-semibold flex items-center gap-2 disabled:opacity-50"><MessageCircle className="w-4 h-4 text-green-400" />Nudge on WhatsApp</button>
+              <button onClick={async () => { try { await navigator.clipboard.writeText(message); toast.success('Message copied'); } catch { window.prompt('Copy this message:', message); } }} className="min-h-11 px-4 rounded-lg border border-slate-500 text-slate-100 font-semibold flex items-center gap-2"><Copy className="w-4 h-4" />Copy the nudge</button>
             </div>
           )}
 

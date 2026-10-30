@@ -27,6 +27,7 @@ import { CommunicationPanel } from './CommunicationPanel';
 import { ClientRegistrationForm } from '../shared/ClientRegistrationForm';
 import type { Database } from '../../../../lib/database.types';
 import { plainError } from '../../../../lib/plainError';
+import { MessageOutfitterButton } from '../shared/MessageOutfitterButton';
 
 type Client = Database['public']['Tables']['clients']['Row'];
 type ClientType = 'all' | 'local' | 'export';
@@ -284,6 +285,24 @@ function PassportUploadSection({ clientId }: { clientId: string | null }) {
 // ── Detail tabs ───────────────────────────────────────────────────────────────
 type DetailTab = 'info' | 'hunts' | 'photos' | 'messages' | 'jobcards' | 'money';
 
+/** One button per hunt that has an outfitter: the conversation with the outfitter about this client, saved against the hunt. */
+function ClientOutfitterChats({ clientId }: { clientId: string }) {
+  const [hunts, setHunts] = useState<{ id: string; ref: string | null }[]>([]);
+  useEffect(() => {
+    (async () => {
+      const { data } = await (supabase as any).from('client_hunts').select('id, ref_number').eq('client_id', clientId).not('outfitter_id', 'is', null).order('created_at', { ascending: false });
+      setHunts((data ?? []).map((h: any) => ({ id: h.id, ref: h.ref_number })));
+    })();
+  }, [clientId]);
+  if (hunts.length === 0) return null;
+  return (
+    <div className="mb-4 rounded-xl border border-slate-300 dark:border-slate-700 p-3 space-y-2">
+      <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Talking to the outfitter about this hunter</p>
+      <div className="flex flex-wrap gap-2">{hunts.map(h => <MessageOutfitterButton key={h.id} huntId={h.id} topic="general" />)}</div>
+    </div>
+  );
+}
+
 function ClientDetailPanel({ client, onEdit, onBack, onOpenQuote }: { client: Client; onEdit: () => void; onBack: () => void; onOpenQuote?: (huntId: string) => void }) {
   const [tab, setTab] = useState<DetailTab>('jobcards');
   const { photos, loading: photosLoading, refresh: refreshPhotos } = useClientPhotos(client.id);
@@ -423,6 +442,7 @@ function ClientDetailPanel({ client, onEdit, onBack, onOpenQuote }: { client: Cl
         {tab === 'money' && <ClientMoney clientId={client.id} onOpenQuote={onOpenQuote ?? (() => {})} />}
         {tab === 'hunts' && <HuntTimeline clientId={client.id} />}
 
+        {tab === 'messages' && <ClientOutfitterChats clientId={client.id} />}
         {tab === 'messages' && (
           <CommunicationPanel
             clientId={client.id}

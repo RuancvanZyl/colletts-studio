@@ -4,8 +4,9 @@ import { ArrowLeft, Loader2, Plus } from 'lucide-react';
 import { supabase } from '../../../../lib/supabase';
 import { useAuth } from '../../../../lib/auth';
 import { OutfitterThread } from '../shared/OutfitterThread';
+import { TOPIC_LABEL } from '../../../../lib/threadTopics';
 
-interface M { hunt_id: string; sender: string; body: string; read_at: string | null; created_at: string; client_hunts: { ref_number: string | null; clients: { full_name: string } | null } | null; outfitters: { name: string } | null }
+interface M { hunt_id: string; topic?: string; sender: string; body: string; read_at: string | null; created_at: string; client_hunts: { ref_number: string | null; clients: { full_name: string } | null } | null; outfitters: { name: string } | null }
 
 export function OutfitterInbox({ onOpenDocs, initialHuntId }: { onOpenDocs: (huntId: string) => void; initialHuntId?: string }) {
   const { profile } = useAuth();
@@ -16,7 +17,11 @@ export function OutfitterInbox({ onOpenDocs, initialHuntId }: { onOpenDocs: (hun
   const [options, setOptions] = useState<{ id: string; label: string }[]>([]);
 
   const load = async () => {
-    const { data } = await (supabase as any).from('outfitter_messages').select('hunt_id, sender, body, read_at, created_at, client_hunts(ref_number, clients(full_name)), outfitters(name)').order('created_at', { ascending: false }).limit(500);
+    const { data, error } = await (supabase as any).from('outfitter_messages').select('hunt_id, topic, sender, body, read_at, created_at, client_hunts(ref_number, clients(full_name)), outfitters(name)').order('created_at', { ascending: false }).limit(500);
+    if (error) {                                  // topics are not switched on yet: the list works as before
+      const old = await (supabase as any).from('outfitter_messages').select('hunt_id, sender, body, read_at, created_at, client_hunts(ref_number, clients(full_name)), outfitters(name)').order('created_at', { ascending: false }).limit(500);
+      setMsgs(old.data ?? []); return;
+    }
     setMsgs(data ?? []);
   };
   useEffect(() => { load(); }, []);
@@ -66,7 +71,7 @@ export function OutfitterInbox({ onOpenDocs, initialHuntId }: { onOpenDocs: (hun
       <div className="rounded-2xl border border-slate-700 bg-[#111c26] divide-y divide-slate-800 overflow-hidden">
         {threads.map(t => (
           <button key={t.id} onClick={() => setOpen(t.id)} className="w-full text-left px-4 py-3 flex items-center gap-3 min-h-16 hover:bg-[#162330]">
-            <span className="flex-1 min-w-0"><span className="block text-lg font-semibold text-slate-100">{t.client} <span className="text-sm font-normal text-slate-500">via {t.outfitter}</span></span><span className="block text-sm text-slate-400 truncate">{t.last.sender === 'workshop' ? 'You: ' : ''}{t.last.body}</span></span>
+            <span className="flex-1 min-w-0"><span className="block text-lg font-semibold text-slate-100">{t.client} <span className="text-sm font-normal text-slate-500">via {t.outfitter}</span></span><span className="block text-sm text-slate-400 truncate">{t.last.topic && t.last.topic !== 'general' ? <span className="font-semibold text-slate-300">{TOPIC_LABEL[t.last.topic]} · </span> : null}{t.last.sender === 'workshop' ? 'You: ' : ''}{t.last.body}</span></span>
             {t.unread > 0 && <span className="min-w-6 h-6 px-1.5 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center">{t.unread}</span>}
           </button>
         ))}

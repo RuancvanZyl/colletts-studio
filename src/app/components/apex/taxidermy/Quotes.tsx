@@ -14,6 +14,7 @@ import { sciName } from '../../../../lib/species';
 import { OrderChangeDialog } from './OrderChangeDialog';
 import { printCreditNote } from '../../../../lib/print';
 import { useQuotePipeline, loadQuotes, money, STAGE_LABEL, type Quote, type QuoteLine, type PipelineRow } from '../../../../lib/hooks/useQuotes';
+import { MessageOutfitterButton } from '../shared/MessageOutfitterButton';
 
 const field = 'w-full rounded-lg border border-slate-600 bg-[#0f1a24] text-slate-100 px-3 min-h-11 text-base placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0073ea]';
 const lab = 'block text-sm font-semibold text-slate-300 mb-1';
@@ -172,6 +173,7 @@ function QuoteEditor({ huntId, onBack }: { huntId: string; onBack: () => void })
       <div>
         <h1 className="text-3xl font-bold text-slate-100 leading-tight">{who.name}</h1>
         <p className="text-slate-400">{who.ref} · {who.type === 'local' ? 'Local' : 'Export'}</p>
+        <MessageOutfitterButton huntId={huntId} topic="quote" className="mt-2 !text-slate-200" />
       </div>
 
       {status === 'declined' && quote?.hunter_comment && <div className="rounded-xl border-2 border-red-500 bg-red-950/30 p-4"><p className="font-bold text-red-300">The hunter asked for changes</p><p className="text-slate-100 mt-1">{quote.hunter_comment}</p></div>}

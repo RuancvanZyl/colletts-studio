@@ -7,6 +7,7 @@ import { conditionSummary } from '../../../../lib/condition';
 import { CaseTag, type OpenCase } from './CaseTag';
 import { SoakReportButton } from './SoakReportButton';
 import { EditJobCardButton } from './EditJobCard';
+import { MessageOutfitterButton } from '../shared/MessageOutfitterButton';
 import { useLiveRefresh } from '../../../../lib/liveRefresh';
 import { Button } from '../../ui/button';
 import { PrintButton } from '../shared/PrintButton';
@@ -418,6 +419,7 @@ function AnimalBlock({ card, expanded, toggle, completing, markDone, photos, add
           <JobPhotosButton docId={card.docId} dept={card.department} huntId={card.huntId} title={`${card.species} — ${card.clientName}`} />
           <PrintButton compact label="Print this card" onPrint={() => printJobCards({ docIds: [card.docId] })} />
           {card.department === 'tannery' && <SoakReportButton docId={card.docId} huntId={card.huntId} species={card.species} />}
+          <MessageOutfitterButton huntId={card.huntId} topic="job_card" docId={card.docId} label="Message the outfitter about this trophy" />
           {isAdmin && <EditJobCardButton docId={card.docId} huntId={card.huntId} species={card.species} mount={card.mountType} instructions={card.instructions} tag={card.tagNumber} department={card.department} clientName={card.clientName} onChanged={reload} />}
           <button onClick={() => toggle(card.docId)} className="ml-auto min-h-11 px-4 rounded-lg border-2 border-green-600 text-green-700 dark:text-green-300 font-bold text-sm inline-flex items-center gap-1.5">{isOpen ? <ChevronUp className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}{isOpen ? 'Close' : 'Complete this stage'}</button>
         </div>

@@ -79,7 +79,7 @@
     if (m) {
       window.__log.push(method + ' ' + m[1]);
       const wantsObject = JSON.stringify((init && init.headers) || {}).includes('vnd.pgrst.object');
-      if (method === 'GET' || method === 'HEAD') { const rows = T[m[1]] || []; return json(wantsObject ? (rows[0] || null) : rows); }
+      if (method === 'GET' || method === 'HEAD') { let rows = T[m[1]] || []; const eq = url.match(/[?&]id=eq\.([^&]+)/); if (eq) rows = rows.filter(r => r.id === decodeURIComponent(eq[1])); return json(wantsObject ? (rows[0] || null) : rows); }
       const body = init && init.body ? JSON.parse(init.body) : {}; const row = Array.isArray(body) ? body : [{ id: 'new1', ...body }];
       return json(wantsObject ? row[0] : row, method === 'POST' ? 201 : 200);
     }

@@ -194,3 +194,11 @@
 - Half Mount (half body) is a price option: 50% of the full mount price until the price list says otherwise (`HALF_BODY_SHARE` in `lib/pricing.ts`).
 - Files: `lib/mountRules.ts` (+ tests), `taxidermy/EditJobCard.tsx`, `OrderChangeDialog` (prefill, first-skin choice), migration `063_mount_change_rules.sql` (+ `supabase/launch/release_063_mount_change_rules.sql`, 325 database checks).
 - NEEDS: run `supabase/launch/release_063_mount_change_rules.sql` in the Supabase SQL Editor. Until then the Edit button shows a plain error.
+
+## 2026-10-30 — Conversations saved against their topic (migration 064)
+- Owner rule: most communication happens in the app, saved against the topic at hand ("outfitter is being contacted about client X").
+- Every outfitter conversation has a heading ("Kalahari Safaris about John Smith", hunt reference) and every message a topic (General, Documents, Rejected skin, Quote and payment, A trophy) and optionally the animal it is about. Topic chips filter the thread; the inbox shows the topic of the last message. Existing messages were given the topic they obviously had.
+- "Message the outfitter about this client" button (opens the thread in a pop-up on the right topic): on each job card ("about this trophy"), on the quote screen, and in the client profile Messages tab. Rejected skins and Documents already open their threads.
+- WhatsApp is only a nudge: a small link under every thread ("Not seen it? Nudge them on WhatsApp" for staff, "Nudge the office" for outfitters; the text just points to the app). The big WhatsApp button on the outfitter's rejected-skin notice is gone. Staff can write down a phone or WhatsApp conversation on any topic ("Spoke on WhatsApp or the phone?"). 
+- Works before the SQL is run: without migration 064 messages simply save as before (no topic). Run `supabase/launch/release_064_conversation_topics.sql` to switch topics on.
+- Not built: automatic WhatsApp/e-mail nudges when a message arrives (needs a sending service: Resend for e-mail, a WhatsApp Business provider); hunter-side topic headings (hunter messages stay per trophy).
