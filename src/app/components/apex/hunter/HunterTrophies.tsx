@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp, Loader2, Printer, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useHunterAnimals, type HunterAnimal } from '../../../../lib/hooks/useHunterAnimals';
-import { getPipeline, DEPT_LABELS } from '../../../../lib/pipeline';
+import { getPipeline, stageIndex, DEPT_LABELS } from '../../../../lib/pipeline';
 import { speciesEmoji } from '../../../../lib/pricing';
 import { sciName } from '../../../../lib/species';
 import { WORKSHOP } from '../../../../lib/workshop';
@@ -23,7 +23,7 @@ function statusOf(a: HunterAnimal): { text: string; tone: 'todo' | 'wait' | 'wor
   if (a.expected && a.mountChosen) return { text: 'Mount chosen — waiting for your trophy to arrive', tone: 'wait', pct: 2 };
   if (!a.mountChosen) return { text: 'Waiting for your choice', tone: 'todo', pct: 0 };
   if (!a.started && a.dept === 'receiving') return { text: 'Mount chosen — we will start soon', tone: 'wait', pct: 3 };
-  const pipe = getPipeline(a.mount); const idx = pipe.indexOf(a.dept);
+  const pipe = getPipeline(a.mount); const idx = stageIndex(pipe, a.dept);
   return { text: `${DEPT_LABELS[a.dept] ?? a.dept}${idx >= 0 ? ` · stage ${idx + 1} of ${pipe.length}` : ''}`, tone: 'work', pct: idx >= 0 ? Math.max(5, Math.round((idx / Math.max(1, pipe.length - 1)) * 100)) : 5 };
 }
 

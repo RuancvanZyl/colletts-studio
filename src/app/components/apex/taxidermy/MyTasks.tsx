@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../../../lib/supabase';
 import { useAuth } from '../../../../lib/auth';
-import { getStaffDepartments, getNextDepartment, getPipeline, DEPT_LABELS, DEPT_COLORS } from '../../../../lib/pipeline';
+import { getStaffDepartments, getNextDepartment, getPipeline, stageIndex, DEPT_LABELS, DEPT_COLORS } from '../../../../lib/pipeline';
 import { toast } from 'sonner';
 import { CheckCircle2, Clock, ChevronRight, ListTodo, AlertTriangle, RefreshCw, Info, Camera, Upload, X, Bell, Play, Square, CheckSquare } from 'lucide-react';
 import { Button } from '../../ui/button';
@@ -511,7 +511,7 @@ export function MyTasks() {
       {/* Task cards — only this client's, once one is picked */}
       {!loading && selectedClient && tasks.filter(t => (t.clientNumber || t.clientName) === selectedClient).map(task => {
         const pipeline = getPipeline(task.mountType);
-        const stageIdx = pipeline.indexOf(task.currentDept);
+        const stageIdx = stageIndex(pipeline, task.currentDept);
         const progress = stageIdx >= 0 ? Math.round((stageIdx / (pipeline.length - 1)) * 100) : 0;
         const deptColor = DEPT_COLORS[task.currentDept] ?? 'bg-[#1E7A96]';
         const isCompleting = completing === task.docId;

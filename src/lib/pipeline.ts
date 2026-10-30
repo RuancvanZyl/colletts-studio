@@ -51,10 +51,24 @@ export function getPipeline(mountType: string): string[] {
   return PIPELINE_STAGES[mountType] ?? DEFAULT_PIPELINE;
 }
 
+/**
+ * Where a card is in a pipeline. When the mount was changed part-way (say a shoulder mount that is at the tannery becomes a Euro skull,
+ * which has no tannery stage) the card finishes the stage it is in and carries on with the first stage of its new route that comes after it.
+ * Returns the stage it is in, or the next stage of the new route when its own stage is not on that route, or -1.
+ */
+export function stageIndex(stages: string[], dept: string): number {
+  const i = stages.indexOf(dept);
+  if (i >= 0) return i;
+  const rank = ALL_DEPARTMENTS.indexOf(dept);
+  if (rank < 0) return -1;
+  return stages.findIndex(s => ALL_DEPARTMENTS.indexOf(s) > rank);
+}
+
 export function getNextDepartment(mountType: string, currentDept: string): string | null {
   const stages = getPipeline(mountType);
   const idx = stages.indexOf(currentDept);
-  if (idx === -1 || idx === stages.length - 1) return null;
+  if (idx === -1) { const next = stageIndex(stages, currentDept); return next >= 0 ? stages[next] : null; }
+  if (idx === stages.length - 1) return null;
   return stages[idx + 1];
 }
 

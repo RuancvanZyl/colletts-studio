@@ -10,6 +10,16 @@ export interface Milestone { key: string; label: string; due_date: string; compl
 export interface AnimalPos { pipeline: string[]; dept: string; done: boolean }
 
 const DAY = 86_400_000;
+/** The order of every stage, to place a card whose mount was changed part-way on its new route */
+const CANON = ['receiving', 'skinning', 'salting', 'cleaning_bleach', 'dip_pack', 'storage', 'tannery', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'];
+function positionOn(pipeline: string[], dept: string): number {
+  const i = pipeline.indexOf(dept);
+  if (i >= 0) return i;
+  const rank = CANON.indexOf(dept);
+  if (rank < 0) return -1;
+  const next = pipeline.findIndex(s => CANON.indexOf(s) > rank);
+  return next < 0 ? -1 : next - 0.5;                 // between its old stage and the next stage of its new route
+}
 /** Everything that counts as "skin & skull preparation" in a pipeline. */
 export const PREP_STAGES = ['receiving', 'skinning', 'salting', 'cleaning_bleach', 'storage'];
 
@@ -31,7 +41,7 @@ export function milestoneMet(key: string, size: string | null, a: AnimalPos): bo
   if (a.done) return true;
   const need = requiredIndex(key, size, a.pipeline);
   if (!Number.isFinite(need)) return false;
-  const here = a.pipeline.indexOf(a.dept);
+  const here = positionOn(a.pipeline, a.dept);
   return here >= 0 && here >= need;
 }
 

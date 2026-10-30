@@ -127,6 +127,9 @@ export const speciesEmoji = (s: string) => {
   return EMOJI_BY_NAME[sp?.name ?? s] ?? SPECIES_EMOJI[s] ?? (sp ? EMOJI_BY_GROUP[sp.group] : undefined) ?? '🎯';
 };
 
+/** Half body mount = this share of the full mount price (interim, until the price list gives its own figures). */
+export const HALF_BODY_SHARE = 0.5;
+
 /** What a hunter can choose to have done with an animal. `key` is the column in the price tables. */
 export interface MountOption { name: string; key: string; blurb: string; special?: 'custom' | 'replica' }
 export const MOUNT_OPTIONS: MountOption[] = [
@@ -134,6 +137,7 @@ export const MOUNT_OPTIONS: MountOption[] = [
   { name: 'Offset Shoulder Mount', key: 'offset_shoulder', blurb: 'Shoulder mount with the head turned to one side for a more natural look.' },
   { name: 'Pedestal Mount',        key: 'pedestal',        blurb: 'Head and neck standing on a pedestal base, for a table or floor.' },
   { name: 'Full Mount',            key: 'full_mount',      blurb: 'The whole animal, life-size, in a natural pose.' },
+  { name: 'Half Mount',            key: 'half_body',       blurb: 'Half-body mount: the front half of the animal, down to the chest and front legs.' },
   { name: 'Euro Skull',            key: 'euro_skull',      blurb: 'Cleaned, whitened skull and horns, ready to hang.' },
   { name: 'Bleach Only',           key: 'bleach_only',     blurb: 'Skull cleaned and bleached — you finish it yourself.' },
   { name: 'Tan Only',              key: 'tan_only',        blurb: 'Skin tanned and returned to you (rug, wall hanging or your own taxidermist).' },
@@ -158,7 +162,9 @@ export function mountPrice(species: string, mountName: string, clientType: strin
 export function mountsFor(species: string, clientType: string): (MountOption & { price: number | null })[] {
   const table = clientType === 'local' ? LOCAL_PRICE_DATA : EXPORT_PRICE_DATA;
   const row = table[priceKeyOf(species)];
-  const priced = MOUNT_OPTIONS.filter(m => row?.[m.key] && row[m.key] > 0).map(m => ({ ...m, price: row[m.key] }));
+  // Half body: until the price list says otherwise it is half the price of a full mount
+  const priceOf = (key: string): number => key === 'half_body' ? Math.round((row?.full_mount ?? 0) * HALF_BODY_SHARE) : (row?.[key] ?? 0);
+  const priced = MOUNT_OPTIONS.filter(m => priceOf(m.key) > 0).map(m => ({ ...m, price: priceOf(m.key) }));
   const quoted = MOUNT_OPTIONS.filter(m => ['tan_only', 'rug', 'dip_pack', 'other'].includes(m.key)).map(m => ({ ...m, price: null as number | null }));
   const specials: (MountOption & { price: number | null })[] = [
     { name: 'Custom mount', key: 'custom', special: 'custom', price: null, blurb: 'Your own idea. Describe it, add photos, even combine several of your animals into one mount.' },

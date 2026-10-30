@@ -8,7 +8,7 @@ import {
   CheckCircle2, Droplet, Skull, Warehouse, Scissors, Paintbrush,
   Camera, X, Upload, AlertCircle, Play, Square, CheckSquare,
 } from 'lucide-react';
-import { DEPT_LABELS, DEPT_COLORS, getPipeline, STALL_HOURS } from '../../../../lib/pipeline';
+import { DEPT_LABELS, DEPT_COLORS, getPipeline, stageIndex, STALL_HOURS } from '../../../../lib/pipeline';
 import { supabase } from '../../../../lib/supabase';
 import { useAuth } from '../../../../lib/auth';
 import { toast } from 'sonner';
@@ -238,7 +238,7 @@ export function DeptJobList({
 
   function renderJob(job: DeptJob) {
     const pipeline  = getPipeline(job.mountType);
-    const stageIdx  = pipeline.indexOf(job.currentDept);
+    const stageIdx  = stageIndex(pipeline, job.currentDept);
     const progress  = stageIdx >= 0 ? Math.round((stageIdx / (pipeline.length - 1)) * 100) : 0;
     const isExpanded = expandedId === job.docId;
     const badge     = stallBadge(dept, job.receivedAt);

@@ -11,7 +11,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from './supabase';
 import { selectIn, fetchAllRows } from './supabaseHelpers';
-import { DEPT_LABELS, getPipeline } from './pipeline';
+import { DEPT_LABELS, getPipeline, stageIndex } from './pipeline';
 import { listParts } from './received';
 import { sciName } from './species';
 
@@ -171,7 +171,7 @@ async function hydrate(rows: any[]): Promise<{ jobs: PrintJob[]; items: { id: st
 
 function jobPage(j: PrintJob, items: { id: string; dept_key: string; label: string }[], progress: Set<string>): string {
   const route = getPipeline(j.mount);
-  const here = route.indexOf(j.dept);
+  const here = stageIndex(route, j.dept);
   const history = new Map(j.stageHistory.map(s => [s.dept, s]));
 
   const stageRows = route.map((dept, i) => {

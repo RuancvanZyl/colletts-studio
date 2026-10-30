@@ -9,7 +9,7 @@ import { Loader2, CheckCircle2, ArrowRight, Eye, EyeOff, Play, Camera } from 'lu
 import { supabase } from '../../../../lib/supabase';
 import { useClientHunts } from '../../../../lib/hooks/useClientHunts';
 import { PRIORITY_META, dueState, useChecklists } from '../../../../lib/hooks/useTaskFlow';
-import { DEPT_LABELS, getPipeline, getNextDepartment } from '../../../../lib/pipeline';
+import { DEPT_LABELS, getPipeline, stageIndex, getNextDepartment } from '../../../../lib/pipeline';
 import { PrintButton } from '../shared/PrintButton';
 import { JobPhotosDialog } from '../shared/TrophyPhotos';
 import { printJobCards } from '../../../../lib/print';
@@ -126,7 +126,7 @@ export function ClientJobCards({ clientId }: { clientId: string }) {
             {shown.map(r => {
               const done = finished(r);
               const pipeline = getPipeline(r.mount);
-              const idx = pipeline.indexOf(r.dept);
+              const idx = stageIndex(pipeline, r.dept);
               const items = checklist.forDept(r.dept);
               const ticked = items.filter(i => checklist.progress[`${r.id}:${i.id}`]?.done).length;
               const due = dueState(r.dueDate);
@@ -192,7 +192,7 @@ export function ClientJobCards({ clientId }: { clientId: string }) {
         {shown.map(r => {
           const done = finished(r);
           const pipeline = getPipeline(r.mount);
-          const idx = pipeline.indexOf(r.dept);
+          const idx = stageIndex(pipeline, r.dept);
           const items = checklist.forDept(r.dept);
           const ticked = items.filter(i => checklist.progress[`${r.id}:${i.id}`]?.done).length;
           const due = dueState(r.dueDate);

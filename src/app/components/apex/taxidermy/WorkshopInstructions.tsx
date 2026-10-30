@@ -6,6 +6,7 @@ import { getNextDepartment, getStaffDepartments, DEPT_LABELS, ALL_DEPARTMENTS } 
 import { conditionSummary } from '../../../../lib/condition';
 import { CaseTag, type OpenCase } from './CaseTag';
 import { SoakReportButton } from './SoakReportButton';
+import { EditJobCardButton } from './EditJobCard';
 import { useLiveRefresh } from '../../../../lib/liveRefresh';
 import { Button } from '../../ui/button';
 import { PrintButton } from '../shared/PrintButton';
@@ -257,7 +258,7 @@ export function WorkshopInstructions() {
   const openList = openClient ? cards.filter(c => clientKey(c) === openClient) : [];
   const openCards = openList.length > 0 ? openList : null;
 
-  const view = { expanded, toggle, completing, markDone, photos, addPhotos, removePhoto, fileRefs, problems };
+  const view = { expanded, toggle, completing, markDone, photos, addPhotos, removePhoto, fileRefs, problems, isAdmin, reload: load };
 
   return (
     <div className="space-y-4 max-w-3xl">
@@ -375,9 +376,11 @@ interface ViewProps {
   removePhoto: (id: string, idx: number) => void;
   fileRefs: React.MutableRefObject<Record<string, HTMLInputElement | null>>;
   problems: Record<string, OpenCase>;
+  isAdmin: boolean;
+  reload: () => void;
 }
 
-function AnimalBlock({ card, expanded, toggle, completing, markDone, photos, addPhotos, removePhoto, fileRefs, problems }: ViewProps & { card: JobCard }) {
+function AnimalBlock({ card, expanded, toggle, completing, markDone, photos, addPhotos, removePhoto, fileRefs, problems, isAdmin, reload }: ViewProps & { card: JobCard }) {
   const isOpen = expanded === card.docId;
   const isDoing = completing === card.docId;
   const cardPhotos = photos[card.docId] ?? [];
@@ -415,6 +418,7 @@ function AnimalBlock({ card, expanded, toggle, completing, markDone, photos, add
           <JobPhotosButton docId={card.docId} dept={card.department} huntId={card.huntId} title={`${card.species} — ${card.clientName}`} />
           <PrintButton compact label="Print this card" onPrint={() => printJobCards({ docIds: [card.docId] })} />
           {card.department === 'tannery' && <SoakReportButton docId={card.docId} huntId={card.huntId} species={card.species} />}
+          {isAdmin && <EditJobCardButton docId={card.docId} huntId={card.huntId} species={card.species} mount={card.mountType} instructions={card.instructions} tag={card.tagNumber} department={card.department} clientName={card.clientName} onChanged={reload} />}
           <button onClick={() => toggle(card.docId)} className="ml-auto min-h-11 px-4 rounded-lg border-2 border-green-600 text-green-700 dark:text-green-300 font-bold text-sm inline-flex items-center gap-1.5">{isOpen ? <ChevronUp className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}{isOpen ? 'Close' : 'Complete this stage'}</button>
         </div>
       </div>

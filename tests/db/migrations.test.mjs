@@ -25,7 +25,7 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql']) {
+for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql', '063_mount_change_rules.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
@@ -891,6 +891,79 @@ await as(ids.mgr2);
 ok((await fails(`SELECT public.case_update_card('${case3}', 'Euro Mount')`))?.includes('Only management'), 'only management can change a job card');
 await as(ids.admin);
 await db.query(`UPDATE quality_cases SET needs_job_card_change = true WHERE id='${case3}'`).catch(() => {});
+
+
+console.log('\nChanging a mount: the skin rules, admin-only edits');
+await as(null);
+const M = n => `ee800000-0000-0000-0000-00000000000${n}`;
+await db.exec(`
+ INSERT INTO hunt_documents (id, hunt_id, doc_type, title, current_department, status, form_data) VALUES
+  ('${M(1)}','d1000000-0000-0000-0000-000000000001','job_card','Kudu - Shoulder Mount','receiving','in_progress','{"species":"Kudu","mount_type":"Shoulder Mount"}'),
+  ('${M(2)}','d1000000-0000-0000-0000-000000000001','job_card','Eland - Full Mount','skinning','in_progress','{"species":"Eland","mount_type":"Full Mount"}'),
+  ('${M(3)}','d1000000-0000-0000-0000-000000000001','job_card','Oryx - Tan Only','skinning','in_progress','{"species":"Oryx","mount_type":"Tan Only"}'),
+  ('${M(4)}','d1000000-0000-0000-0000-000000000001','job_card','Zebra - Pending Instructions','receiving','in_progress','{"species":"Zebra","mount_type":"Pending Instructions"}'),
+  ('${M(5)}','d1000000-0000-0000-0000-000000000001','job_card','Roan - Shoulder Mount','skinning','in_progress','{"species":"Roan","mount_type":"Shoulder Mount"}');`);
+const prob = async (a, b) => (await q(`SELECT public._mount_change_problem($1,$2) p`, [a, b]))[0].p;
+ok((await prob('Shoulder Mount', 'Full Mount'))?.includes('cannot become a full mount') && (await prob('Shoulder Mount', 'Full Mount'))?.includes('buy a skin from our stock'), 'a shoulder mount cannot become a full mount; the client can buy a skin from stock');
+ok(!!(await prob('Shoulder Mount', 'Half Mount')) && !!(await prob('Offset Shoulder Mount', 'Full Mount')), 'a shoulder mount cannot become a half body either');
+ok(!!(await prob('Flat Skin', 'Full Mount')) && !!(await prob('Tan Only', 'Shoulder Mount')) && !!(await prob('Rug Mount on Felt', 'Half Mount')), 'a flat skin cannot become a full, half-body or shoulder mount');
+ok((await prob('Full Mount', 'Half Mount')) === null && (await prob('Full Mount', 'Shoulder Mount')) === null && (await prob('Half Mount', 'Shoulder Mount')) === null, 'a full mount can become a half body or shoulder, and a half body a shoulder');
+ok((await prob('Full Mount', 'Flat Skin')) === null && (await prob('Full Mount', 'Rug Mount on Felt')) === null && (await prob('Half Mount', 'Tan Only')) === null && !!(await prob('Half Mount', 'Rug Mount on Felt')), 'a full mount can become a flat skin; a half body or shoulder only a tan or dip and pack');
+ok((await prob('Shoulder Mount', 'Offset Shoulder Mount')) === null && (await prob('Full Mount', 'Euro Skull')) === null && (await prob('Shoulder Mount', 'Tan Only')) === null, 'shoulder styles swap freely, and a skull-only or tan-only is always possible');
+ok(!!(await prob('Shoulder Mount', 'Rug Mount on Felt')) && !!(await prob('Euro Skull', 'Shoulder Mount')), 'a rug needs a flat-cut skin; a kept skull cannot grow a skin');
+await as(ids.worker);
+ok((await fails(`SELECT public.staff_change_mount('${M(2)}', 'Shoulder Mount', 'Client asked')`))?.includes('Only an admin'), 'a worker cannot edit a job card');
+await as(ids.mgr);
+ok((await fails(`SELECT public.staff_change_mount('${M(2)}', 'Shoulder Mount', 'Client asked')`))?.includes('Only an admin'), 'a department lead cannot edit a job card either');
+await as(ids.admin);
+ok((await fails(`SELECT public.staff_change_mount('${M(2)}', 'Shoulder Mount', '')`))?.includes('Say why'), 'a change needs a reason');
+ok((await fails(`SELECT public.staff_change_mount('${M(1)}', 'Full Mount', 'Client wants a full mount')`))?.includes('cannot become a full mount'), 'the admin cannot turn a shoulder mount into a full mount');
+ok((await fails(`SELECT public.staff_change_mount('${M(3)}', 'Shoulder Mount', 'Client wants a shoulder')`))?.includes('cannot become a shoulder mount'), 'or a flat skin into a shoulder mount');
+ok((await fails(`SELECT public.staff_change_mount('${M(4)}', 'Shoulder Mount', 'x')`))?.includes('has not chosen'), 'a card without a chosen mount is not changed here');
+await db.query(`SELECT public.staff_change_mount('${M(2)}', 'Shoulder Mount', 'Client changed from full to shoulder')`);
+const ch = (await q(`SELECT form_data, title FROM hunt_documents WHERE id='${M(2)}'`))[0];
+ok(ch.form_data.mount_type === 'Shoulder Mount' && ch.title === 'Eland - Shoulder Mount', 'a full mount can be changed to a shoulder mount by an admin');
+ok(ch.form_data.mount_history.length === 1 && ch.form_data.mount_history[0].from === 'Full Mount' && ch.form_data.mount_history[0].by === 'Ann Admin' && ch.form_data.mount_history[0].reason.includes('full to shoulder'), 'the change is written on the card: from, to, who, why');
+ok((await q(`SELECT count(*)::int n FROM client_notifications WHERE title='Your mount was changed'`))[0].n === 1, 'the hunter is told');
+await db.query(`SELECT public.staff_edit_card('${M(2)}', 'Head turned left', '77', 'Client sent new notes')`);
+const ed = (await q(`SELECT form_data FROM hunt_documents WHERE id='${M(2)}'`))[0].form_data;
+ok(ed.instructions === 'Head turned left' && ed.tag_number === '77' && ed.edit_history[0].before.instructions === '' , 'instructions and tag can be edited, and what was there before is kept');
+await as(ids.worker);
+ok((await fails(`SELECT public.staff_edit_card('${M(2)}', 'x', '1', 'y')`))?.includes('Only an admin'), 'a worker cannot edit instructions');
+// a hunter choosing again cannot swap to a bigger mount
+await as(null);
+await db.exec(`UPDATE hunt_documents SET started_at = NULL, current_department = 'receiving' WHERE id='${M(1)}'; UPDATE hunt_documents SET form_data = form_data || '{"x":1}' WHERE id='${M(1)}'`);
+await as(HUN2);
+ok((await fails(`SELECT public.hunter_choose_mount('${M(1)}', 'Full Mount')`))?.includes('cannot become a full mount'), 'a hunter who chose a shoulder mount cannot choose a full mount instead');
+await db.query(`SELECT public.hunter_choose_mount('${M(1)}', 'Offset Shoulder Mount')`);
+ok((await q(`SELECT form_data->>'mount_type' m FROM hunt_documents WHERE id='${M(1)}'`))[0].m === 'Offset Shoulder Mount', 'but they can pick another shoulder style');
+// mounted trophies cannot be changed
+await as(null);
+await db.exec(`INSERT INTO hunt_documents (id, hunt_id, doc_type, title, current_department, status, form_data) VALUES ('${M(6)}','d1000000-0000-0000-0000-000000000001','job_card','Gemsbok - Shoulder Mount','mounting','in_progress','{"species":"Gemsbok","mount_type":"Shoulder Mount"}'), ('${M(7)}','d1000000-0000-0000-0000-000000000001','job_card','Sable - Shoulder Mount','tannery','in_progress','{"species":"Sable","mount_type":"Shoulder Mount"}')`);
+await as(ids.admin);
+ok((await fails(`SELECT public.staff_change_mount('${M(6)}', 'Euro Skull', 'Client changed his mind')`))?.includes('can no longer be changed'), 'once a trophy is being mounted its mount cannot be changed');
+await db.query(`SELECT public.staff_change_mount('${M(7)}', 'Euro Skull', 'Client changed to a Euro mount; the tan is still paid for')`);
+ok((await q(`SELECT form_data->>'mount_type' m, current_department d FROM hunt_documents WHERE id='${M(7)}'`))[0].m === 'Euro Skull', 'before mounting it can still be changed, for example from a shoulder mount at the tannery to a Euro mount');
+// buying a skin from stock: credit the first mount, close its card, new card for the stock skin
+await as(null);
+const QS = 'f9000000-0000-0000-0000-000000000001', LS = 'f9100000-0000-0000-0000-000000000001';
+await db.exec(`
+ INSERT INTO quotes (id, hunt_id, client_id, status, currency, deposit_percent, amount_due_now) SELECT '${QS}', id, client_id, 'deposit_paid', 'USD', 50, 500 FROM client_hunts WHERE id='d1000000-0000-0000-0000-000000000001';
+ INSERT INTO quote_lines (id, quote_id, hunt_doc_id, description, amount, sort_order) VALUES ('${LS}','${QS}','${M(5)}','Roan shoulder mount',1000,1);
+ INSERT INTO quote_payments (quote_id, amount, method) VALUES ('${QS}',500,'eft');`);
+await as(ids.admin);
+ok((await fails(`SELECT public.staff_amend_quote('${QS}', NULL, $1::jsonb, '[]'::jsonb, 'Reason', 'Agreed')`, [JSON.stringify([{ line_id: LS, amount: 1000, cancel_card: true }])]))?.includes('what happens to the first skin'), 'closing the first card needs a decision about the first skin');
+await db.query(`SELECT public.staff_amend_quote('${QS}', NULL, $1::jsonb, $2::jsonb, 'Client wants a full mount; shoulder skin cannot be used', 'Agreed on WhatsApp')`,
+  [JSON.stringify([{ line_id: LS, amount: 1000, cancel_card: true, skin_decision: 'keep_ship' }]),
+   JSON.stringify([{ description: 'Hide purchase: Roan', amount: 800, kind: 'hide_purchase', stock_reference: 'Stock hide R-2' },
+                   { description: 'Roan full mount', amount: 2500, stock_reference: 'Stock hide R-2', new_card: { species: 'Roan', mount_type: 'Full Mount', start_department: 'mounting' } }])]);
+ok((await q(`SELECT status FROM hunt_documents WHERE id='${M(5)}'`))[0].status === 'cancelled', 'the first mount is credited and its job card is closed');
+const disp = (await q(`SELECT form_data->'skin_disposition'->>'choice' c FROM hunt_documents WHERE id='${M(5)}'`))[0].c;
+ok(disp === 'keep_ship', 'what happens to the first skin is written on the closed card');
+ok((await q(`SELECT form_data->>'instructions' i FROM hunt_documents WHERE title='Roan - Full Mount (replacement)'`))[0].i.includes('ship it with the other trophies'), 'and the new card tells the workshop about the first skin');
+const rep = (await q(`SELECT form_data->>'replacement_for' r, current_department d, form_data->>'mount_type' m FROM hunt_documents WHERE title='Roan - Full Mount (replacement)'`))[0];
+ok(rep && rep.r === M(5) && rep.d === 'mounting' && rep.m === 'Full Mount', 'a new card starts for the stock skin, and it knows which card it replaces');
+ok((await q(`SELECT sum(amount)::float t FROM quote_lines WHERE quote_id='${QS}'`))[0].t === 3300, 'the invoice: 1000 - 1000 + 800 hide purchase + 2500 full mount');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

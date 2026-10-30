@@ -14,20 +14,25 @@ import { ALL_DEPARTMENTS } from '../../../../lib/pipeline';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
 import { deptLabel } from './progressUi';
 
-interface Add { key: number; kind: 'item' | 'hide_purchase'; description: string; amount: string; stock: string; newCard: boolean; species: string; mount: string; startDept: string }
+export interface Add { key: number; kind: 'item' | 'hide_purchase'; description: string; amount: string; stock: string; newCard: boolean; species: string; mount: string; startDept: string; docId?: string }
+/** Ready-made answers for the dialog, for example when a mount is swapped for a skin bought from stock */
+export interface OrderChangePrefill { credits: Record<string, string>; cancelLineIds?: string[]; adds: Partial<Add>[]; reason?: string }
 export interface OrderChangeCase { id: string; docId: string; species: string; reasons: string[] }
 const field = 'w-full rounded-lg border border-slate-600 bg-[#0f1a24] text-slate-100 px-3 min-h-11 text-base placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0073ea]';
 const lab = 'block text-sm font-semibold text-slate-300 mb-1';
 let seq = 1;
 
-export function OrderChangeDialog({ quote, clientType, who, caseInfo, onClose, onDone }: { quote: Quote; clientType: string; who: string; caseInfo?: OrderChangeCase | null; onClose: () => void; onDone: () => void }) {
+export function OrderChangeDialog({ quote, clientType, who, caseInfo, prefill, onClose, onDone }: { quote: Quote; clientType: string; who: string; caseInfo?: OrderChangeCase | null; prefill?: OrderChangePrefill | null; onClose: () => void; onDone: () => void }) {
   const cur = quote.currency;
   const credited = (id?: string) => -quote.lines.filter(l => l.credit_for_line_id === id).reduce((s, l) => s + (l.amount ?? 0), 0);
   const creditable = quote.lines.filter(l => l.kind !== 'credit' && l.id).map(l => ({ ...l, left: Math.max(0, (l.amount ?? 0) - credited(l.id)) })).filter(l => l.left > 0.005);
-  const [credits, setCredits] = useState<Record<string, string>>(() => Object.fromEntries(creditable.filter(l => caseInfo && l.hunt_doc_id === caseInfo.docId).map(l => [l.id!, String(l.left)])));
-  const [adds, setAdds] = useState<Add[]>([]);
-  const [reason, setReason] = useState(caseInfo ? `Rejected ${caseInfo.species}: ${caseInfo.reasons.join(', ')}` : '');
+  const [credits, setCredits] = useState<Record<string, string>>(() => prefill?.credits ?? Object.fromEntries(creditable.filter(l => caseInfo && l.hunt_doc_id === caseInfo.docId).map(l => [l.id!, String(l.left)])));
+  const [adds, setAdds] = useState<Add[]>(() => (prefill?.adds ?? []).map(a => ({ key: seq++, kind: 'item', description: '', amount: '', stock: '', newCard: false, species: '', mount: '', startDept: 'mounting', ...a })));
+  const cancelIds = new Set(prefill?.cancelLineIds ?? []);
+  const [reason, setReason] = useState(prefill?.reason ?? (caseInfo ? `Rejected ${caseInfo.species}: ${caseInfo.reasons.join(', ')}` : ''));
   const [agreed, setAgreed] = useState('');
+  const [skin, setSkin] = useState('');
+  const [skinNote, setSkinNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<{ id: string; no: string } | null>(null);
   const [mountForm, setMountForm] = useState<{ species: string; mount: string } | null>(null);
@@ -39,7 +44,7 @@ export function OrderChangeDialog({ quote, clientType, who, caseInfo, onClose, o
   const newTotal = total - creditTotal + addTotal;
   const balance = newTotal - paid;
   const addsOk = adds.every(a => a.description.trim() && a.amount !== '' && Number(a.amount) >= 0 && (a.kind !== 'hide_purchase' || a.stock.trim()) && (!a.newCard || (a.species && a.mount)));
-  const ready = (creditTotal > 0 || adds.length > 0) && addsOk && reason.trim() && agreed.trim();
+  const ready = (creditTotal > 0 || adds.length > 0) && addsOk && reason.trim() && agreed.trim() && (cancelIds.size === 0 || !!skin);
 
   const addLine = (p: Partial<Add>) => setAdds(prev => [...prev, { key: seq++, kind: 'item', description: '', amount: '', stock: '', newCard: false, species: '', mount: '', startDept: 'mounting', ...p }]);
   const patch = (key: number, p: Partial<Add>) => setAdds(prev => prev.map(a => a.key === key ? { ...a, ...p } : a));
@@ -50,8 +55,8 @@ export function OrderChangeDialog({ quote, clientType, who, caseInfo, onClose, o
     setBusy(true);
     const { data, error } = await (supabase as any).rpc('staff_amend_quote', {
       p_quote: quote.id, p_case: caseInfo?.id ?? null, p_reason: reason, p_agreed: agreed,
-      p_credits: Object.entries(credits).filter(([, v]) => Number(v) > 0).map(([line_id, v]) => ({ line_id, amount: Number(v) })),
-      p_adds: adds.map(a => ({ description: a.description, amount: Number(a.amount), kind: a.kind, stock_reference: a.stock || null, ...(a.newCard ? { new_card: { species: a.species, mount_type: a.mount, start_department: a.startDept } } : {}) })),
+      p_credits: Object.entries(credits).filter(([, v]) => Number(v) > 0).map(([line_id, v]) => ({ line_id, amount: Number(v), ...(cancelIds.has(line_id) ? { cancel_card: true, skin_decision: skin, skin_note: skinNote } : {}) })),
+      p_adds: adds.map(a => ({ description: a.description, amount: Number(a.amount), kind: a.kind, stock_reference: a.stock || null, ...(a.docId ? { hunt_doc_id: a.docId } : {}), ...(a.newCard ? { new_card: { species: a.species, mount_type: a.mount, start_department: a.startDept } } : {}) })),
     });
     setBusy(false);
     if (error) { toast.error(error.message); return; }
@@ -76,6 +81,7 @@ export function OrderChangeDialog({ quote, clientType, who, caseInfo, onClose, o
           <>
             <section className="space-y-2">
               <h3 className="text-lg font-bold text-slate-100">1. Credit what is cancelled</h3>
+              {cancelIds.size > 0 && <p className="rounded-lg border border-amber-600 bg-amber-950/30 text-amber-100 p-2 text-sm">The job card of the credited mount is closed when you save, so nobody keeps working on it.</p>}
               {creditable.length === 0 && <p className="text-slate-400">Nothing on this invoice can be credited.</p>}
               {creditable.map(l => { const on = credits[l.id!] !== undefined; return (
                 <div key={l.id} className={`rounded-xl border-2 p-3 flex items-center gap-3 ${on ? 'border-red-500 bg-red-950/20' : 'border-slate-700'}`}>
@@ -125,6 +131,16 @@ export function OrderChangeDialog({ quote, clientType, who, caseInfo, onClose, o
               </div>
               <p className="text-xs text-slate-500">Already received: {money(paid, cur)}. The old total was {money(total, cur)}.</p>
             </section>
+
+            {cancelIds.size > 0 && (
+              <section className="space-y-2">
+                <h3 className="text-lg font-bold text-slate-100">What happens to the first skin? *</h3>
+                {[['discard', 'Throw it away', 'It goes to the workshop stock if the quality is good enough.'], ['leather', 'Make leather products from it', ''], ['keep_ship', 'Keep it as a ready-to-mount skin', 'It is packed and shipped with the other trophies.']].map(([v, t, h]) => (
+                  <button key={v} type="button" aria-pressed={skin === v} onClick={() => setSkin(v)} className={`w-full text-left rounded-xl border-2 px-4 py-3 ${skin === v ? 'border-green-500 bg-green-950/30' : 'border-slate-700'}`}><span className="block font-semibold text-slate-100">{skin === v ? '✓ ' : ''}{t}</span>{h && <span className="block text-sm text-slate-400">{h}</span>}</button>
+                ))}
+                <input className={field} value={skinNote} onChange={e => setSkinNote(e.target.value)} placeholder="Anything the workshop must know about it (optional)" aria-label="Note about the first skin" />
+              </section>
+            )}
 
             <section className="space-y-2">
               <div><label className={lab}>Why is the invoice changing? *</label><textarea rows={2} className={field} value={reason} onChange={e => setReason(e.target.value)} /></div>

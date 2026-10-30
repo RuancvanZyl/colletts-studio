@@ -7,7 +7,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../supabase';
 import { useAuth } from '../auth';
-import { getPipeline, DEPT_LABELS, STALL_HOURS } from '../pipeline';
+import { getPipeline, stageIndex, DEPT_LABELS, STALL_HOURS } from '../pipeline';
 
 export interface HunterTrophy {
   docId:       string;
@@ -118,7 +118,7 @@ export function useHunterHunts() {
       const fd           = d.form_data ?? {};
       const mountType    = fd.mount_type ?? 'Shoulder Mount';
       const pipeline     = getPipeline(mountType);
-      const currIdx      = pipeline.indexOf(d.current_department);
+      const currIdx      = stageIndex(pipeline, d.current_department);
       const stagesDone   = d.status === 'completed' ? pipeline.length : Math.max(currIdx, 0);
       const pct          = Math.round((stagesDone / pipeline.length) * 100);
       const stallThresh  = STALL_HOURS[d.current_department] ?? 72;
