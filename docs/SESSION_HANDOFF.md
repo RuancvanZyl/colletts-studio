@@ -181,3 +181,8 @@
 
 ### Master Access removed (owner decision)
 - The hidden "Master Access" PIN box and its 4-digit PIN are gone from the sign-in page and from the app files; `VITE_MASTER_PIN` removed from the local `.env`. The owner should also delete `VITE_MASTER_PIN` from the Vercel environment variables (Project → Settings → Environment Variables). `VITE_MASTER_EMAIL` / `VITE_MASTER_PASSWORD` in `.env` are not used by any code and can be deleted too (change that master password if it was ever real).
+
+### Stations grouped by client
+- All station screens (Skinning, Salting, Tannery, Packing, Mounting, Finishing, and the rest; they share `DeptJobList`) now show one row per client (number, name, "3 trophies · Kudu, Impala, Warthog", red/amber marker if any are urgent or overdue). Tap a client to see every animal of theirs at that station, each with its checklist and Start / Mark Complete. Clients with urgent animals come first; a find box appears when there are more than 5 clients.
+- The station "steps" box is folded away ("Steps for this station (tap to show)") so the clients are first on the screen.
+- The missed-deadline pop-up now disappears after 15 seconds instead of staying until closed.

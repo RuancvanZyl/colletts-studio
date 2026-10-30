@@ -270,7 +270,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       const names = overdue.slice(0, 3).map((h: any) => h.clients?.full_name).filter(Boolean).join(', ');
       toast.error(
         `⚠ ${overdue.length} client hunt${overdue.length !== 1 ? 's have' : ' has'} missed their deadline${names ? ` — ${names}${overdue.length > 3 ? '…' : ''}` : ''}. Open Hunters → Past deadline to review.`,
-        { duration: Infinity, closeButton: true }
+        { duration: 15000, closeButton: true }
       );
     })();
   }, [profile?.id, profile?.role]);

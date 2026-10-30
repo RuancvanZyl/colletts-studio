@@ -184,6 +184,8 @@ export function DeptJobList({
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [openClient, setOpenClient] = useState<string | null>(null);
+  const [find, setFind] = useState('');
   const { profile } = useAuth();
   const checklist = useChecklists([dept], jobs.map(j => j.docId));
   const [flow, setFlow] = useState<Record<string, { openedAt?: string; startedAt?: string }>>({});
@@ -446,17 +448,18 @@ export function DeptJobList({
         </div>
       )}
 
-      {/* Steps reference */}
-      <div className={`border rounded-lg p-3 ${colors.bg}`}>
-        <div className="flex flex-wrap gap-3">
+      {/* Steps reference: folded away so the clients come first */}
+      <details className={`border rounded-lg ${colors.bg}`}>
+        <summary className={`cursor-pointer select-none px-3 py-3 min-h-11 font-semibold text-sm ${colors.text}`}>Steps for this station (tap to show)</summary>
+        <div className="flex flex-col gap-2 px-3 pb-3">
           {steps.map((step, i) => (
             <div key={i} className={`flex items-center gap-2 text-sm ${colors.text}`}>
               <span className={`w-5 h-5 ${colors.dot} rounded-full flex items-center justify-center text-xs font-bold shrink-0`}>{i + 1}</span>
-              <span>{step}</span>
+              <span>{step.replace(/^\d+\.\s*/, '')}</span>
             </div>
           ))}
         </div>
-      </div>
+      </details>
 
       {loading ? (
         <Card><CardContent className="py-12 text-center"><Loader2 className="w-8 h-8 animate-spin text-slate-400 mx-auto" /></CardContent></Card>
@@ -467,39 +470,60 @@ export function DeptJobList({
             <p className="text-slate-600 dark:text-slate-400">{emptyText}</p>
           </CardContent>
         </Card>
-      ) : (
-        <div className="space-y-4">
-          {/* Urgent (red) first */}
-          {redJobs.length > 0 && (
-            <div>
-              <p className="text-xs font-bold text-red-600 uppercase tracking-wide mb-2 flex items-center gap-1">
-                <AlertCircle className="w-3.5 h-3.5" /> Urgent — needs attention now
-              </p>
-              {redJobs.map(renderJob)}
+      ) : (() => {
+        // ── grouped by client: one row per client, tap a client to see all their animals here ──
+        const key = (j: DeptJob) => j.clientNumber || j.clientName || 'unknown';
+        const rank = (j: DeptJob) => { const h = hoursAgo(j.receivedAt), t = STALL_HOURS[dept] ?? 48; return h >= t * 2 ? 0 : h >= t ? 1 : 2; };
+        const groups = new Map<string, DeptJob[]>();
+        for (const j of liveJobs) { const k = key(j); (groups.get(k) ?? groups.set(k, []).get(k)!).push(j); }
+        const needle = find.trim().toLowerCase();
+        const list = [...groups.entries()]
+          .filter(([, js]) => !needle || js.some(j => `${j.clientName} ${j.clientNumber} ${j.species} ${j.tagNumber}`.toLowerCase().includes(needle)))
+          .sort((a, b) => Math.min(...a[1].map(rank)) - Math.min(...b[1].map(rank)) || (a[1][0].clientName ?? '').localeCompare(b[1][0].clientName ?? ''));
+        const open = openClient ? groups.get(openClient) : undefined;
+
+        if (open) {
+          return (
+            <div className="space-y-4">
+              <button onClick={() => setOpenClient(null)} className="inline-flex items-center gap-1.5 text-base font-semibold text-[#0073ea] min-h-11"><ChevronRight className="w-4 h-4 rotate-180" />All clients</button>
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1c2b3a] p-4">
+                {open[0].clientNumber && <span className="font-mono text-xs font-bold text-white bg-slate-700 px-2 py-0.5 rounded">{open[0].clientNumber}</span>}
+                <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 leading-tight mt-1.5">{open[0].clientName}</h2>
+                <p className="text-sm text-slate-500 mt-0.5">{open.length === 1 ? '1 trophy' : `${open.length} trophies`} at {deptLabel} · {[...new Set(open.map(j => j.species))].join(', ')}</p>
+              </div>
+              {[...open].sort((a, b) => rank(a) - rank(b) || a.species.localeCompare(b.species)).map(renderJob)}
             </div>
-          )}
-          {/* Overdue (yellow) */}
-          {yellowJobs.length > 0 && (
-            <div>
-              <p className="text-xs font-bold text-amber-600 uppercase tracking-wide mb-2 flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5" /> Overdue — running behind schedule
-              </p>
-              {yellowJobs.map(renderJob)}
-            </div>
-          )}
-          {/* On track (green) */}
-          {greenJobs.length > 0 && (
-            <div>
-              {(redJobs.length + yellowJobs.length) > 0 && (
-                <p className="text-xs font-bold text-green-600 uppercase tracking-wide mb-2 flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> On track
-                </p>
-              )}
-              {greenJobs.map(renderJob)}
-            </div>
-          )}
-        </div>
-      )}
+          );
+        }
+
+        return (
+          <div className="space-y-3">
+            {groups.size > 5 && (
+              <input value={find} onChange={e => setFind(e.target.value)} placeholder="Find a client, an animal or a tag number" className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-3 min-h-11 text-base" />
+            )}
+            {list.length === 0 && <p className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 p-8 text-center text-slate-500">No clients match.</p>}
+            {list.map(([k, js]) => {
+              const worst = Math.min(...js.map(rank));
+              const urgent = js.filter(j => rank(j) === 0).length, late = js.filter(j => rank(j) === 1).length;
+              return (
+                <button key={k} onClick={() => setOpenClient(k)}
+                  className={`w-full text-left bg-white dark:bg-[#1c2b3a] rounded-2xl border-2 px-4 py-3.5 flex items-center gap-3 min-h-16 hover:bg-slate-50 dark:hover:bg-slate-800/40 ${worst === 0 ? 'border-red-400' : worst === 1 ? 'border-amber-300' : 'border-slate-200 dark:border-slate-700'}`}>
+                  <span className="flex-1 min-w-0 space-y-1">
+                    <span className="flex items-center gap-2 flex-wrap">
+                      {js[0].clientNumber && <span className="font-mono text-[11px] font-bold text-white bg-slate-700 px-1.5 py-0.5 rounded shrink-0">{js[0].clientNumber}</span>}
+                      {urgent > 0 && <span className="text-[11px] font-bold rounded-full px-2 py-0.5 bg-red-600 text-white">{urgent} urgent</span>}
+                      {late > 0 && <span className="text-[11px] font-bold rounded-full px-2 py-0.5 bg-amber-500 text-black">{late} overdue</span>}
+                    </span>
+                    <span className="block font-bold text-slate-900 dark:text-slate-100 text-lg leading-snug">{js[0].clientName}</span>
+                    <span className="block text-sm text-slate-500">{js.length === 1 ? '1 trophy' : `${js.length} trophies`} · {[...new Set(js.map(j => j.species))].join(', ')}</span>
+                  </span>
+                  <ChevronRight className="w-5 h-5 text-slate-400 shrink-0" />
+                </button>
+              );
+            })}
+          </div>
+        );
+      })()}
     </div>
   );
 }
