@@ -6,6 +6,7 @@ import {
   Zap, Package, DollarSign, RefreshCw,
 } from 'lucide-react';
 import { useDashboard } from '../../../../lib/hooks/useDashboard';
+import { useBack } from '../../../../lib/back';
 
 interface Notice {
   id: string;
@@ -41,6 +42,7 @@ interface NoticeBoardProps {
 
 export function NoticeBoard({ onNavigate }: NoticeBoardProps) {
   const [open, setOpen] = useState(false);
+  useBack(open, () => setOpen(false));
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const { summary, alerts, loading, refresh } = useDashboard();
 

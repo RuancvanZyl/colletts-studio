@@ -18,6 +18,7 @@ import {
   RefreshCw, Loader2, Sparkles, ChevronDown, ChevronUp,
   Camera, CheckCircle2, X, ArrowLeft, Search,
 } from 'lucide-react';
+import { useBack } from '../../../../lib/back';
 
 interface StageHistory {
   dept: string;
@@ -53,6 +54,7 @@ export function WorkshopInstructions() {
   const loadedOnce = useRef(false);
   const [expanded, setExpanded]   = useState<string | null>(null);
   const [openClient, setOpenClient] = useState<string | null>(null);
+  useBack(!!openClient, () => setOpenClient(null));
   const [deptFilter, setDeptFilter] = useState<string>('all');
   const [find, setFind] = useState('');
   const [problems, setProblems] = useState<Record<string, OpenCase>>({});

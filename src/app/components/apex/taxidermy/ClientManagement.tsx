@@ -28,6 +28,7 @@ import { ClientRegistrationForm } from '../shared/ClientRegistrationForm';
 import type { Database } from '../../../../lib/database.types';
 import { plainError } from '../../../../lib/plainError';
 import { MessageOutfitterButton } from '../shared/MessageOutfitterButton';
+import { useBack } from '../../../../lib/back';
 
 type Client = Database['public']['Tables']['clients']['Row'];
 type ClientType = 'all' | 'local' | 'export';
@@ -92,6 +93,7 @@ function PhotoSection({ clientId, photoType, label, photos, onUploaded, onDelete
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
+  useBack(!!lightbox, () => setLightbox(null));
   const mine = photos.filter(p => p.photo_type === photoType);
 
   async function handleFiles(files: FileList | null) {
@@ -169,7 +171,7 @@ function PhotoSection({ clientId, photoType, label, photos, onUploaded, onDelete
       )}
       {lightbox && (
         <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
-          <button className="absolute top-4 right-4 text-white/70 hover:text-white"><X className="w-6 h-6" /></button>
+          <button aria-label="Close the photo" className="absolute top-4 right-4 min-h-11 min-w-11 flex items-center justify-center text-white/80 hover:text-white"><X className="w-6 h-6" /></button>
           <img src={lightbox} alt="" className="max-w-full max-h-full rounded-lg object-contain" />
         </div>
       )}
@@ -495,6 +497,7 @@ export function ClientManagement({ initialClientId, onOpenQuote }: { initialClie
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<ClientType>('all');
   const [selected, setSelected] = useState<Client | null>(null);
+  useBack(!!selected, () => setSelected(null));
   const [editOpen, setEditOpen] = useState(false);
   const [regOpen, setRegOpen] = useState(false);   // full registration flow
   const [form, setForm] = useState(EMPTY_FORM);

@@ -6,6 +6,7 @@ import { supabase } from '../../../../lib/supabase';
 import { useQuotePipeline, money, STAGE_LABEL } from '../../../../lib/hooks/useQuotes';
 import { WORKSHOP, inviteUrl } from '../../../../lib/workshop';
 import { whatsappUrl } from '../../../../lib/invite';
+import { useBack } from '../../../../lib/back';
 
 interface Outfitter { id: string; name: string; contact_name: string | null; email: string | null; phone: string | null; country: string | null; farm_name: string | null; commission_pct: number | null; status: string; invite_token: string | null; invite_sent_at: string | null; auth_user_id: string | null }
 interface HuntRow { id: string; outfitter_id: string }
@@ -20,6 +21,7 @@ export function Outfitters({ onOpenQuote }: { onOpenQuote: (huntId: string) => v
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
   const [open, setOpen] = useState<string | 'new' | null>(null);
+  useBack(!!open, () => setOpen(null));
   const { rows } = useQuotePipeline();
 
   const load = async () => {

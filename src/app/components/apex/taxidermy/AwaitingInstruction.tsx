@@ -13,6 +13,7 @@ import {
   RefreshCw, Loader2, Mail, Clock, CheckCircle2, Send, Users, AlertTriangle, X, Eye,
 } from 'lucide-react';
 import { Button } from '../../ui/button';
+import { useBack } from '../../../../lib/back';
 
 function draftReminder(h: AwaitingInstructionHunt) {
   const firstName = h.clientName?.split(' ')[0] ?? 'there';
@@ -41,6 +42,8 @@ export function AwaitingInstruction({ onOpenClient }: { onOpenClient?: (clientId
   const [previewHunt, setPreviewHunt] = useState<AwaitingInstructionHunt | null>(null);
   const [previewBody, setPreviewBody] = useState('');
   const [bulkPreviewOpen, setBulkPreviewOpen] = useState(false);
+  useBack(!!previewHunt, () => setPreviewHunt(null));
+  useBack(bulkPreviewOpen, () => setBulkPreviewOpen(false));
 
   function openPreview(h: AwaitingInstructionHunt) {
     setPreviewHunt(h);

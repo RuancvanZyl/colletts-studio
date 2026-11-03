@@ -12,6 +12,7 @@ import { Plus, RefreshCw, User, Shield, Pencil, Power, Loader2, X, Check } from 
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
+import { useBack } from '../../../../lib/back';
 
 interface StaffMember {
   id: string;
@@ -60,6 +61,7 @@ export function StaffManagement() {
   const [depts, setDepts]       = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading]   = useState(true);
   const [showForm, setShowForm] = useState(false);
+  useBack(showForm, () => setShowForm(false));
   const [editId, setEditId]     = useState<string | null>(null);
   const [saving, setSaving]     = useState(false);
 

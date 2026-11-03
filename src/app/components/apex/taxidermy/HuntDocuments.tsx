@@ -14,6 +14,7 @@ import { OutfitterThread } from '../shared/OutfitterThread';
 import { HuntRegister } from './HuntRegister';
 import { readDocument, type AiRegister, type AiDocument } from '../../../../lib/aiReader';
 import { docsSummary, PROVINCES, RESPONSIBLE_LABEL, STATUS_LABEL, STATUS_TONE, uploadHuntFiles, openHuntFile, waiting } from '../../../../lib/docs';
+import { useBack } from '../../../../lib/back';
 
 interface BoardRow { hunt_id: string; ref_number: string | null; client_name: string; outfitter_name: string | null; required: number; approved: number; waiting_outfitter: number; waiting_hunter: number; waiting_other: number; to_check: number; rejected: number; oldest_wait: string | null; complete: boolean; province: string | null }
 interface Req { id: string; name: string; responsible: string; status: string; needs_signature: boolean; needs_stamp: boolean; file_paths: string[]; note: string | null; requested_at: string; received_at: string | null; received_by_name: string | null; rejection_reason: string | null; checked_signed: boolean; checked_stamped: boolean; reference_numbers: string[]; check_kind: string | null; must_show: string[]; shown_ok: string[]; ph_permit_seen: string | null; ho_permit_seen: string | null; ai_extracted: { flags?: string[] } | null; ai_read_at: string | null }
@@ -25,6 +26,7 @@ export function HuntDocuments({ initialHuntId }: { initialHuntId?: string }) {
   const [rows, setRows] = useState<BoardRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState<string | null>(initialHuntId ?? null);
+  useBack(!!open, () => setOpen(null));
   const [search, setSearch] = useState('');
 
   const loadedOnce = useRef(false);

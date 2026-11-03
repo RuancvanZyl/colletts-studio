@@ -16,6 +16,7 @@ import { useOutfitter } from '../../../lib/hooks/useOutfitter';
 import { useOutfitterAttention } from '../../../lib/hooks/useOutfitterAttention';
 import { useTheme } from './ThemeProvider';
 import { usePortalTheme } from './PortalThemeProvider';
+import { useViewLevels, BackButton } from '../../../lib/back';
 
 interface OutfitterPortalProps { onLogout: () => void }
 type OutfitterView = 'hunts' | 'documents' | 'messages' | 'register' | 'account';
@@ -26,6 +27,7 @@ export function OutfitterPortal({ onLogout }: OutfitterPortalProps) {
   const [thread, setThread] = useState<string | null>(null);
   const { theme, toggleTheme } = useTheme();
   const { theme: portalTheme } = usePortalTheme();
+  const go = useViewLevels(view, (v: OutfitterView) => { setThread(null); setView(v); });       // every screen change can be undone with Back
   const { data } = useOutfitter();
   const { attention } = useOutfitterAttention();
   const badge = (v: OutfitterView) => v === 'hunts' ? attention.hunts : v === 'documents' ? attention.documents : v === 'messages' ? attention.messages : 0;
@@ -39,9 +41,9 @@ export function OutfitterPortal({ onLogout }: OutfitterPortalProps) {
   ];
 
   const body = () => {
-    if (view === 'documents') return <OutfitterDocuments onAsk={(id) => { setThread(id); setView('messages'); }} />;
+    if (view === 'documents') return <OutfitterDocuments onAsk={(id) => { setThread(id); go('messages'); }} />;
     if (view === 'messages') return <OutfitterMessages key={thread ?? 'all'} initialHuntId={thread} />;
-    if (view === 'register') return <RegisterHunt onClose={() => setView('hunts')} onDone={() => setTick(t => t + 1)} />;
+    if (view === 'register') return <RegisterHunt onClose={() => go('hunts')} onDone={() => setTick(t => t + 1)} />;
     if (view === 'account') {
       return (
         <div className="max-w-xl mx-auto space-y-5">
@@ -56,7 +58,7 @@ export function OutfitterPortal({ onLogout }: OutfitterPortalProps) {
         </div>
       );
     }
-    return <OutfitterHunts key={tick} onRegister={() => setView('register')} />;
+    return <OutfitterHunts key={tick} onRegister={() => go('register')} />;
   };
 
   return (
@@ -64,6 +66,7 @@ export function OutfitterPortal({ onLogout }: OutfitterPortalProps) {
       <header className="bg-white/90 dark:bg-stone-900/90 backdrop-blur-lg border-b border-green-200 dark:border-green-900 sticky top-0 z-50">
         <div className="px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
+            <BackButton atHome={view === 'hunts'} home={() => go('hunts')} className="text-green-900 dark:text-green-200 border border-green-300 dark:border-green-800" />
             <div className={`w-10 h-10 bg-gradient-to-br ${portalTheme.gradient} rounded-lg flex items-center justify-center shadow-md`}><Compass className="w-5 h-5 text-amber-50" /></div>
             <div><h2 className="font-bold leading-tight text-slate-900 dark:text-slate-100">APEX TROPHY SOLUTIONS</h2><p className="text-xs text-slate-600 dark:text-slate-400">Outfitter portal{data ? ` · ${data.outfitter.name}` : ''}</p></div>
           </div>
@@ -76,7 +79,7 @@ export function OutfitterPortal({ onLogout }: OutfitterPortalProps) {
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-stone-900/90 backdrop-blur-lg border-t border-green-200 dark:border-green-900 z-50">
         <div className="grid grid-cols-5 gap-1 p-2">
           {items.map(i => (
-            <Button key={i.v} variant={view === i.v ? 'default' : 'ghost'} className="flex flex-col items-center gap-1 h-auto min-h-14 py-2" onClick={() => { setThread(null); setView(i.v); }}>
+            <Button key={i.v} variant={view === i.v ? 'default' : 'ghost'} className="flex flex-col items-center gap-1 h-auto min-h-14 py-2" onClick={() => { setThread(null); go(i.v); }}>
               <span className="relative"><i.icon className="w-5 h-5" />{badge(i.v) > 0 && <span className="absolute -top-2 -right-3 bg-red-600 text-white text-[10px] font-bold rounded-full min-w-4 h-4 px-1 flex items-center justify-center">{badge(i.v) > 9 ? '9+' : badge(i.v)}</span>}</span><span className="text-[11px]">{i.label}</span>
             </Button>
           ))}
@@ -84,7 +87,7 @@ export function OutfitterPortal({ onLogout }: OutfitterPortalProps) {
       </nav>
       <nav className="hidden md:block fixed left-0 top-16 bottom-0 w-64 bg-white/90 dark:bg-stone-900/90 backdrop-blur-lg border-r border-green-200 dark:border-green-900 p-4 space-y-2">
         {items.map(i => (
-          <Button key={i.v} variant={view === i.v ? 'default' : 'ghost'} className="w-full justify-start min-h-11" onClick={() => { setThread(null); setView(i.v); }}><i.icon className="w-5 h-5 mr-3" />{i.label}{badge(i.v) > 0 && <span className="ml-auto bg-red-600 text-white text-xs font-bold rounded-full min-w-5 h-5 px-1.5 flex items-center justify-center">{badge(i.v)}</span>}</Button>
+          <Button key={i.v} variant={view === i.v ? 'default' : 'ghost'} className="w-full justify-start min-h-11" onClick={() => { setThread(null); go(i.v); }}><i.icon className="w-5 h-5 mr-3" />{i.label}{badge(i.v) > 0 && <span className="ml-auto bg-red-600 text-white text-xs font-bold rounded-full min-w-5 h-5 px-1.5 flex items-center justify-center">{badge(i.v)}</span>}</Button>
         ))}
       </nav>
     </div>

@@ -4,10 +4,12 @@ import { ArrowLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { supabase } from '../../../../lib/supabase';
 import { useOutfitter } from '../../../../lib/hooks/useOutfitter';
 import { OutfitterThread } from '../shared/OutfitterThread';
+import { useBack } from '../../../../lib/back';
 
 export function OutfitterMessages({ initialHuntId }: { initialHuntId?: string | null }) {
   const { data, loading } = useOutfitter();
   const [open, setOpen] = useState<string | null>(initialHuntId ?? null);
+  useBack(!!open, () => setOpen(null));
   const [unread, setUnread] = useState<Record<string, number>>({});
 
   useEffect(() => {

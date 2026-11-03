@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
+import { useBack } from '../../../../lib/back';
 
 const LEVEL_STYLE = {
   overdue: { chip: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300',    dot: 'bg-red-500',    label: 'Needs contact' },
@@ -41,6 +42,7 @@ export function ClientCare({ onOpenClient }: { onOpenClient?: (clientId: string)
   const [filter, setFilter]   = useState<'all' | 'overdue' | 'due'>('all');
   const [search, setSearch]   = useState('');
   const [compose, setCompose] = useState<CareClient | null>(null);
+  useBack(!!compose, () => setCompose(null));
   const [body, setBody]       = useState('');
   const [sending, setSending] = useState(false);
 

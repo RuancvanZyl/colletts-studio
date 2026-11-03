@@ -17,6 +17,7 @@ import { AddAnimalsFlow } from './AddAnimalsFlow';
 import { QuoteCard } from './QuoteCard';
 import { HunterDocuments } from './HunterDocuments';
 import { useHunterQuotes } from '../../../../lib/hooks/useQuotes';
+import { useBack } from '../../../../lib/back';
 
 function statusOf(a: HunterAnimal): { text: string; tone: 'todo' | 'wait' | 'work' | 'done'; pct: number } {
   if (a.finished) return { text: 'Finished — ready for you', tone: 'done', pct: 100 };
@@ -33,6 +34,8 @@ export function HunterTrophies({ onRegisterHunt, onChanged, startAdding = false 
   const [choosing, setChoosing] = useState<string[] | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [adding, setAdding] = useState(startAdding);
+  useBack(!!choosing, () => setChoosing(null));
+  useBack(adding, () => setAdding(false));
 
   if (loading) return <div className="flex items-center justify-center py-20 text-slate-400"><Loader2 className="w-6 h-6 animate-spin" /></div>;
   if (!client) return null;

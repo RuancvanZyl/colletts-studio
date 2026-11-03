@@ -5,6 +5,7 @@ import { Button } from '../../ui/button';
 import { Badge } from '../../ui/badge';
 import { Send, Loader2, MessageCircle, Sparkles, ChevronDown, ChevronUp, Tag } from 'lucide-react';
 import { toast } from 'sonner';
+import { useBack } from '../../../../lib/back';
 
 interface Message {
   id: string;
@@ -47,6 +48,7 @@ export function TrophyMessages() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading]   = useState(true);
   const [selected, setSelected] = useState<Trophy | null>(null);
+  useBack(!!selected, () => setSelected(null));
   const [body, setBody]         = useState('');
   const [sending, setSending]   = useState(false);
   const [showStarters, setShowStarters] = useState(false);

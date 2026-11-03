@@ -5,10 +5,13 @@ import * as DialogPrimitive from "@radix-ui/react-dialog@1.1.6";
 import { XIcon } from "lucide-react@0.487.0";
 
 import { cn } from "./utils";
+import { useBack } from "../../../lib/back";
 
 function Dialog({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Root>) {
+  // the phone's back button and the on-screen Back close an open pop-up before anything else
+  useBack(!!props.open, () => props.onOpenChange?.(false));
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;
 }
 

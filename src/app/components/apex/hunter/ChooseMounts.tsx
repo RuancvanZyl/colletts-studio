@@ -13,6 +13,7 @@ import { sciName } from '../../../../lib/species';
 import { listParts } from '../../../../lib/received';
 import { savePhotos, shrinkPhoto } from '../../../../lib/offline/photos';
 import { SpeciesGuide } from './SpeciesGuide';
+import { useBack } from '../../../../lib/back';
 
 export interface MountAnimal { docId: string; huntId?: string; species: string; parts: { code: string; label: string }[]; other: string; mount: string; instructions: string; expected?: boolean }
 export interface MountPick {
@@ -36,6 +37,8 @@ export function ChooseMounts({ animals, clientType, clientId, combinable = [], o
   const [i, setI] = useState(0);
   const [picks, setPicks] = useState<Record<string, MountPick>>(() => Object.fromEntries(animals.map(a => [a.docId, blank(a)])));
   const [review, setReview] = useState(false);
+  useBack(review, () => setReview(false));
+  useBack(!review && i > 0, () => setI(n => Math.max(0, n - 1)));
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);

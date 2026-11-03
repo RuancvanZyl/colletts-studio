@@ -21,6 +21,7 @@ import { SpeciesField } from '../shared/AnimalPicker';
 import { TrophyLabels } from './TrophyLabels';
 import type { TrophyPart } from '../../../../lib/trophyParts';
 import { CONDITION_ISSUES, SALT_QUALITY, SKULL_CONDITION, VISUAL_CHECKS, conditionOk, conditionSummary } from '../../../../lib/condition';
+import { useBack } from '../../../../lib/back';
 
 interface FoundClient { id: string; full_name: string; email: string | null; phone: string | null; client_number: string | null; client_type: string | null; auth_user_id: string | null }
 interface Animal { id: string; docId?: string; mount?: string; species: string; tag: string; condition: string; salt: string; skull: string; issues: string[]; parts: string[]; other: string; notes: string; photos: File[]; previews: string[] }
@@ -35,6 +36,7 @@ const bigBtn = 'inline-flex items-center justify-center gap-2 rounded-xl font-bo
 export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
   const { profile } = useAuth();
   const [step, setStep] = useState<1 | 2 | 3>(1);
+  useBack(step > 1, () => setStep(s => (s - 1) as 1 | 2 | 3));
   const [saving, setSaving] = useState(false);
 
   // 1 — hunter

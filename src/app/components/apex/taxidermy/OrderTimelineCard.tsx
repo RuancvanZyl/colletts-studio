@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { ORDER_SIZE_LABELS, milestoneStatus, type OrderSize } from '../../../../lib/orderTimeline';
 import { Button } from '../../ui/button';
 import { Clock, CheckCircle2, AlertTriangle, Calendar, Pencil, PlayCircle, Loader2, X } from 'lucide-react';
+import { useBack } from '../../../../lib/back';
 
 interface MilestoneRow { key: string; label: string; due_date: string; completed: boolean }
 
@@ -40,6 +41,7 @@ export function OrderTimelineCard({ hunt, onRefresh }: { hunt: HuntTimelineField
   const [starting, setStarting] = useState(false);
   const [startDate, setStartDate] = useState(todayISO());
   const [amendOpen, setAmendOpen] = useState(false);
+  useBack(amendOpen, () => setAmendOpen(false));
   const [newDate, setNewDate] = useState(hunt.deadline_current ?? '');
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);

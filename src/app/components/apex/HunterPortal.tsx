@@ -1,22 +1,13 @@
 import { useState } from 'react';
-import { HunterHome } from './hunter/HunterHome';
-import { MyTrophies } from './hunter/MyTrophies';
-import { TrophyDetail } from './hunter/TrophyDetail';
 import { Notifications } from './hunter/Notifications';
 import { HunterProfile } from './hunter/HunterProfile';
-import { TrophySelection } from './hunter/TrophySelection';
-import { HunterRegistration } from './hunter/HunterRegistration';
-import { VerificationPending } from './hunter/VerificationPending';
 import { HunterTrophies } from './hunter/HunterTrophies';
 import { HunterCollection } from './hunter/HunterCollection';
-import { TrophyTrackingDashboard } from './hunter/TrophyTrackingDashboard';
 import { TrophyMessages } from './hunter/TrophyMessages';
-import { SpecialRequests } from './hunter/SpecialRequests';
 import { HunterHuntCreationWizard } from './hunter/HunterHuntCreationWizard';
 import { Button } from '../ui/button';
 import { Home, Award, Bell, User, Moon, Sun, Trophy as TrophyIcon, Plus, MessageCircle } from 'lucide-react';
 import { Badge } from '../ui/badge';
-import { Trophy, TrophySelection as TrophySelectionType } from './types';
 import { useClientNotifications } from '../../../lib/hooks/useClientNotifications';
 import { useTheme } from './ThemeProvider';
 import { usePortalTheme } from './PortalThemeProvider';
@@ -27,6 +18,7 @@ import { useAuth } from '../../../lib/auth';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { InstallBanner } from './shared/InstallApp';
 import { UpdateBanner } from './shared/AppVersion';
+import { useBack, useViewLevels, BackButton } from '../../../lib/back';
 
 const PHASE_PROGRESS: Record<string, number> = {
   intake: 10, skin_processing: 20, skull_processing: 30,
@@ -49,7 +41,7 @@ type HunterFlow =
   | 'create-hunt'
   | 'main';
 
-type HunterView = 'home' | 'collection' | 'add-animals' | 'trophies' | 'trophy-detail' | 'notifications' | 'profile' | 'trophy-selection' | 'messages' | 'special-requests';
+type HunterView = 'home' | 'collection' | 'add-animals' | 'trophies' | 'notifications' | 'profile' | 'messages';
 
 export function HunterPortal({ onLogout }: HunterPortalProps) {
   const { user } = useAuth();
@@ -58,25 +50,12 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
 
   const [flow, setFlow] = useState<HunterFlow>('main');
   const [currentView, setCurrentView] = useState<HunterView>('home');
-  const [selectedTrophy, setSelectedTrophy] = useState<Trophy | null>(null);
-  const { theme, toggleTheme } = useTheme();
+    const { theme, toggleTheme } = useTheme();
   const { theme: portalTheme } = usePortalTheme();
+  const go = useViewLevels(currentView, setCurrentView);       // every screen change can be undone with Back
+  useBack(flow === 'create-hunt', () => setFlow('main'));
 
   const { notifications, unreadCount, markRead, markAllRead } = useClientNotifications(client?.id);
-
-  const handleViewTrophy = (trophy: Trophy) => {
-    setSelectedTrophy(trophy);
-    setCurrentView('trophy-detail');
-  };
-
-  const handleBackToList = () => {
-    setSelectedTrophy(null);
-    setCurrentView('trophies');
-  };
-
-  const handleTrophySelectionComplete = (_selections: TrophySelectionType[]) => {
-    setCurrentView('home');
-  };
 
   // Loading state
   if (clientLoading || huntsLoading) {
@@ -130,10 +109,6 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
       case 'home':
       case 'trophies':
         return <HunterTrophies onRegisterHunt={() => setFlow('create-hunt')} onChanged={refreshHunts} />;
-      case 'trophy-detail':
-        return selectedTrophy ? (
-          <TrophyDetail trophy={selectedTrophy} onBack={handleBackToList} />
-        ) : null;
       case 'notifications':
         return (
           <Notifications
@@ -145,22 +120,13 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
           />
         );
       case 'collection':
-        return <HunterCollection onAddAnimals={() => setCurrentView('add-animals')} />;
+        return <HunterCollection onAddAnimals={() => go('add-animals')} />;
       case 'add-animals':
         return <HunterTrophies startAdding onChanged={refreshHunts} />;
       case 'messages':
         return <TrophyMessages />;
-      case 'special-requests':
-        return <SpecialRequests />;
       case 'profile':
         return <HunterProfile onLogout={onLogout} />;
-      case 'trophy-selection':
-        return (
-          <TrophySelection
-            onBack={() => setCurrentView('home')}
-            onComplete={handleTrophySelectionComplete}
-          />
-        );
       default:
         return <HunterTrophies onRegisterHunt={() => setFlow('create-hunt')} onChanged={refreshHunts} />;
     }
@@ -173,6 +139,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
+              <BackButton atHome={currentView === 'home' || currentView === 'trophies'} home={() => go('home')} className="text-green-900 dark:text-green-200 border border-green-300 dark:border-green-800" />
               <div className={`w-10 h-10 bg-gradient-to-br ${portalTheme.gradient} rounded-lg flex items-center justify-center shadow-md`}>
                 <TrophyIcon className="w-5 h-5 text-amber-50" />
               </div>
@@ -200,7 +167,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
               <Button 
                 variant="ghost" 
                 size="icon"
-                onClick={() => setCurrentView('profile')}
+                onClick={() => go('profile')}
                 className="rounded-full"
               >
                 <User className="w-5 h-5" />
@@ -224,7 +191,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
           <Button
             variant={currentView === 'home' || currentView === 'trophies' ? 'default' : 'ghost'}
             className="flex flex-col items-center gap-1 h-auto min-h-14 py-2"
-            onClick={() => setCurrentView('home')}
+            onClick={() => go('home')}
           >
             <Award className="w-5 h-5" />
             <span className="text-[11px] leading-tight">Trophies</span>
@@ -232,7 +199,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
           <Button
             variant={currentView === 'collection' ? 'default' : 'ghost'}
             className="flex flex-col items-center gap-1 h-auto min-h-14 py-2"
-            onClick={() => setCurrentView('collection')}
+            onClick={() => go('collection')}
           >
             <TrophyIcon className="w-5 h-5" />
             <span className="text-[11px] leading-tight">Collection</span>
@@ -240,7 +207,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
           <Button
             variant={currentView === 'notifications' ? 'default' : 'ghost'}
             className="flex flex-col items-center gap-1 h-auto min-h-14 py-2 relative"
-            onClick={() => setCurrentView('notifications')}
+            onClick={() => go('notifications')}
           >
             <Bell className="w-5 h-5" />
             {unreadCount > 0 && (
@@ -253,7 +220,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
           <Button
             variant={currentView === 'messages' ? 'default' : 'ghost'}
             className="flex flex-col items-center gap-1 h-auto min-h-14 py-2"
-            onClick={() => setCurrentView('messages')}
+            onClick={() => go('messages')}
           >
             <MessageCircle className="w-5 h-5" />
             <span className="text-[11px] leading-tight">Ask us</span>
@@ -261,7 +228,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
           <Button
             variant={currentView === 'profile' ? 'default' : 'ghost'}
             className="flex flex-col items-center gap-1 h-auto min-h-14 py-2"
-            onClick={() => setCurrentView('profile')}
+            onClick={() => go('profile')}
           >
             <User className="w-5 h-5" />
             <span className="text-[11px] leading-tight">Profile</span>
@@ -272,22 +239,22 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
       {/* Desktop Navigation */}
       <nav className="hidden md:block fixed left-0 top-16 bottom-0 w-64 bg-white/90 dark:bg-stone-900/90 backdrop-blur-lg border-r border-green-200 dark:border-green-900 p-4">
         <div className="space-y-2">
-          <Button variant={currentView === 'home' || currentView === 'trophies' ? 'default' : 'ghost'} className="w-full justify-start min-h-11" onClick={() => setCurrentView('home')}>
+          <Button variant={currentView === 'home' || currentView === 'trophies' ? 'default' : 'ghost'} className="w-full justify-start min-h-11" onClick={() => go('home')}>
             <Award className="w-5 h-5 mr-3" />My Trophies
           </Button>
-          <Button variant={currentView === 'collection' ? 'default' : 'ghost'} className="w-full justify-start min-h-11" onClick={() => setCurrentView('collection')}>
+          <Button variant={currentView === 'collection' ? 'default' : 'ghost'} className="w-full justify-start min-h-11" onClick={() => go('collection')}>
             <TrophyIcon className="w-5 h-5 mr-3" />My collection
           </Button>
-          <Button variant={currentView === 'notifications' ? 'default' : 'ghost'} className="w-full justify-start relative min-h-11" onClick={() => setCurrentView('notifications')}>
+          <Button variant={currentView === 'notifications' ? 'default' : 'ghost'} className="w-full justify-start relative min-h-11" onClick={() => go('notifications')}>
             <Bell className="w-5 h-5 mr-3" />Updates
             {unreadCount > 0 && (
               <span className="ml-auto bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center">{unreadCount}</span>
             )}
           </Button>
-          <Button variant={currentView === 'messages' ? 'default' : 'ghost'} className="w-full justify-start min-h-11" onClick={() => setCurrentView('messages')}>
+          <Button variant={currentView === 'messages' ? 'default' : 'ghost'} className="w-full justify-start min-h-11" onClick={() => go('messages')}>
             <MessageCircle className="w-5 h-5 mr-3" />Ask the workshop
           </Button>
-          <Button variant={currentView === 'profile' ? 'default' : 'ghost'} className="w-full justify-start min-h-11" onClick={() => setCurrentView('profile')}>
+          <Button variant={currentView === 'profile' ? 'default' : 'ghost'} className="w-full justify-start min-h-11" onClick={() => go('profile')}>
             <User className="w-5 h-5 mr-3" />My profile
           </Button>
         </div>

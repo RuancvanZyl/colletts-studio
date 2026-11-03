@@ -5,6 +5,7 @@ import { supabase } from '../../../../lib/supabase';
 import { useAuth } from '../../../../lib/auth';
 import { OutfitterThread } from '../shared/OutfitterThread';
 import { TOPIC_LABEL } from '../../../../lib/threadTopics';
+import { useBack } from '../../../../lib/back';
 
 interface M { hunt_id: string; topic?: string; sender: string; body: string; read_at: string | null; created_at: string; client_hunts: { ref_number: string | null; clients: { full_name: string } | null } | null; outfitters: { name: string } | null }
 
@@ -13,6 +14,7 @@ export function OutfitterInbox({ onOpenDocs, initialHuntId }: { onOpenDocs: (hun
   const canWrite = ['admin', 'studio_manager', 'bookkeeper'].includes(profile?.role ?? '') || (profile as any)?.manages_departments?.length > 0;
   const [msgs, setMsgs] = useState<M[] | null>(null);
   const [open, setOpen] = useState<string | null>(initialHuntId ?? null);
+  useBack(!!open, () => setOpen(null));
   const [starting, setStarting] = useState(false);
   const [options, setOptions] = useState<{ id: string; label: string }[]>([]);
 

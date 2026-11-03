@@ -11,6 +11,7 @@ import { useDeptJobs } from '../../../../lib/hooks/useDeptJobs';
 import { DEPT_COLORS } from '../../../../lib/pipeline';
 import { toast } from 'sonner';
 import type { DeptJob } from '../../../../lib/hooks/useDeptJobs';
+import { useBack } from '../../../../lib/back';
 
 const QC_CHECKS = [
   { key: 'symmetry', label: 'Facial symmetry and proportion' },
@@ -24,6 +25,7 @@ const QC_CHECKS = [
 export function QualityInspection() {
   const { jobs, loading, completing, load, advance } = useDeptJobs('quality_check');
   const [selected, setSelected] = useState<DeptJob | null>(null);
+  useBack(!!selected, () => setSelected(null));
   const [checks, setChecks] = useState<Record<string, boolean>>({});
   const [failNotes, setFailNotes] = useState('');
   const [saving, setSaving] = useState(false);

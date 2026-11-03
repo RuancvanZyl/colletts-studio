@@ -11,6 +11,7 @@ import { Package, Truck, Camera, RefreshCw, AlertTriangle, Loader2, CheckCircle2
 import { useDeptJobs } from '../../../../lib/hooks/useDeptJobs';
 import { toast } from 'sonner';
 import type { DeptJob } from '../../../../lib/hooks/useDeptJobs';
+import { useBack } from '../../../../lib/back';
 
 const COURIERS = ['DHL', 'FedEx', 'Aramex', 'CourierIT', 'The Courier Guy', 'Airlink Cargo', 'Self-collect', 'Other'];
 
@@ -19,6 +20,7 @@ export function PackingShipping() {
   const { jobs: adminJobs, loading: loadingAdmin, load: loadAdmin, completing: completingAdmin, advance: advanceAdmin } = useDeptJobs('administration');
 
   const [shipTarget, setShipTarget] = useState<DeptJob | null>(null);
+  useBack(!!shipTarget, () => setShipTarget(null));
   const [courier, setCourier] = useState('');
   const [tracking, setTracking] = useState('');
 

@@ -11,6 +11,7 @@ import { savePhotos, shrinkPhoto } from '../../../../lib/offline/photos';
 import { mountHasHead } from '../../../../lib/pricing';
 import { useHunterAnimals } from '../../../../lib/hooks/useHunterAnimals';
 import { collectionOf, newBadges, rankOf } from '../../../../lib/collection';
+import { useBack } from '../../../../lib/back';
 
 const field = 'w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-3 min-h-12 text-base';
 const btn = 'inline-flex items-center justify-center gap-2 rounded-xl font-bold min-h-12 px-5 text-base disabled:opacity-50';
@@ -18,6 +19,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 export function AddAnimalsFlow({ clientId, clientType, onClose, onSaved }: { clientId: string; clientType: string; onClose: () => void; onSaved: () => void }) {
   const [step, setStep] = useState<'hunt' | 'pick' | 'mounts'>('hunt');
+  useBack(step !== 'hunt', () => setStep(s => (s === 'mounts' ? 'pick' : 'hunt')));
   const [endDate, setEndDate] = useState(today());
   const [startDate, setStartDate] = useState('');
   const [operator, setOperator] = useState('');

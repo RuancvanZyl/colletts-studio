@@ -12,6 +12,7 @@ import { useAuth } from '../../../../lib/auth';
 import { pendingActions } from '../../../../lib/offline/outbox';
 import { savePhotos, shrinkPhoto, type PhotoKind } from '../../../../lib/offline/photos';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
+import { useBack } from '../../../../lib/back';
 
 export const KIND_META: Record<PhotoKind, { label: string; hint: string }> = {
   arrival:  { label: 'Arrival',  hint: 'How it looked when it came in' },
@@ -122,6 +123,7 @@ export function PhotoGallery({ docId, huntId, clientId, canManage = false, refre
   const [loading, setLoading] = useState(true);
   const [waiting, setWaiting] = useState(0);
   const [big, setBig] = useState<string | null>(null);
+  useBack(!!big, () => setBig(null));
 
   const load = useCallback(async () => {
     let q = (supabase as any).from('trophy_photos')

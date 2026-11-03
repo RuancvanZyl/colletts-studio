@@ -17,6 +17,7 @@ import { SoakReportButton } from '../taxidermy/SoakReportButton';
 import type { DeptJob } from '../../../../lib/hooks/useDeptJobs';
 import { completeStage as completeStageAction } from '../../../../lib/offline/completeStage';
 import { PRIORITY_META, dueState, taskStatus, useChecklists, markJobOpened, markJobStarted } from '../../../../lib/hooks/useTaskFlow';
+import { useBack } from '../../../../lib/back';
 
 type StepColor = 'blue' | 'amber' | 'slate' | 'green' | 'orange' | 'rose' | 'pink' | 'purple' | 'teal';
 type EmptyIcon = 'droplet' | 'skull' | 'warehouse' | 'scissors' | 'paintbrush';
@@ -185,6 +186,7 @@ export function DeptJobList({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [openClient, setOpenClient] = useState<string | null>(null);
+  useBack(!!openClient, () => setOpenClient(null));
   const [find, setFind] = useState('');
   const { profile } = useAuth();
   const checklist = useChecklists([dept], jobs.map(j => j.docId));

@@ -1,6 +1,7 @@
 import { QRCodeSVG } from 'qrcode.react';
 import { Printer, X } from 'lucide-react';
 import { makePartTag, type TrophyPart } from '../../../../lib/trophyParts';
+import { useBack } from '../../../../lib/back';
 
 interface LabelTrophy {
   trophyIndex: number;
@@ -19,6 +20,7 @@ interface TrophyLabelsProps {
 }
 
 export function TrophyLabels({ clientNumber, clientName, huntYear, trophies, onClose }: TrophyLabelsProps) {
+  useBack(true, onClose);
   const allLabels: { tag: string; species: string; mountType: string; partLabel: string; trophyIndex: number }[] = [];
 
   for (const t of trophies) {

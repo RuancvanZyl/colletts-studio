@@ -8,9 +8,11 @@ import { toast } from 'sonner';
 import { supabase } from '../../../../lib/supabase';
 import { money, type Quote } from '../../../../lib/hooks/useQuotes';
 import { PAYMENT_DETAILS } from '../../../../lib/workshop';
+import { useBack } from '../../../../lib/back';
 
 export function QuoteCard({ quote, ref_, onChanged }: { quote: Quote; ref_?: string; onChanged: () => void }) {
   const [open, setOpen] = useState(false);
+  useBack(open, () => setOpen(false));
   const total = quote.lines.reduce((s, l) => s + (l.amount ?? 0), 0);
   const paid = quote.payments.reduce((s, p) => s + p.amount, 0);
   const s = quote.status;

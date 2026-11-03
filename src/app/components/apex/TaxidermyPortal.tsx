@@ -72,6 +72,7 @@ import {
   Users, FileText, ChevronRight, ChevronLeft, BarChart3, ClipboardList, ListTodo, FolderOpen, CreditCard, Calendar, MessageCircle, AlertTriangle, Clock,
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
+import { useBack, pushBackLevel, BackButton } from '../../../lib/back';
 
 type TaxidermyView =
   | 'summary'
@@ -275,7 +276,17 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     })();
   }, [profile?.id, profile?.role]);
 
+  // The screen people land on, and where Back ends
+  const homeView: TaxidermyView = ['admin', 'studio_manager'].includes(profile?.role ?? '') ? 'whiteboard' : profile?.role === 'bookkeeper' ? 'payment-confirmation' : 'tasks';
+  useBack(sidebarOpen, () => setSidebarOpen(false));
+  useBack(searchOpen, () => setSearchOpen(false));
+
   const navigate = (view: string, clientId?: string) => {
+    // every move to another screen can be undone with Back, all the way to the home screen
+    if (view !== currentView || clientId !== navClientId) {
+      const before = { view: currentView, id: navClientId };
+      pushBackLevel(() => { setCurrentView(before.view); setNavClientId(before.id); window.scrollTo({ top: 0 }); });
+    }
     setCurrentView(view as TaxidermyView);
     setNavClientId(clientId);
     setSidebarOpen(false);
@@ -560,6 +571,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
 
         {/* Top bar */}
         <header className="h-14 bg-[#0F1A1C] border-b border-[rgba(58,174,204,0.12)] flex items-center px-4 gap-3 sticky top-0 z-30 flex-shrink-0">
+          <BackButton atHome={currentView === homeView} home={() => navigate(homeView)} className="text-[#7AADB8] hover:text-white border border-[rgba(58,174,204,0.3)]" />
           {/* Hamburger */}
           <button
             className="lg:hidden text-[#7AADB8] hover:text-white"

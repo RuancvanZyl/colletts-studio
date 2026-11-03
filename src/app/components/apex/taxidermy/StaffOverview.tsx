@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { DEPT_LABELS } from '../../../../lib/pipeline';
 import { RefreshCw, Loader2, ChevronDown, ChevronUp, User, Trophy, Plus, X } from 'lucide-react';
 import { Button } from '../../ui/button';
+import { useBack } from '../../../../lib/back';
 
 interface AssignedJob {
   id: string;
@@ -58,6 +59,8 @@ export function StaffOverview() {
   const [assignModal, setAssignModal]     = useState<{ jobId: string | string[]; jobTitle: string } | null>(null);
   const [expandedClient, setExpandedClient] = useState<string | null>(null);
   const [noteModal, setNoteModal]         = useState<{ jobId: string; currentNote: string } | null>(null);
+  useBack(!!assignModal, () => setAssignModal(null));
+  useBack(!!noteModal, () => setNoteModal(null));
   const [noteText, setNoteText]           = useState('');
   const [saving, setSaving]               = useState(false);
 

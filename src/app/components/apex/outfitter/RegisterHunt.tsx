@@ -9,6 +9,7 @@ import { supabase } from '../../../../lib/supabase';
 import { AnimalPicker, pickedName, type PickedAnimal } from '../shared/AnimalPicker';
 import { speciesEmoji } from '../../../../lib/pricing';
 import { PROVINCES } from '../../../../lib/docs';
+import { useBack } from '../../../../lib/back';
 
 const field = 'w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-3 min-h-12 text-base';
 const lab = 'block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1';
@@ -17,6 +18,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 export function RegisterHunt({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  useBack(step > 1, () => setStep(s => (s - 1) as 1 | 2 | 3 | 4));
   const [hunter, setHunter] = useState({ name: '', email: '', phone: '', country: '', client_type: 'export' });
   const [end, setEnd] = useState(today()); const [start, setStart] = useState(''); const [farm, setFarm] = useState(''); const [province, setProvince] = useState('');
   const [items, setItems] = useState<PickedAnimal[]>([]);

@@ -15,6 +15,7 @@ import { OrderChangeDialog } from './OrderChangeDialog';
 import { printCreditNote } from '../../../../lib/print';
 import { useQuotePipeline, loadQuotes, money, STAGE_LABEL, type Quote, type QuoteLine, type PipelineRow } from '../../../../lib/hooks/useQuotes';
 import { MessageOutfitterButton } from '../shared/MessageOutfitterButton';
+import { useBack } from '../../../../lib/back';
 
 const field = 'w-full rounded-lg border border-slate-600 bg-[#0f1a24] text-slate-100 px-3 min-h-11 text-base placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0073ea]';
 const lab = 'block text-sm font-semibold text-slate-300 mb-1';
@@ -26,6 +27,7 @@ const STAGE_COLOUR: Record<string, string> = {
 export function Quotes({ onChanged, initialHuntId }: { onChanged?: () => void; initialHuntId?: string }) {
   const { rows, loading, refresh } = useQuotePipeline();
   const [open, setOpen] = useState<string | null>(initialHuntId ?? null);
+  useBack(!!open, () => setOpen(null));
 
   if (open) return <QuoteEditor huntId={open} onBack={() => { setOpen(null); refresh(); onChanged?.(); }} />;
 

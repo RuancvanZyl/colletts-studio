@@ -14,6 +14,7 @@ import {
   Package, Clock, ChevronRight, XCircle, Loader2, RefreshCw,
   X, Upload,
 } from 'lucide-react';
+import { useBack } from '../../../../lib/back';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -52,6 +53,7 @@ export function ReceivingSheet({ onNavigate }: { onNavigate: (v: string) => void
   const [hunts, setHunts]         = useState<PendingHunt[]>([]);
   const [loading, setLoading]     = useState(true);
   const [activeId, setActiveId]   = useState<string | null>(null);
+  useBack(!!activeId, () => setActiveId(null));
   const [tab, setTab]             = useState<'pending' | 'received'>('pending');
   const [received, setReceived]   = useState<PendingHunt[]>([]);
   const [search, setSearch]       = useState('');

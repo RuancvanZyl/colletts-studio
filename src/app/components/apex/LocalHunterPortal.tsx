@@ -4,7 +4,6 @@ import { UpdateBanner } from './shared/AppVersion';
 import { LocalTrophyTracking } from './hunter/LocalTrophyTracking';
 import { Notifications } from './hunter/Notifications';
 import { HunterProfile } from './hunter/HunterProfile';
-import { SpecialRequests } from './hunter/SpecialRequests';
 import { TrophyMessages } from './hunter/TrophyMessages';
 import { HunterTrophies } from './hunter/HunterTrophies';
 import { HunterCollection } from './hunter/HunterCollection';
@@ -13,27 +12,28 @@ import { Home, Bell, User, MessageCircle, Trophy, Moon, Sun, Package } from 'luc
 import { useClientNotifications } from '../../../lib/hooks/useClientNotifications';
 import { useTheme } from './ThemeProvider';
 import { useHunterClient } from '../../../lib/hooks/useHunterClient';
+import { useViewLevels, BackButton } from '../../../lib/back';
 
 interface LocalHunterPortalProps {
   onLogout: () => void;
 }
 
-type LocalView = 'home' | 'collection' | 'add-animals' | 'notifications' | 'profile' | 'messages' | 'special-requests';
+type LocalView = 'home' | 'collection' | 'add-animals' | 'notifications' | 'profile' | 'messages';
 
 export function LocalHunterPortal({ onLogout }: LocalHunterPortalProps) {
   const { client, displayName } = useHunterClient();
   const [currentView, setCurrentView] = useState<LocalView>('home');
   const { theme, toggleTheme } = useTheme();
+  const go = useViewLevels(currentView, setCurrentView);       // every screen change can be undone with Back
   const { notifications, unreadCount, markRead, markAllRead } = useClientNotifications(client?.id);
 
   const renderView = () => {
     switch (currentView) {
       case 'home':             return <HunterTrophies />;
-      case 'collection':       return <HunterCollection onAddAnimals={() => setCurrentView('add-animals')} />;
+      case 'collection':       return <HunterCollection onAddAnimals={() => go('add-animals')} />;
       case 'add-animals':      return <HunterTrophies startAdding />;
       case 'notifications':    return <Notifications notifications={notifications} loading={false} unreadCount={unreadCount} onMarkRead={markRead} onMarkAllRead={markAllRead} />;
       case 'messages':         return <TrophyMessages />;
-      case 'special-requests': return <SpecialRequests />;
       case 'profile':          return <HunterProfile onLogout={onLogout} />;
       default:                 return <HunterTrophies />;
     }
@@ -46,6 +46,7 @@ export function LocalHunterPortal({ onLogout }: LocalHunterPortalProps) {
       <header className="bg-white/90 dark:bg-stone-900/90 backdrop-blur-lg border-b border-amber-200 dark:border-amber-900 sticky top-0 z-50">
         <div className="px-4 py-4 flex items-center justify-between md:pl-60">
           <div className="flex items-center gap-3">
+            <BackButton atHome={currentView === 'home'} home={() => go('home')} className="text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-800" />
             <div className="w-10 h-10 bg-gradient-to-br from-amber-700 to-amber-500 rounded-lg flex items-center justify-center shadow-md">
               <Package className="w-5 h-5 text-white" />
             </div>
@@ -58,7 +59,7 @@ export function LocalHunterPortal({ onLogout }: LocalHunterPortalProps) {
             <Button variant="ghost" size="icon" onClick={toggleTheme} className="rounded-full" title="Switch light or dark mode" aria-label="Switch light or dark mode">
               {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
             </Button>
-            <Button variant="ghost" size="icon" title="My profile" aria-label="My profile" onClick={() => setCurrentView('profile')} className="rounded-full">
+            <Button variant="ghost" size="icon" title="My profile" aria-label="My profile" onClick={() => go('profile')} className="rounded-full">
               <User className="w-5 h-5" />
             </Button>
           </div>
@@ -86,7 +87,7 @@ export function LocalHunterPortal({ onLogout }: LocalHunterPortalProps) {
               key={item.view}
               variant={currentView === item.view ? 'default' : 'ghost'}
               className="flex flex-col items-center gap-1 h-auto py-2 relative"
-              onClick={() => setCurrentView(item.view)}
+              onClick={() => go(item.view)}
             >
               <item.icon className="w-5 h-5" />
               {item.badge != null && item.badge > 0 && (
@@ -111,7 +112,7 @@ export function LocalHunterPortal({ onLogout }: LocalHunterPortalProps) {
             key={item.view}
             variant={currentView === item.view ? 'default' : 'ghost'}
             className="w-full justify-start relative"
-            onClick={() => setCurrentView(item.view)}
+            onClick={() => go(item.view)}
           >
             <item.icon className="w-4 h-4 mr-3" />
             {item.label}

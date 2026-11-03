@@ -17,6 +17,7 @@ import {
   Loader2, MapPin, User, Calendar, Trophy, Crosshair, Package,
 } from 'lucide-react';
 import { createHunt, addTrophyToHunt, notifyAdminOfNewHunt, HuntDetails, TrophyEntry } from '../../../../lib/hooks/useHunterSelfService';
+import { useBack } from '../../../../lib/back';
 
 const SPECIES = [
   'Kudu', 'Impala', 'Springbok', 'Gemsbok', 'Eland', 'Sable Antelope',
@@ -63,6 +64,7 @@ interface Props {
 
 export function HunterHuntCreationWizard({ clientId, clientName, clientEmail, clientType, onComplete, onCancel }: Props) {
   const [step, setStep] = useState<Step>('hunt');
+  useBack(step !== 'hunt', () => setStep(s => (s === 'review' ? 'trophies' : 'hunt')));
   const [submitting, setSubmitting] = useState(false);
 
   const [hunt, setHunt] = useState<HuntDetails>({

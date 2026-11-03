@@ -14,6 +14,7 @@ import { useLiveRefresh } from '../../../../lib/liveRefresh';
 import { SoakReportButton } from './SoakReportButton';
 import { completeStage as completeStageAction } from '../../../../lib/offline/completeStage';
 import { PRIORITY_META, dueState, taskStatus, useChecklists, markJobOpened, markJobStarted } from '../../../../lib/hooks/useTaskFlow';
+import { useBack } from '../../../../lib/back';
 
 // What each department needs to do with a trophy
 const DEPT_INSTRUCTIONS: Record<string, { action: string; steps: string[] }> = {
@@ -192,6 +193,7 @@ export function MyTasks() {
   const [completeState, setCompleteState] = useState<Record<string, CompleteState>>({});
   const [showAlerts, setShowAlerts] = useState(true);
   const [selectedClient, setSelectedClient] = useState<string | null>(null);
+  useBack(!!selectedClient, () => setSelectedClient(null));
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const myDepts = getStaffDepartments(profile?.full_name ?? '', profile?.department_name, profile?.works_in);

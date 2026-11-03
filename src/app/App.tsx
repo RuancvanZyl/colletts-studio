@@ -17,6 +17,7 @@ import { AuthProvider, useAuth } from '../lib/auth';
 import { supabase, AUTH_LINK, INVITE_AT_LOAD, clearInviteToken } from '../lib/supabase';
 import { InviteScreen } from './components/apex/InviteScreen';
 import { OutfitterInviteScreen } from './components/apex/OutfitterInviteScreen';
+import { clearBack } from '../lib/back';
 
 export type UserRole = 'hunter' | 'local-hunter' | 'admin' | 'outfitter' | 'taxidermy' | 'unified' | null;
 
@@ -136,6 +137,7 @@ function AppInner() {
   }, [selectedPortal, setPortalAndPersist]);
 
   const handleLogout = async () => {
+    clearBack();
     await signOut();
     setPortalAndPersist(null);
     setCurrentView('landing');

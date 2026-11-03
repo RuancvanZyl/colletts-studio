@@ -8,12 +8,15 @@ import { loadGuide, PHOTO_KIND_LABEL, FACT_KIND_LABEL, type Guide, type GuidePho
 import { findSpecies } from '../../../../lib/species';
 import { speciesEmoji } from '../../../../lib/pricing';
 import { GROUP_STYLE } from '../../../../lib/collection';
+import { useBack } from '../../../../lib/back';
 
 export function SpeciesGuide({ species, collected = 0, onClose }: { species: string; collected?: number; onClose: () => void }) {
   const sp = findSpecies(species);
   const name = sp?.name ?? species;
   const [data, setData] = useState<{ guide: Guide | null; photos: GuidePhoto[] } | null>(null);
   const [big, setBig] = useState<string | null>(null);
+  useBack(!!big, () => setBig(null));
+  useBack(true, onClose);
 
   useEffect(() => { let alive = true; loadGuide(name).then(d => { if (alive) setData(d); }).catch(() => alive && setData({ guide: null, photos: [] })); return () => { alive = false; }; }, [name]);
 

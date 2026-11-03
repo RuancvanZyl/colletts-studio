@@ -12,6 +12,7 @@ import { SPECIES } from '../../../../lib/species';
 import { speciesEmoji } from '../../../../lib/pricing';
 import { shrinkPhoto } from '../../../../lib/offline/photos';
 import { loadGuide, loadGuideIndex, PHOTO_KIND_LABEL, FACT_KIND_LABEL, type GuideFact, type GuidePhoto } from '../../../../lib/hooks/useSpeciesGuide';
+import { useBack } from '../../../../lib/back';
 
 const field = 'w-full rounded-lg border border-slate-600 bg-[#0f1a24] text-slate-100 px-3 min-h-11 text-base placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0073ea]';
 const lab = 'block text-sm font-semibold text-slate-300 mb-1';
@@ -21,6 +22,7 @@ export function AnimalGuideEditor() {
   const [index, setIndex] = useState<Record<string, { guide: boolean; photos: number }>>({});
   const [q, setQ] = useState('');
   const [open, setOpen] = useState<string | null>(null);
+  useBack(!!open, () => setOpen(null));
 
   const refreshIndex = () => loadGuideIndex().then(setIndex).catch(() => {});
   useEffect(() => { refreshIndex(); }, []);
