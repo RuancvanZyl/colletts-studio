@@ -11,6 +11,8 @@ const q = async (sql, params) => (await db.query(sql, params)).rows;
 const fails = async (sql, params) => { try { await db.query(sql, params); return null; } catch (e) { return String(e.message); } };
 
 await db.exec(fs.readFileSync(HERE + 'bootstrap.sql', 'utf8'));
+// like Supabase: new functions can be run by signed-in users unless a migration takes that away (the tests must not hide a missing permission)
+await db.exec(`ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO authenticated, anon;`);
 await db.exec(`
  ALTER TABLE client_hunts ADD COLUMN IF NOT EXISTS year text; ALTER TABLE client_hunts ADD COLUMN IF NOT EXISTS status text; ALTER TABLE client_hunts ADD COLUMN IF NOT EXISTS client_type text; ALTER TABLE client_hunts ADD COLUMN IF NOT EXISTS operator text; ALTER TABLE client_hunts ADD COLUMN IF NOT EXISTS start_date date; ALTER TABLE client_hunts ADD COLUMN IF NOT EXISTS end_date date;
  ALTER TABLE clients ADD COLUMN IF NOT EXISTS client_number text;
@@ -25,14 +27,14 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql', '063_mount_change_rules.sql', '064_conversation_topics.sql']) {
+for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql', '063_mount_change_rules.sql', '064_conversation_topics.sql', '065_mark_done_permission_fix.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
 const seeded = (await db.query(`SELECT name, provinces FROM document_types ORDER BY sort_order`)).rows;
 if (seeded.length === 11 && seeded[0].provinces.length === 0 && seeded.find(x => x.name === 'Hunting permit (sable)').provinces.join() === 'Free State' && seeded.find(x => x.name === 'Game farm permit').provinces.join() === 'Northern Cape') console.log('  ok  the workshop list is loaded per province'); else { console.log('  FAIL the workshop list is loaded per province'); process.exit(1); }
 await db.exec(`DELETE FROM document_types`);
-await db.exec(`GRANT USAGE ON SCHEMA public, auth, storage TO authenticated; GRANT SELECT ON storage.objects TO authenticated; GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated; GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO authenticated;`);
+await db.exec(`GRANT USAGE ON SCHEMA public, auth, storage TO authenticated; GRANT SELECT ON storage.objects TO authenticated; GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;`);
 
 // people
 const ids = { admin: 'a0000000-0000-0000-0000-000000000001', worker: 'a0000000-0000-0000-0000-000000000002', other: 'a0000000-0000-0000-0000-000000000003',
@@ -105,13 +107,15 @@ await db.query(`UPDATE hunt_documents SET current_department='skinning', assigne
 await as(null); await db.query(`UPDATE hunt_documents SET current_department='skinning', assigned_to='${ids.worker}' WHERE id=$1`, [DOC]);
 await as(null); await db.query('DELETE FROM job_checklist_progress'); await db.query('DELETE FROM offline_action_log');
 const it0 = items[0].id, rid = 'f0000000-0000-0000-0000-000000000001';
+const recent = h => new Date(Date.now() - 2 * 86400000 + h * 3600000).toISOString();   // two days ago (the database ignores offline times older than 14 days)
+const t0 = recent(0);
 await as(ids.worker);
-await db.query(`SELECT job_check_item($1,$2,true,NULL,'2026-10-20T08:00:00Z',$3)`, [DOC, it0, rid]);
-await db.query(`SELECT job_check_item($1,$2,false,NULL,'2026-10-20T09:00:00Z',$3)`, [DOC, it0, rid]);
+await db.query(`SELECT job_check_item($1,$2,true,NULL,$4,$3)`, [DOC, it0, rid, t0]);
+await db.query(`SELECT job_check_item($1,$2,false,NULL,$4,$3)`, [DOC, it0, rid, recent(1)]);
 let p = (await q('SELECT done, done_at FROM job_checklist_progress WHERE job_doc_id=$1 AND item_id=$2', [DOC, it0]))[0];
-ok(p.done === true, 'a repeated request id is ignored (no double count)');
-ok(new Date(p.done_at).toISOString() === '2026-10-20T08:00:00.000Z', 'the REAL time the worker ticked it is stored');
-await db.query(`SELECT job_check_item($1,$2,false,NULL,'2026-10-20T07:00:00Z',$3)`, [DOC, it0, 'f0000000-0000-0000-0000-000000000002']);
+console.log('DEBUG p', JSON.stringify(p));ok(p.done === true, 'a repeated request id is ignored (no double count)');
+ok(new Date(p.done_at).toISOString() === t0, 'the REAL time the worker ticked it is stored');
+await db.query(`SELECT job_check_item($1,$2,false,NULL,$4,$3)`, [DOC, it0, 'f0000000-0000-0000-0000-000000000002', recent(-1)]);
 p = (await q('SELECT done FROM job_checklist_progress WHERE job_doc_id=$1 AND item_id=$2', [DOC, it0]))[0];
 ok(p.done === true, 'an older offline action never overwrites a newer one');
 await db.query(`SELECT job_mark_started($1,'2999-01-01T00:00:00Z',$2)`, [DOC, 'f0000000-0000-0000-0000-000000000003']);
@@ -596,7 +600,10 @@ ok(!has(await fnd(), 'doc:ph:' + reqId), 'once the number agrees with the regist
 await db.query(`SELECT public.staff_review_requirement($1, true, true, true, true, true, NULL, ARRAY['PH permit number','Hunter name'])`, [regReq]);
 ok((await q(`SELECT status FROM hunt_requirements WHERE id=$1`, [regReq]))[0].status === 'approved', 'once every problem is fixed or set aside with a reason, the register can be approved');
 await db.query(`SELECT public.staff_clear_override($1, 'header:province')`, [rh]);
-ok(((await q(`SELECT public._register_unresolved($1) n`, [rh]))[0].n) === 1, 'taking a reason away reopens the problem');
+await db.exec('RESET ROLE');   // the helper is private (only the system may call it)
+const reopened = (await q(`SELECT public._register_unresolved($1) n`, [rh]))[0].n;
+await db.exec('SET ROLE authenticated');
+ok(reopened === 1, 'taking a reason away reopens the problem');
 
 console.log('\nPermit numbers owned by outfitters, and the AI reader');
 await as(null);
