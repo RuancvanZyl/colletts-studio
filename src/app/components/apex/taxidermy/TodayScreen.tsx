@@ -57,7 +57,6 @@ export function TodayScreen({ onNavigate }: { onNavigate: (view: string, clientI
     { n: docs.lateAccept, text: plural(docs.lateAccept, 'job card has waited over 24 hours to be accepted by a department lead', 'job cards have waited over 24 hours to be accepted by a department lead'), go: 'incoming', tone: 'amber' },
     { n: redCount, text: plural(redCount, 'order is red: more than one milestone missed', 'orders are red: more than one milestone missed'), go: 'progress-check', tone: 'red' },
     { n: deadlinesOverdue.length, text: plural(deadlinesOverdue.length, 'hunt is past its deadline', 'hunts are past their deadline'), go: 'deadline-watch', tone: 'red' },
-    { n: attention?.stalledRed ?? 0, text: plural(attention?.stalledRed ?? 0, 'animal has been stuck for far too long', 'animals have been stuck for far too long'), go: 'daily-todo', tone: 'red' },
     { n: attention?.unreadMessages ?? 0, text: plural(attention?.unreadMessages ?? 0, 'unread message from a hunter', 'unread messages from hunters'), go: 'client-inbox', tone: 'amber' },
     { n: waitingForMounts.length, text: plural(waitingForMounts.length, 'hunter has not told us what to do with their trophies', 'hunters have not told us what to do with their trophies'), go: 'awaiting-instruction', tone: 'amber' },
     { n: careOverdue, text: plural(careOverdue, 'hunter needs a call or message from us', 'hunters need a call or message from us'), go: 'client-care', tone: 'amber' },
