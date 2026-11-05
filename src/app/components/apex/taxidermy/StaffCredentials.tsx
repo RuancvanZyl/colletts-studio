@@ -43,8 +43,9 @@ export function StaffCredentials() {
       `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/list-staff-emails`,
       { headers: { Authorization: `Bearer ${session?.access_token}` } }
     );
-    const data = await res.json();
-    setStaff((data ?? []).map((s: StaffMember) => ({ ...s, newPassword: generatePassword() })));
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !Array.isArray(data)) toast.error(`The staff e-mail addresses could not be loaded (code ${res.status}). Please tell the person who looks after the app.`, { duration: 15000 });
+    setStaff((Array.isArray(data) ? data : []).map((s: StaffMember) => ({ ...s, newPassword: generatePassword() })));
     setAllGenerated(true);
     setLoading(false);
   }
@@ -63,13 +64,13 @@ export function StaffCredentials() {
         body:    JSON.stringify({ userId: member.id, password: member.newPassword }),
       }
     );
-    const result = await res.json();
+    const result = await res.json().catch(() => ({} as any));
     setSaving(null);
     if (result.ok) {
       setStaff(prev => prev.map(s => s.id === member.id ? { ...s, saved: true } : s));
       toast.success(`Password set for ${member.name}`);
     } else {
-      toast.error(`Failed: ${result.error}`);
+      toast.error(`The password could not be saved (code ${res.status}). Please tell the person who looks after the app. ${typeof result.error === 'string' ? result.error : result.message ?? ''}`.trim(), { duration: 15000 });
     }
   }
 
