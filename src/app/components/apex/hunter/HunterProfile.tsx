@@ -3,6 +3,7 @@ import { LogOut, Mail, Phone, User, Hash, Globe } from 'lucide-react';
 import { useHunterClient } from '../../../../lib/hooks/useHunterClient';
 import { InstallCard } from '../shared/InstallApp';
 import { AppVersion } from '../shared/AppVersion';
+import { ChangePasswordButton } from '../shared/ChangePassword';
 import { WORKSHOP } from '../../../../lib/workshop';
 
 interface HunterProfileProps {
@@ -46,6 +47,7 @@ export function HunterProfile({ onLogout }: HunterProfileProps) {
 
       <InstallCard />
 
+      <ChangePasswordButton className="text-slate-600 dark:text-slate-300" />
       <AppVersion className="text-slate-500" />
 
       <button onClick={onLogout} className="w-full min-h-12 rounded-xl border-2 border-slate-400 text-slate-900 dark:text-slate-100 font-bold flex items-center justify-center gap-2"><LogOut className="w-5 h-5" />Sign out</button>

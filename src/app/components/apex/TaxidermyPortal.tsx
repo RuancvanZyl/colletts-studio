@@ -49,6 +49,7 @@ import { OutfitterInbox } from './taxidermy/OutfitterInbox';
 import { PermitNumbers } from './taxidermy/PermitNumbers';
 import { InstallBanner } from './shared/InstallApp';
 import { AppVersion, UpdateBanner } from './shared/AppVersion';
+import { ChangePasswordButton } from './shared/ChangePassword';
 import { DepartmentProgress } from './taxidermy/DepartmentProgress';
 import { ProgressCheck } from './taxidermy/ProgressCheck';
 import { IncomingCards } from './taxidermy/IncomingCards';
@@ -554,7 +555,8 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
               <LogOut className="w-4 h-4" />
             </button>
           </div>
-          <AppVersion className="mt-2 text-[#7AADB8]" />
+          <ChangePasswordButton className="mt-2 text-[#7AADB8]" />
+          <AppVersion className="mt-1 text-[#7AADB8]" />
         </div>
       </aside>
 
