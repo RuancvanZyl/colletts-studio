@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { HunterPortal } from './components/apex/HunterPortal';
 import { LocalHunterPortal } from './components/apex/LocalHunterPortal';
 import { TaxidermyPortal } from './components/apex/TaxidermyPortal';
@@ -79,6 +79,8 @@ function AppInner() {
     })();
   }, [user, profile, profileResolved, inviteToken, currentView]);
 
+  const hunterRouting = useRef(false);
+
   // Auto-redirect authenticated users to their portal
   useEffect(() => {
     // DEV-ONLY: profile without a session means the local admin preview is on
@@ -100,9 +102,19 @@ function AppInner() {
         if (portalType === 'outfitter') {
           setPortalAndPersist('outfitter');
           setCurrentView('portal');
-        } else {
-          setPortalAndPersist('hunter');
-          setCurrentView('portal');
+        } else if (!hunterRouting.current) {
+          // A hunter whose trophies stay in South Africa has their own portal, also when they reopen the app
+          hunterRouting.current = true;
+          (async () => {
+            const { data: client } = await (supabase as any)
+              .from('clients')
+              .select('client_type')
+              .eq('auth_user_id', user.id)
+              .maybeSingle();
+            setPortalAndPersist(client?.client_type === 'local' ? ('local-hunter' as any) : 'hunter');
+            setCurrentView('portal');
+            hunterRouting.current = false;
+          })();
         }
       }
     }
