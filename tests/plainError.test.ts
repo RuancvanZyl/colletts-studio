@@ -14,3 +14,9 @@ test('our own plain messages pass through unchanged', () => {
   assert.equal(plainError(ours), ours);
   assert.equal(plainError(''), 'Something went wrong. Please try again.');
 });
+
+test('an error with no readable text becomes a plain sentence', () => {
+  for (const raw of ['{}', 'Failed: {}', 'Could not send the reset email: {}', '[object Object]']) {
+    assert.match(plainError(raw), /could not reach the server/i);
+  }
+});

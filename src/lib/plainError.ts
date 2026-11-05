@@ -2,6 +2,9 @@
 // Messages we wrote ourselves (already plain) pass through unchanged.
 
 const RULES: [RegExp, string][] = [
+  // an error that arrived with no readable text at all (a blocked or dropped connection): shows up as {} or [object Object]
+  [/(^|:\s*)\{\s*\}\s*$|\[object object\]/i,
+    'We could not reach the server. Please check your internet connection and try again. If it keeps happening, tell the office.'],
   [/failed to fetch|networkerror|load failed|network request failed|timeout|timed out/i,
     'No internet connection right now. Your work is safe on this device. Try again when you are back online.'],
   [/jwt|token.*expired|not authenticated|auth session missing/i,
