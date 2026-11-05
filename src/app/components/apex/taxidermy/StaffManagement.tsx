@@ -244,8 +244,8 @@ export function StaffManagement() {
 
       {/* Add / Edit Modal */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-5">
+        <div className="fixed inset-0 z-50 flex justify-center overflow-y-auto bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl m-auto w-full max-w-md p-6 space-y-5">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-slate-900 dark:text-slate-100">{editId ? 'Edit Staff Member' : 'Add Staff Member'}</h3>
               <button onClick={() => setShowForm(false)} className="text-slate-400 hover:text-slate-600">

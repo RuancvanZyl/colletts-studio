@@ -168,8 +168,8 @@ export function OrderTimelineCard({ hunt, onRefresh }: { hunt: HuntTimelineField
 
       {/* Amend dialog */}
       {amendOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl w-full max-w-sm p-5 space-y-4">
+        <div className="fixed inset-0 z-50 flex justify-center overflow-y-auto bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl m-auto w-full max-w-sm p-5 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">Amend Deadline</h3>
               <button onClick={() => setAmendOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>

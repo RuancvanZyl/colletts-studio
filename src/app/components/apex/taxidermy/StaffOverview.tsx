@@ -324,8 +324,8 @@ export function StaffOverview() {
 
       {/* Assign modal */}
       {assignModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex justify-center overflow-y-auto bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl m-auto w-full max-w-sm p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">Assign Task</h3>
               <button onClick={() => setAssignModal(null)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
@@ -355,8 +355,8 @@ export function StaffOverview() {
 
       {/* Note modal */}
       {noteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex justify-center overflow-y-auto bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl m-auto w-full max-w-sm p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">Admin Note</h3>
               <button onClick={() => setNoteModal(null)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>

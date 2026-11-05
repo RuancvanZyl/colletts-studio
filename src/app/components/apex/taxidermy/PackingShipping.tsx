@@ -193,8 +193,8 @@ export function PackingShipping() {
 
       {/* Shipping dialog */}
       {shipTarget && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <Card className="w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 z-50 flex justify-center overflow-y-auto p-4">
+          <Card className="w-full max-w-md m-auto">
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><Truck className="w-5 h-5" />Ship Trophy</CardTitle>
             </CardHeader>

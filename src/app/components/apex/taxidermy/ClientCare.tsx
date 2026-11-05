@@ -200,8 +200,8 @@ export function ClientCare({ onOpenClient }: { onOpenClient?: (clientId: string)
 
       {/* Compose */}
       {compose && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex justify-center overflow-y-auto bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl m-auto w-full max-w-lg p-6 space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="font-bold text-slate-900 dark:text-slate-100">Update {compose.name}</h3>
