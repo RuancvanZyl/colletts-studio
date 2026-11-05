@@ -216,7 +216,7 @@ export function LoginScreen({
                       toast.error(
                         /rate|limit|seconds/i.test(error.message)
                           ? 'Too many reset emails were sent recently. Wait about an hour, or ask the admin to reset your password.'
-                          : `Could not send the reset email: ${error.message}`,
+                          : 'We could not send the reset e-mail right now. Please ask the office to set a new password for you.',
                         { duration: 12000 }
                       );
                       return;
