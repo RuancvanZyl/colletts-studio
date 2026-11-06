@@ -19,12 +19,13 @@ import { useOutfitterAttention } from '../../../lib/hooks/useOutfitterAttention'
 import { useTheme } from './ThemeProvider';
 import { usePortalTheme } from './PortalThemeProvider';
 import { useViewLevels, BackButton } from '../../../lib/back';
+import { useRememberedScreen } from '../../../lib/draft';
 
 interface OutfitterPortalProps { onLogout: () => void }
 type OutfitterView = 'hunts' | 'documents' | 'messages' | 'register' | 'account';
 
 export function OutfitterPortal({ onLogout }: OutfitterPortalProps) {
-  const [view, setView] = useState<OutfitterView>('hunts');
+  const [view, setView] = useRememberedScreen<OutfitterView>('outfitter', 'hunts', v => ['hunts','documents','messages','register','account'].includes(v as string));   // a refresh brings the person back to the same screen
   const [tick, setTick] = useState(0);
   const [thread, setThread] = useState<string | null>(null);
   const { theme, toggleTheme } = useTheme();

@@ -13,6 +13,7 @@ import { useClientNotifications } from '../../../lib/hooks/useClientNotification
 import { useTheme } from './ThemeProvider';
 import { useHunterClient } from '../../../lib/hooks/useHunterClient';
 import { useViewLevels, BackButton } from '../../../lib/back';
+import { useRememberedScreen } from '../../../lib/draft';
 
 interface LocalHunterPortalProps {
   onLogout: () => void;
@@ -22,7 +23,7 @@ type LocalView = 'home' | 'collection' | 'add-animals' | 'notifications' | 'prof
 
 export function LocalHunterPortal({ onLogout }: LocalHunterPortalProps) {
   const { client, displayName } = useHunterClient();
-  const [currentView, setCurrentView] = useState<LocalView>('home');
+  const [currentView, setCurrentView] = useRememberedScreen<LocalView>('local-hunter', 'home', v => ['home','collection','add-animals','notifications','profile','messages'].includes(v as string));   // a refresh brings the person back to the same screen
   const { theme, toggleTheme } = useTheme();
   const go = useViewLevels(currentView, setCurrentView);       // every screen change can be undone with Back
   const { notifications, unreadCount, markRead, markAllRead } = useClientNotifications(client?.id);

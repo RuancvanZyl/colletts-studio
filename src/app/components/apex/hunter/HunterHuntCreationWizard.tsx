@@ -6,6 +6,7 @@
  */
 
 import { useState } from 'react';
+import { useDraft } from '../../../../lib/draft';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
@@ -63,11 +64,12 @@ interface Props {
 }
 
 export function HunterHuntCreationWizard({ clientId, clientName, clientEmail, clientType, onComplete, onCancel }: Props) {
-  const [step, setStep] = useState<Step>('hunt');
+  // what the hunter has filled in is kept on this device until the hunt is submitted
+  const [step, setStep, dStep] = useDraft<Step>(`hunt:${clientId}:step`, 'hunt');
   useBack(step !== 'hunt', () => setStep(s => (s === 'review' ? 'trophies' : 'hunt')));
   const [submitting, setSubmitting] = useState(false);
 
-  const [hunt, setHunt] = useState<HuntDetails>({
+  const [hunt, setHunt, dHunt] = useDraft<HuntDetails>(`hunt:${clientId}:details`, {
     clientType,
     year: new Date().getFullYear(),
     operator: '',
@@ -76,8 +78,8 @@ export function HunterHuntCreationWizard({ clientId, clientName, clientEmail, cl
     notes: '',
   });
 
-  const [trophies, setTrophies] = useState<TrophyEntry[]>([]);
-  const [draftTrophy, setDraftTrophy] = useState<TrophyEntry>({
+  const [trophies, setTrophies, dTrophies] = useDraft<TrophyEntry[]>(`hunt:${clientId}:trophies`, []);
+  const [draftTrophy, setDraftTrophy, dDraft] = useDraft<TrophyEntry>(`hunt:${clientId}:draft`, {
     species: '',
     mountType: '',
     quantity: 1,
@@ -85,6 +87,7 @@ export function HunterHuntCreationWizard({ clientId, clientName, clientEmail, cl
     extras: [],
   });
   const [addingTrophy, setAddingTrophy] = useState(false);
+  const clearAll = () => { dStep.clear(); dHunt.clear(); dTrophies.clear(); dDraft.clear(); };
 
   // ── Hunt details step ──────────────────────────────────────────────────────
 
@@ -150,6 +153,7 @@ export function HunterHuntCreationWizard({ clientId, clientName, clientEmail, cl
       );
 
       toast.success('Hunt registered! Our team will be in touch shortly.');
+      clearAll();
       onComplete();
     } catch (err: any) {
       toast.error(err.message);

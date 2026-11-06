@@ -244,3 +244,9 @@
 - Bug fixed: the trophy parts (horns / tusks / antlers / none, and the big-game extras) used old short names, so a spotted hyena, jackals, baboons, crocodile and birds got "Horns" and a cape. They now follow the animal's family (`animalKind` in species.ts, tests in tests/species.test.ts).
 - `docs/ANIMAL_LIST.csv` is the whole list for the workshop to check (one column to mark "yes / change"). Scientific names follow common hunting-trade usage; subspecies and some colour names are a judgement call and should be reviewed by someone who hunts or mounts these animals.
 - Not done: field-guide text and photos for the new types (they show no guide until written), prices for new types (they are quoted, like other animals without a fixed price).
+
+## 2026-11-06 — Work is kept when the app refreshes or updates; staff who are also hunters stay on their side
+- Bug: Steve (a staff admin who is also a hunter) was sent to the staff portal every time the app updated or reloaded, because a staff profile always won. `App.tsx` now looks up the person's client record and keeps the side they chose (hunter, local hunter or staff).
+- `src/lib/draft.ts`: `useDraft(name, initial)` keeps a value on this device (per person, 3 days) and `useRememberedScreen` keeps the screen (12 hours). Photos are not stored: the person adds them again. Everything is forgotten when the person signs out (`clearAllDrafts` in `handleLogout`).
+- Kept: the screen in all four portals (staff also keeps the client that was open); the hunter's mount selection (choices, step, review and the fact that the step was open, with a "Welcome back, Start again" note); add-animals flow; hunt creation wizard; staff arrival check-in (with the same note); quick job entry; half-written team messages and outfitter thread messages.
+- Not covered yet: the receiving sheet, quote builder and other staff forms; a draft lives on one device only (another phone or computer starts fresh).

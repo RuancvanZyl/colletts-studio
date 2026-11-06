@@ -13,6 +13,7 @@ import { ALL_DEPARTMENTS, DEPT_LABELS } from '../../../../lib/pipeline';
 import { PRIORITY_META } from '../../../../lib/hooks/useTaskFlow';
 import { useStaffMessages, useCommunicationLog, canCommunicate, isAdminRole, type StaffMessage } from '../../../../lib/hooks/useMessages';
 import { Button } from '../../ui/button';
+import { useDraft } from '../../../../lib/draft';
 
 type Tab = 'inbox' | 'sent' | 'compose' | 'log';
 
@@ -171,8 +172,9 @@ function Compose({ people, myId, admin, myDepts, onSend }: {
   const [kind, setKind] = useState<'user' | 'department' | 'everyone'>('department');
   const [user, setUser] = useState('');
   const [dept, setDept] = useState(myDepts[0] ?? ALL_DEPARTMENTS[0]);
-  const [subject, setSubject] = useState('');
-  const [body, setBody] = useState('');
+  // a message that is half written is kept on this device until it is sent
+  const [subject, setSubject, dSubject] = useDraft('message:subject', '');
+  const [body, setBody, dBody] = useDraft('message:body', '');
   const [priority, setPriority] = useState(3);
   const [ack, setAck] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -186,7 +188,7 @@ function Compose({ people, myId, admin, myDepts, onSend }: {
     setBusy(true);
     const ok = await onSend({ kind, user, dept, subject, body, priority, ack });
     setBusy(false);
-    if (ok) { setSubject(''); setBody(''); setAck(false); setPriority(3); }
+    if (ok) { dSubject.clear(); dBody.clear(); setSubject(''); setBody(''); setAck(false); setPriority(3); dSubject.clear(); dBody.clear(); }
   }
 
   return (

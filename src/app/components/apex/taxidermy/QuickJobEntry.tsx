@@ -13,6 +13,7 @@ import { supabase } from '../../../../lib/supabase';
 import { useClients } from '../../../../lib/hooks/useClients';
 import { DEPT_LABELS, getPipeline } from '../../../../lib/pipeline';
 import { toast } from 'sonner';
+import { useDraft } from '../../../../lib/draft';
 
 // ── Species & mount options ───────────────────────────────────────────────────
 
@@ -242,15 +243,17 @@ interface QuickJobEntryProps {
 }
 
 export function QuickJobEntry({ onDone }: QuickJobEntryProps) {
-  const [clientId, setClientId] = useState('');
-  const [clientName, setClientName] = useState('');
-  const [year, setYear] = useState(new Date().getFullYear().toString());
-  const [refNumber, setRefNumber] = useState('');
-  const [operator, setOperator] = useState('');
-  const [ph, setPh] = useState('');
-  const [country, setCountry] = useState('');
-  const [dropboxPath, setDropboxPath] = useState('');
-  const [rows, setRows] = useState<TrophyRow[]>([emptyRow()]);
+  // what has been typed is kept on this device until the job cards are created
+  const [clientId, setClientId, d1] = useDraft('quickjob:clientId', '');
+  const [clientName, setClientName, d2] = useDraft('quickjob:clientName', '');
+  const [year, setYear, d3] = useDraft('quickjob:year', new Date().getFullYear().toString());
+  const [refNumber, setRefNumber, d4] = useDraft('quickjob:ref', '');
+  const [operator, setOperator, d5] = useDraft('quickjob:operator', '');
+  const [ph, setPh, d6] = useDraft('quickjob:ph', '');
+  const [country, setCountry, d7] = useDraft('quickjob:country', '');
+  const [dropboxPath, setDropboxPath, d8] = useDraft('quickjob:dropbox', '');
+  const [rows, setRows, d9] = useDraft<TrophyRow[]>('quickjob:rows', () => [emptyRow()]);
+  const clearDrafts = () => [d1, d2, d3, d4, d5, d6, d7, d8, d9].forEach(d => d.clear());
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [savedCount, setSavedCount] = useState(0);
@@ -325,6 +328,7 @@ export function QuickJobEntry({ onDone }: QuickJobEntryProps) {
 
       setSavedCount(rows.length);
       setSaved(true);
+      clearDrafts();
       toast.success(`${rows.length} trophy job card${rows.length !== 1 ? 's' : ''} created and routed to departments`);
     } catch (err: any) {
       toast.error('Failed: ' + err.message);

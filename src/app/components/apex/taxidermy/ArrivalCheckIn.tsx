@@ -6,6 +6,7 @@
  * The hunter chooses the mounts afterwards, from their own profile.
  */
 import { useEffect, useRef, useState } from 'react';
+import { useDraft } from '../../../../lib/draft';
 import { Camera, CheckCircle2, ArrowLeft, ArrowRight, Copy as CopyIcon, Loader2, Plus, Printer, Search, Tag, Trash2, UserPlus, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../../../lib/supabase';
@@ -35,23 +36,25 @@ const bigBtn = 'inline-flex items-center justify-center gap-2 rounded-xl font-bo
 
 export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
   const { profile } = useAuth();
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  // what has been typed is kept on this device until the check-in is saved (photos have to be taken again)
+  const [step, setStep, dStep] = useDraft<1 | 2 | 3>('checkin:step', 1);
   useBack(step > 1, () => setStep(s => (s - 1) as 1 | 2 | 3));
   const [saving, setSaving] = useState(false);
 
   // 1 — hunter
-  const [mode, setMode] = useState<'find' | 'new'>('find');
+  const [mode, setMode, dMode] = useDraft<'find' | 'new'>('checkin:mode', 'find');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<FoundClient[]>([]);
   const [searching, setSearching] = useState(false);
-  const [client, setClient] = useState<FoundClient | null>(null);
-  const [fresh, setFresh] = useState({ full_name: '', phone: '', email: '', country: '', client_type: 'export' });
+  const [client, setClient, dClient] = useDraft<FoundClient | null>('checkin:client', null);
+  const [fresh, setFresh, dFresh] = useDraft('checkin:new-client', { full_name: '', phone: '', email: '', country: '', client_type: 'export' });
   const [similar, setSimilar] = useState<FoundClient[]>([]);
   const [openHunts, setOpenHunts] = useState<OpenHunt[]>([]);
   const [newFile, setNewFile] = useState(false);
 
   // 2 — animals
-  const [animals, setAnimals] = useState<Animal[]>([emptyAnimal()]);
+  const [animals, setAnimals, dAnimals] = useDraft<Animal[]>('checkin:animals', () => [emptyAnimal()], undefined, saved => (Array.isArray(saved) && saved.length ? saved : [emptyAnimal()]).map(a => ({ ...a, photos: [], previews: [] })));
+  const clearDrafts = () => { dStep.clear(); dMode.clear(); dClient.clear(); dFresh.clear(); dAnimals.clear(); };
   const [expected, setExpected] = useState<{ docId: string; species: string; mount: string; huntId: string; tag: string }[]>([]);
   const photoRef = useRef<HTMLInputElement>(null);
   const [photoFor, setPhotoFor] = useState<string | null>(null);
@@ -205,6 +208,7 @@ export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
       let link: string | null = null;
       try { link = await getInviteLink(c.id); } catch { /* migration 045 not run yet — papers still print */ }
       setResult({ clientId: c.id, name: c.full_name, number, email: c.email, phone: c.phone, registered: !!c.auth_user_id, huntRef, year, animals, link });
+      clearDrafts();
       toast.success(`${animals.length} animal${animals.length > 1 ? 's' : ''} checked in for ${c.full_name}`);
     } catch (e: any) {
       toast.error(e.message ?? 'Could not save the check-in');
@@ -213,6 +217,7 @@ export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
 
   function reset() {
     setResult(null); setStep(1); setAnimals([emptyAnimal()]); setClient(null); setQuery(''); setResults([]); setMode('find');
+    clearDrafts();
     setFresh({ full_name: '', phone: '', email: '', country: '', client_type: 'export' });
   }
 
@@ -276,6 +281,12 @@ export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
   return (
     <div className="max-w-xl mx-auto pb-44 lg:pb-28">
       <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Arrival check-in</h1>
+      {dAnimals.restored && !result && (
+        <div className="mt-3 rounded-xl border-2 border-sky-500 bg-sky-50 dark:bg-sky-950/40 p-3 flex items-center gap-3 text-slate-900 dark:text-slate-100">
+          <p className="flex-1 text-sm font-semibold leading-snug">Welcome back. We kept what you had typed, so you can carry on. Photos have to be taken again.</p>
+          <button className="min-h-11 px-3 rounded-lg border border-slate-400 text-sm font-semibold" onClick={() => { clearDrafts(); reset(); }}>Start again</button>
+        </div>
+      )}
       <div className="flex items-center gap-2 my-4">
         {steps.map((s, i) => (
           <div key={s} className="flex items-center gap-2 flex-1">

@@ -2,7 +2,7 @@
  * HunterTrophies — the hunter's home: every animal the workshop has received from them, what came in,
  * the mount they chose (or still have to choose), and where it is now. Built to be read on a phone.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ChevronDown, ChevronUp, Loader2, Printer, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useHunterAnimals, type HunterAnimal } from '../../../../lib/hooks/useHunterAnimals';
 import { getPipeline, stageIndex, DEPT_LABELS } from '../../../../lib/pipeline';
@@ -18,6 +18,7 @@ import { QuoteCard } from './QuoteCard';
 import { HunterDocuments } from './HunterDocuments';
 import { useHunterQuotes } from '../../../../lib/hooks/useQuotes';
 import { useBack } from '../../../../lib/back';
+import { useDraft } from '../../../../lib/draft';
 
 function statusOf(a: HunterAnimal): { text: string; tone: 'todo' | 'wait' | 'work' | 'done'; pct: number } {
   if (a.finished) return { text: 'Finished — ready for you', tone: 'done', pct: 100 };
@@ -31,11 +32,15 @@ function statusOf(a: HunterAnimal): { text: string; tone: 'todo' | 'wait' | 'wor
 export function HunterTrophies({ onRegisterHunt, onChanged, startAdding = false }: { onRegisterHunt?: () => void; onChanged?: () => void; startAdding?: boolean }) {
   const { client, animals, loading, refresh } = useHunterAnimals();
   const { quotes, refresh: refreshQuotes } = useHunterQuotes(client?.id);
-  const [choosing, setChoosing] = useState<string[] | null>(null);
+  // the step the hunter was on is remembered, so a refresh brings them straight back to it
+  const [choosing, setChoosing] = useDraft<string[] | null>('trophies:choosing', null, 12 * 3600 * 1000);
   const [open, setOpen] = useState<string | null>(null);
   const [adding, setAdding] = useState(startAdding);
   useBack(!!choosing, () => setChoosing(null));
   useBack(adding, () => setAdding(false));
+
+  // an animal that was being chosen for but is not waiting any more (already saved): drop the remembered step
+  useEffect(() => { if (choosing && !loading && animals.length && !animals.some(a => choosing.includes(a.docId))) setChoosing(null); }, [choosing, loading, animals]);
 
   if (loading) return <div className="flex items-center justify-center py-20 text-slate-400"><Loader2 className="w-6 h-6 animate-spin" /></div>;
   if (!client) return null;
@@ -47,6 +52,7 @@ export function HunterTrophies({ onRegisterHunt, onChanged, startAdding = false 
 
   if (choosing) {
     const subset = animals.filter(a => choosing.includes(a.docId));
+    if (subset.length === 0) return null;
     return <ChooseMounts animals={subset.map(x => ({ ...x }))} clientType={client.type} clientId={client.id} combinable={animals.filter(x => !x.finished && !x.started && x.dept === 'receiving').map(x => ({ docId: x.docId, species: x.species }))} onClose={() => setChoosing(null)} onSaved={() => { refresh(); onChanged?.(); }} />;
   }
 

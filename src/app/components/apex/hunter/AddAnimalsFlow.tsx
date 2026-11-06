@@ -3,6 +3,7 @@
  * chooses a mount for each (seeing the prices) and the workshop gets an order waiting for the trophies to arrive.
  */
 import { useState } from 'react';
+import { useDraft } from '../../../../lib/draft';
 import { ArrowLeft, ArrowRight, CalendarCheck } from 'lucide-react';
 import { supabase } from '../../../../lib/supabase';
 import { AnimalPicker, pickedName, type PickedAnimal } from '../shared/AnimalPicker';
@@ -18,12 +19,14 @@ const btn = 'inline-flex items-center justify-center gap-2 rounded-xl font-bold 
 const today = () => new Date().toISOString().slice(0, 10);
 
 export function AddAnimalsFlow({ clientId, clientType, onClose, onSaved }: { clientId: string; clientType: string; onClose: () => void; onSaved: () => void }) {
-  const [step, setStep] = useState<'hunt' | 'pick' | 'mounts'>('hunt');
+  // what the hunter has filled in is kept on this device until the animals are registered
+  const [step, setStep, dStep] = useDraft<'hunt' | 'pick' | 'mounts'>(`add:${clientId}:step`, 'hunt');
   useBack(step !== 'hunt', () => setStep(s => (s === 'mounts' ? 'pick' : 'hunt')));
-  const [endDate, setEndDate] = useState(today());
-  const [startDate, setStartDate] = useState('');
-  const [operator, setOperator] = useState('');
-  const [items, setItems] = useState<PickedAnimal[]>([]);
+  const [endDate, setEndDate, dEnd] = useDraft(`add:${clientId}:end`, today());
+  const [startDate, setStartDate, dStart] = useDraft(`add:${clientId}:start`, '');
+  const [operator, setOperator, dOp] = useDraft(`add:${clientId}:operator`, '');
+  const [items, setItems, dItems] = useDraft<PickedAnimal[]>(`add:${clientId}:items`, []);
+  const clearAll = () => { dStep.clear(); dEnd.clear(); dStart.clear(); dOp.clear(); dItems.clear(); };
   const { animals: existing } = useHunterAnimals();
   const before = collectionOf(existing.map(a => a.species));
 
@@ -43,7 +46,7 @@ export function AddAnimalsFlow({ clientId, clientType, onClose, onSaved }: { cli
     const drafts = items.map(it => ({ docId: it.id, species: pickedName(it), parts: [], other: '', mount: '', instructions: '', expected: true }));
     return (
       <ChooseMounts
-        animals={drafts} clientType={clientType} clientId={clientId} onClose={onClose} onSaved={onSaved}
+        animals={drafts} clientType={clientType} clientId={clientId} onClose={onClose} onSaved={() => { clearAll(); onSaved(); }}
         doneExtra={extra}
         doneText="Your animals are registered with the workshop. When your trophies arrive we tick off exactly what came in, and you can follow every stage, with photos, right here."
         onConfirmPicks={async (picks: Record<string, MountPick>) => {

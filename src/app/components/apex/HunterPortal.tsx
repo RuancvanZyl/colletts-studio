@@ -19,6 +19,7 @@ import { AlertCircle, Loader2 } from 'lucide-react';
 import { InstallBanner } from './shared/InstallApp';
 import { UpdateBanner } from './shared/AppVersion';
 import { useBack, useViewLevels, BackButton } from '../../../lib/back';
+import { useRememberedScreen } from '../../../lib/draft';
 
 const PHASE_PROGRESS: Record<string, number> = {
   intake: 10, skin_processing: 20, skull_processing: 30,
@@ -49,7 +50,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
   const { hunts, loading: huntsLoading, refresh: refreshHunts } = useHunterHunts();
 
   const [flow, setFlow] = useState<HunterFlow>('main');
-  const [currentView, setCurrentView] = useState<HunterView>('home');
+  const [currentView, setCurrentView] = useRememberedScreen<HunterView>('hunter', 'home', v => ['home','collection','add-animals','trophies','notifications','profile','messages'].includes(v as string));   // a refresh brings the person back to the same screen
     const { theme, toggleTheme } = useTheme();
   const { theme: portalTheme } = usePortalTheme();
   const go = useViewLevels(currentView, setCurrentView);       // every screen change can be undone with Back

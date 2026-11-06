@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { supabase } from '../../../../lib/supabase';
 import { WORKSHOP } from '../../../../lib/workshop';
 import { TOPICS, TOPIC_LABEL, whatsappLink } from '../../../../lib/threadTopics';
+import { useDraft } from '../../../../lib/draft';
 
 interface Msg { id: string; sender: 'outfitter' | 'workshop'; sender_name: string | null; body: string; created_at: string; requirement_id: string | null; channel?: string; case_id?: string | null; topic?: string; job?: { form_data?: { species?: string; tag_number?: string } } | null }
 interface HuntInfo { ref: string | null; client: string; outfitter: string; phone: string | null; contact: string | null }
@@ -26,7 +27,8 @@ export function OutfitterThread({ huntId, side, canWrite = true, prefill = '', r
   docId?: string | null;
 }) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
-  const [text, setText] = useState(prefill);
+  // a half-written message is kept on this device until it is sent
+  const [text, setText, dText] = useDraft(`thread:${huntId}:${side}`, prefill);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [info, setInfo] = useState<HuntInfo | null>(null);
@@ -66,7 +68,7 @@ export function OutfitterThread({ huntId, side, canWrite = true, prefill = '', r
     if (error && /could not find the function|schema cache/i.test(error.message)) ({ error } = await (supabase as any).rpc('send_outfitter_message', args));
     setBusy(false);
     if (error) { toast.error(error.message); return; }
-    setText(''); load();
+    dText.clear(); setText(''); dText.clear(); load();
   }
 
   async function writeDown() {

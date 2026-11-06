@@ -76,6 +76,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 import { useBack, pushBackLevel, BackButton } from '../../../lib/back';
+import { useRememberedScreen, hadRememberedScreen } from '../../../lib/draft';
 
 type TaxidermyView =
   | 'summary'
@@ -148,11 +149,17 @@ interface TaxidermyPortalProps {
 }
 
 export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
-  const [currentView, setCurrentView] = useState<TaxidermyView>('tasks');
+  // a refresh (or an update of the app) brings the person back to the screen they were on
+  const { user: authUser } = useAuth();
+  const [startedAt] = useState(() => hadRememberedScreen(authUser?.id, 'staff'));
+  const [place, setPlace] = useRememberedScreen<{ view: string; id?: string }>('staff', { view: 'tasks' }, v => !!v && typeof (v as any).view === 'string');
+  const currentView = place.view as TaxidermyView;
+  const setCurrentView = (v: TaxidermyView) => setPlace(p => ({ view: v, id: p.id }));
   const [landed, setLanded] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [navClientId, setNavClientId] = useState<string | undefined>(undefined);
+  const navClientId = place.id;
+  const setNavClientId = (id: string | undefined) => setPlace(p => ({ view: p.view, id }));
   const [searchOpen, setSearchOpen] = useState(false);
   const [myTaskCount, setMyTaskCount] = useState<number | null>(null);
   const [lastTab, setLastTab] = useState<Record<string, string>>({});
@@ -186,6 +193,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
   useEffect(() => {
     if (!profile?.role || landed) return;
     setLanded(true);
+    if (startedAt) return;   // they were somewhere already: leave them there
     if (['admin', 'studio_manager'].includes(profile.role)) setCurrentView('whiteboard');
     else if (profile.role === 'bookkeeper') setCurrentView('payment-confirmation');
     else setCurrentView('tasks');

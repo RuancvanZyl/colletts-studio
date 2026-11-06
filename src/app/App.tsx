@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { clearAllDrafts } from '../lib/draft';
 import { HunterPortal } from './components/apex/HunterPortal';
 import { LocalHunterPortal } from './components/apex/LocalHunterPortal';
 import { TaxidermyPortal } from './components/apex/TaxidermyPortal';
@@ -95,8 +96,20 @@ function AppInner() {
 
     if (user && currentView === 'landing') {
       if (profile) {
-        setPortalAndPersist('admin');
-        setCurrentView('portal');
+        // someone who works here AND is a hunter keeps the side they chose (an update of the app must not move them)
+        if ((selectedPortal === 'hunter' || (selectedPortal as any) === 'local-hunter') && !hunterRouting.current) {
+          hunterRouting.current = true;
+          (async () => {
+            const { data: client } = await (supabase as any).from('clients').select('client_type').eq('auth_user_id', user.id).maybeSingle();
+            if (client) setPortalAndPersist(client.client_type === 'local' ? ('local-hunter' as any) : 'hunter');
+            else setPortalAndPersist('admin');
+            setCurrentView('portal');
+            hunterRouting.current = false;
+          })();
+        } else if (!hunterRouting.current) {
+          setPortalAndPersist('admin');
+          setCurrentView('portal');
+        }
       } else {
         const portalType = user.user_metadata?.portal_type;
         if (portalType === 'outfitter') {
@@ -150,6 +163,7 @@ function AppInner() {
 
   const handleLogout = async () => {
     clearBack();
+    clearAllDrafts();   // nothing a person was typing stays on a device they have signed out of
     await signOut();
     setPortalAndPersist(null);
     setCurrentView('landing');

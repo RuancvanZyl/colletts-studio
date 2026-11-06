@@ -5,6 +5,7 @@
  * and a REPLICA (with the reason). Used for animals the workshop has received and for animals added after the hunt.
  */
 import { useRef, useState } from 'react';
+import { useDraft, hashKey } from '../../../../lib/draft';
 import { ArrowLeft, ArrowRight, Camera, CheckCircle2, Loader2, Sparkles, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../../../lib/supabase';
@@ -34,9 +35,17 @@ export function ChooseMounts({ animals, clientType, clientId, combinable = [], o
   onConfirmPicks?: (picks: Record<string, MountPick>) => Promise<string | null>;
   doneText?: string; doneExtra?: React.ReactNode;
 }) {
-  const [i, setI] = useState(0);
-  const [picks, setPicks] = useState<Record<string, MountPick>>(() => Object.fromEntries(animals.map(a => [a.docId, blank(a)])));
-  const [review, setReview] = useState(false);
+  // the choices are kept on this device while the person works, so a refresh or an update never loses them
+  const dKey = 'mounts:' + hashKey(animals.map(a => a.docId));
+  const [i, setI, dStep] = useDraft(dKey + ':step', 0);
+  const [picks, setPicks, dPicks] = useDraft<Record<string, MountPick>>(dKey + ':picks', () => Object.fromEntries(animals.map(a => [a.docId, blank(a)])), undefined, saved => {
+    const fresh = Object.fromEntries(animals.map(a => [a.docId, blank(a)])) as Record<string, MountPick>;
+    for (const a of animals) { const p = (saved as any)?.[a.docId]; if (p) fresh[a.docId] = { ...fresh[a.docId], ...p, custom: { ...fresh[a.docId].custom, ...(p.custom ?? {}), files: [] }, replica: { ...fresh[a.docId].replica, ...(p.replica ?? {}) } }; }
+    return fresh;   // photos cannot be kept: the person adds them again
+  });
+  const [review, setReview, dReview] = useDraft(dKey + ':review', false);
+  const clearWork = () => { dStep.clear(); dPicks.clear(); dReview.clear(); };
+  const startAgain = () => { dStep.reset(); dPicks.reset(); dReview.reset(); };
   useBack(review, () => setReview(false));
   useBack(!review && i > 0, () => setI(n => Math.max(0, n - 1)));
   const [saving, setSaving] = useState(false);
@@ -80,12 +89,21 @@ export function ChooseMounts({ animals, clientType, clientId, combinable = [], o
       }
     }
     setSaving(false);
-    if (failed === 0) { setDone(true); onSaved(); }
+    if (failed === 0) { clearWork(); setDone(true); onSaved(); }
   }
 
   const btn = 'inline-flex items-center justify-center gap-2 rounded-xl font-bold min-h-12 px-5 text-base disabled:opacity-50';
   const chip = (on: boolean) => `rounded-full border-2 px-4 min-h-11 text-sm font-semibold ${on ? 'border-green-600 bg-green-600 text-white' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`;
   const box = 'rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 space-y-4';
+
+  const [hideWelcome, setHideWelcome] = useState(false);
+  const welcomeBack = dPicks.restored && !hideWelcome ? (
+    <div className="rounded-xl border-2 border-sky-500 bg-sky-50 dark:bg-sky-950/40 p-3 flex items-center gap-3 text-slate-900 dark:text-slate-100">
+      <p className="flex-1 text-sm font-semibold leading-snug">Welcome back. We kept your choices so far, so you can carry on where you stopped.</p>
+      <button className="min-h-11 px-3 rounded-lg border border-slate-400 text-sm font-semibold" onClick={() => { startAgain(); setHideWelcome(true); }}>Start again</button>
+      <button className="min-h-11 px-3 rounded-lg bg-sky-600 text-white text-sm font-bold" onClick={() => setHideWelcome(true)}>OK</button>
+    </div>
+  ) : null;
 
   if (done) {
     return (
@@ -102,6 +120,7 @@ export function ChooseMounts({ animals, clientType, clientId, combinable = [], o
   if (review) {
     return (
       <div className="max-w-xl mx-auto space-y-4 pb-28">
+        {welcomeBack}
         <button className="text-sm text-slate-500 min-h-11 inline-flex items-center gap-1" onClick={() => setReview(false)}><ArrowLeft className="w-4 h-4" />Back</button>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Your choices</h1>
         <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
@@ -152,6 +171,7 @@ export function ChooseMounts({ animals, clientType, clientId, combinable = [], o
 
   return (
     <div className="max-w-xl mx-auto space-y-4 pb-28">
+      {welcomeBack}
       {guide && <SpeciesGuide species={guide} onClose={() => setGuide(null)} />}
       <input ref={fileRef} type="file" accept="image/*" multiple className="hidden"
         onChange={e => { const f = Array.from(e.target.files ?? []); if (f.length) setCustom(a.docId, { files: [...p.custom.files, ...f].slice(0, 6) }); e.target.value = ''; }} />
