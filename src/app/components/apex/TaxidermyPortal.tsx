@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { getStaffDepartments, STALL_HOURS } from '../../../lib/pipeline';
 import { toast } from 'sonner';
@@ -50,6 +50,8 @@ import { PermitNumbers } from './taxidermy/PermitNumbers';
 import { InstallBanner } from './shared/InstallApp';
 import { AppVersion, UpdateBanner } from './shared/AppVersion';
 import { ChangePasswordButton } from './shared/ChangePassword';
+import { NotificationsButton } from './shared/NotificationsButton';
+import { takeOpenRequest, onOpenRequest } from '../../../lib/push';
 import { DepartmentProgress } from './taxidermy/DepartmentProgress';
 import { ProgressCheck } from './taxidermy/ProgressCheck';
 import { IncomingCards } from './taxidermy/IncomingCards';
@@ -301,6 +303,16 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
   const isBookkeeper = role === 'bookkeeper';
   const isManager    = canCommunicate(profile);
   const unreadMessages = useUnreadMessages();
+
+  // a tapped notification opens the screen it is about (today: the team messages)
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
+  useEffect(() => {
+    const open = (v: string) => { if (v === 'messages') navigateRef.current('messages'); };
+    const first = takeOpenRequest();
+    if (first) open(first);
+    return onOpenRequest(open);
+  }, []);
   const canSeeBusiness = isAdmin || isBookkeeper;
 
   // ── Role tiers ────────────────────────────────────────────────────────────
@@ -555,7 +567,8 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
               <LogOut className="w-4 h-4" />
             </button>
           </div>
-          <ChangePasswordButton className="mt-2 text-[#7AADB8]" />
+          <NotificationsButton className="mt-2 block text-[#7AADB8]" />
+          <ChangePasswordButton className="text-[#7AADB8]" />
           <AppVersion className="mt-1 text-[#7AADB8]" />
         </div>
       </aside>

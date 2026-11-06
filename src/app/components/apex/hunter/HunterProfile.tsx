@@ -4,6 +4,7 @@ import { useHunterClient } from '../../../../lib/hooks/useHunterClient';
 import { InstallCard } from '../shared/InstallApp';
 import { AppVersion } from '../shared/AppVersion';
 import { ChangePasswordButton } from '../shared/ChangePassword';
+import { NotificationsButton } from '../shared/NotificationsButton';
 import { WORKSHOP } from '../../../../lib/workshop';
 
 interface HunterProfileProps {
@@ -47,6 +48,7 @@ export function HunterProfile({ onLogout }: HunterProfileProps) {
 
       <InstallCard />
 
+      <NotificationsButton className="block text-slate-600 dark:text-slate-300" />
       <ChangePasswordButton className="text-slate-600 dark:text-slate-300" />
       <AppVersion className="text-slate-500" />
 

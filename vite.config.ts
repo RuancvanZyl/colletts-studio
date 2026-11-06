@@ -72,6 +72,7 @@ export default defineConfig({
         globIgnores: ['sw.js'],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         cleanupOutdatedCaches: true,
+        importScripts: ['/push-handler.js'],   // shows notifications (see public/push-handler.js)
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/functions\//, /^\/auth\//],
         runtimeCaching: [

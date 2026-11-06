@@ -9,6 +9,7 @@ import { supabase } from '../supabase';
 import { useAuth } from '../auth';
 import { performAction } from '../offline/outbox';
 import { fetchAllRows } from '../supabaseHelpers';
+import { tellOthersAboutNewMessages } from '../push';
 
 export interface StaffMessage {
   id: string; sender_id: string; sender_name: string | null;
@@ -67,7 +68,7 @@ export function useStaffMessages() {
       kind: m.kind, user: m.user ?? null, dept: m.dept ?? null, subject: m.subject, body: m.body,
       priority: m.priority, ack: m.ack, doc: m.doc ?? null, hunt: m.hunt ?? null,
     }, myId ?? null);
-    if (!r.error && !r.queued) await load();
+    if (!r.error && !r.queued) { void tellOthersAboutNewMessages(); await load(); }
     return r;
   }
 

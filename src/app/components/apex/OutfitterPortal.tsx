@@ -13,6 +13,7 @@ import { MyPermitNumbers } from './outfitter/MyPermitNumbers';
 import { InstallBanner } from './shared/InstallApp';
 import { AppVersion, UpdateBanner } from './shared/AppVersion';
 import { ChangePasswordButton } from './shared/ChangePassword';
+import { NotificationsButton } from './shared/NotificationsButton';
 import { useOutfitter } from '../../../lib/hooks/useOutfitter';
 import { useOutfitterAttention } from '../../../lib/hooks/useOutfitterAttention';
 import { useTheme } from './ThemeProvider';
@@ -54,6 +55,7 @@ export function OutfitterPortal({ onLogout }: OutfitterPortalProps) {
             <p className="text-sm text-slate-500">{data?.outfitter.status === 'active' ? 'Active' : 'Waiting for the workshop to activate this account'}</p>
           </div>
           {data && <MyPermitNumbers outfitterId={data.outfitter.id} outfitterName={data.outfitter.name} />}
+          <NotificationsButton className="block text-slate-600 dark:text-slate-300" />
           <ChangePasswordButton className="text-slate-600 dark:text-slate-300" />
           <AppVersion className="text-slate-500" />
           <Button variant="outline" className="w-full min-h-12" onClick={onLogout}><LogOut className="w-4 h-4 mr-2" />Sign out</Button>
