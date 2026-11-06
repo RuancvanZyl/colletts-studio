@@ -28,7 +28,9 @@ export function useAttentionCounts(): AttentionCounts {
         .eq('doc_type', 'job_card').eq('current_department', 'receiving').in('status', ['awaiting_arrival', 'in_progress', 'flagged']);
       const atReceiving: any[] = rc ?? [];
       const arrivedHunts = new Set(atReceiving.filter(x => x.arrived_at && !(Array.isArray(x.received) && x.received.length > 0)).map(x => x.hunt_id));
-      const missing = atReceiving.filter(x => x.tf === 'true' || (x.status === 'flagged' && Array.isArray(x.mp) && x.mp.length > 0)).length;
+      const oldMissing = atReceiving.filter(x => x.tf === 'true' || (x.status === 'flagged' && Array.isArray(x.mp) && x.mp.length > 0)).length;
+      const fu = await db.from('part_followups').select('id', { count: 'exact', head: true }).is('resolved_at', null);
+      const missing = fu.error ? oldMissing : (fu.count ?? 0);
       setC({
         arrivedToCheck: arrivedHunts.size, missingParts: missing,
         heldAside: cases.filter(x => x.order_override_at).length,
@@ -42,6 +44,6 @@ export function useAttentionCounts(): AttentionCounts {
     })().catch(() => {});
   }, []);
   useEffect(() => { load(); }, [load]);
-  useLiveRefresh(['hunt_requirements', 'quality_cases', 'job_card_legs', 'registered_numbers', 'outfitter_messages', 'hunt_documents'], load);
+  useLiveRefresh(['hunt_requirements', 'quality_cases', 'job_card_legs', 'registered_numbers', 'outfitter_messages', 'hunt_documents', 'part_followups'], load);
   return c;
 }

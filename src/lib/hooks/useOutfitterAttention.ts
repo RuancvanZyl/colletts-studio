@@ -15,18 +15,19 @@ export function useOutfitterAttention(enabled = true) {
   const load = useCallback(async () => {
     if (!enabled) return;
     try {
-      const [cases, docs, msgs] = await Promise.all([
+      const [cases, docs, msgs, parts] = await Promise.all([
         (supabase as any).rpc('outfitter_cases'),
         (supabase as any).rpc('outfitter_documents_overview'),
         (supabase as any).from('outfitter_messages').select('id', { count: 'exact', head: true }).eq('sender', 'workshop').is('read_at', null),
+        (supabase as any).rpc('outfitter_part_followups'),
       ]);
-      const hunts = ((cases.data ?? []) as { status: string; ack_at: string | null }[]).filter(c => c.status !== 'resolved' && !c.ack_at).length;
+      const hunts = ((cases.data ?? []) as { status: string; ack_at: string | null }[]).filter(c => c.status !== 'resolved' && !c.ack_at).length + (Array.isArray(parts.data) ? parts.data.length : 0);   // rejected skins not acknowledged + parts still missing
       const documents = ((docs.data ?? []) as { items: { responsible: string; status: string }[] }[])
         .reduce((sum, h) => sum + (h.items ?? []).filter(i => i.responsible === 'outfitter' && (i.status === 'awaiting' || i.status === 'rejected')).length, 0);
       setN({ hunts, documents, messages: msgs.count ?? 0 });
     } catch { /* the menu simply shows no numbers */ }
   }, [enabled]);
   useEffect(() => { load(); const t = setInterval(load, 60_000); return () => clearInterval(t); }, [load]);
-  useLiveRefresh(['quality_cases', 'outfitter_messages', 'hunt_requirements'], load);
+  useLiveRefresh(['quality_cases', 'outfitter_messages', 'hunt_requirements', 'part_followups'], load);
   return { attention: n, refresh: load };
 }

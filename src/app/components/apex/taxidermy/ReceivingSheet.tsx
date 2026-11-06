@@ -38,6 +38,7 @@ interface PendingHunt {
   operator: string | null;
   checked_in_at: string;
   arrivedAt?: string | null;   // when the tag was seen or someone pressed "Trophies have arrived"
+  missing?: boolean;           // parts did not arrive: the outfitter was told, it stays red until they are received
 }
 
 type CheckStatus = 'pending' | 'ok' | 'issue' | 'later';   // later = part of it is here, the rest follows
@@ -98,6 +99,8 @@ export function ReceivingSheet({ onNavigate }: { onNavigate: (v: string) => void
 
       const arrivedBy: Record<string, string> = {};
       for (const r of rows) if (r.arrived_at && (!arrivedBy[r.hunt_id] || r.arrived_at < arrivedBy[r.hunt_id])) arrivedBy[r.hunt_id] = r.arrived_at;
+      const { data: openFu } = await (supabase as any).from('part_followups').select('hunt_id').is('resolved_at', null);
+      const missingHunts = new Set<string>((openFu ?? []).map((x: any) => x.hunt_id));
       const seen = new Set<string>();
       const mapped: PendingHunt[] = [];
       for (const r of rows) {
@@ -114,10 +117,11 @@ export function ReceivingSheet({ onNavigate }: { onNavigate: (v: string) => void
           operator:      h.operator ?? null,
           checked_in_at: h.created_at,
           arrivedAt:     arrivedBy[h.id] ?? null,
+          missing:       missingHunts.has(h.id),
         });
       }
       // trophies that have arrived and wait for their condition report come first
-      mapped.sort((a, b) => (a.arrivedAt ? 0 : 1) - (b.arrivedAt ? 0 : 1) || a.client_name.localeCompare(b.client_name));
+      mapped.sort((a, b) => (b.missing ? 1 : 0) - (a.missing ? 1 : 0) || (a.arrivedAt ? 0 : 1) - (b.arrivedAt ? 0 : 1) || a.client_name.localeCompare(b.client_name));
 
       if (tab === 'pending') setHunts(mapped);
       else setReceived(mapped);
@@ -187,6 +191,7 @@ export function ReceivingSheet({ onNavigate }: { onNavigate: (v: string) => void
                   {hunt.client_number && <span className="text-xs text-slate-400 font-mono">{hunt.client_number}</span>}
                   <Badge variant="secondary" className="text-[10px]">{hunt.year}</Badge>
                   {hunt.client_type === 'local' && <Badge className="text-[10px] bg-green-100 text-green-700">Local</Badge>}
+                  {hunt.missing && <Badge className="text-[10px] bg-red-600 text-white border-0">Parts missing</Badge>}
                 </div>
                 {hunt.operator && <p className="text-xs text-slate-400">{hunt.operator}</p>}
                 {hunt.arrivedAt && tab === 'pending' && <p className="text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1.5 mt-0.5"><span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500" />Arrived {new Date(hunt.arrivedAt).toLocaleString('en-ZA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}. Condition report needed</p>}
@@ -220,6 +225,7 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
   const [extras, setExtras, dExtras] = useDraft<{ docId: string; species: string }[]>(`receiving:${huntId}:extras`, []);
   const [view, setView] = useDraft<'sheet' | 'cards'>('receiving:view', 'sheet', 30 * 24 * 3600 * 1000);
   const [arrival, setArrival] = useState<{ at: string; via: string } | null>(null);
+  const [followups, setFollowups] = useState<{ id: string; doc_id: string; parts: string[]; opened_at: string; plan_date: string | null; plan_note: string | null; reminder_count: number }[]>([]);
   const [missingAsk, setMissingAsk] = useState<{ docId: string; species: string; missing: string[] }[] | null>(null);
   const [neverSent, setNeverSent] = useState<Set<string>>(new Set());
   const [addingExtra, setAddingExtra] = useState(false);
@@ -275,6 +281,8 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
       };
     });
 
+    const { data: fus } = await (supabase as any).from('part_followups').select('id, doc_id, parts, opened_at, plan_date, plan_note, reminder_count').eq('hunt_id', huntId).is('resolved_at', null);
+    setFollowups(fus ?? []);
     const arrivedDocs = (docs ?? []).filter((d: any) => d.arrived_at).sort((a: any, b: any) => (a.arrived_at < b.arrived_at ? -1 : 1));
     setArrival(arrivedDocs.length ? { at: arrivedDocs[0].arrived_at, via: arrivedDocs[0].arrived_via ?? 'manual' } : null);
     const added: TrophyLine[] = extras.map(x => ({
@@ -352,7 +360,7 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
       }
 
       // Process each line
-      let waitingCount = 0; let laterCount = 0; let madeNew = false;
+      let waitingCount = 0; let laterCount = 0; let madeNew = false; let followedUp = 0;
       for (const line0 of lines) {
         let line = line0;
         if (line0.isNew) {
@@ -397,6 +405,16 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
           missing_parts: missingFor(line),
           parts: [...keep.filter(p => line.rec.parts.includes(p.code)), ...partRecords(num, line.species, lineNo, line.rec.parts.filter(c => !known.has(c)))],
         };
+
+        // parts that did not arrive: open the follow-up (the outfitter is told, gives a plan and is reminded until they arrive)
+        const miss = missingFor(line);
+        if ((line.status === 'later' || line.status === 'issue') && miss.length > 0) {
+          const { error: fuErr } = await (supabase as any).rpc('staff_open_part_followup', { p_doc: line.docId, p_parts: miss });
+          if (fuErr) toast.warning(`The outfitter could not be told about the missing ${line.species} parts automatically. Please tell them yourself. (${fuErr.message})`, { duration: 12000 });
+          else followedUp++;
+        } else if (line.status === 'ok' && miss.length > 0 && neverSent.has(line.docId)) {
+          await (supabase as any).rpc('staff_close_part_followup', { p_doc: line.docId, p_reason: 'never_sent' }).then(() => undefined, () => undefined);
+        }
 
         // Part of it is here and the rest follows: write down what came, keep the card in Receiving
         if (line.status === 'later') {
@@ -462,6 +480,7 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
         mileage_km: delivery.mileage ? Number(delivery.mileage) : null, note: delivery.note.trim() || null, animals_count: lines.length,
       }).then(() => undefined, () => undefined);
       dEdits.clear(); dDelivery.clear(); dExtras.clear();
+      if (followedUp) toast.info(`The outfitter has been told about the missing parts and will be reminded until they arrive. It stays red on your Needs you list until then.`, { duration: 10000 });
       if (laterCount) toast.info(`${laterCount} animal${laterCount > 1 ? 's are' : ' is'} only partly here. They stay on the receiving list until the rest arrives.`, { duration: 9000 });
       toast.success(waitingCount ? `Receiving saved — ${waitingCount} animal${waitingCount > 1 ? 's are' : ' is'} waiting for the hunter to choose a mount` : 'Receiving complete — trophies queued into pipeline');
       onBack();
@@ -479,6 +498,10 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
     setArrival({ at: new Date().toISOString(), via: 'manual' });
     void tellAboutArrival(huntId);
     toast.success('The receiving team and the admins have been told that the trophies arrived.');
+  }
+  async function remindNow(id: string) {
+    const { error } = await (supabase as any).rpc('staff_remind_part_followup', { p_followup: id });
+    if (error) toast.error(error.message); else { toast.success('The outfitter has been reminded.'); loadDocs(); }
   }
   const [saveSoon, setSaveSoon] = useState(false);
   useEffect(() => { if (saveSoon) { setSaveSoon(false); saveReceiving(); } }, [saveSoon]);
@@ -554,6 +577,30 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
           <button type="button" onClick={markArrived} className="min-h-11 px-4 rounded-lg bg-green-600 hover:bg-green-700 text-white font-bold">Trophies have arrived</button>
         </div>
       ))}
+
+      {/* Parts that did not arrive earlier: the outfitter's plan, red until received */}
+      {followups.length > 0 && (
+        <div role="alert" className="rounded-xl border-2 border-red-600 bg-red-50 dark:bg-red-950/40 p-4 space-y-2">
+          <p className="font-bold text-red-800 dark:text-red-200 flex items-center gap-2"><AlertTriangle className="w-5 h-5" />Still to come. The outfitter has been told and is reminded every 3 days.</p>
+          {followups.map(f => {
+            const l = lines.find(x => x.docId === f.doc_id);
+            const overdue = !!f.plan_date && f.plan_date < new Date().toISOString().slice(0, 10);
+            return (
+              <div key={f.id} className="rounded-lg bg-white/70 dark:bg-slate-900/50 p-3 flex flex-wrap items-center gap-2">
+                <div className="flex-1 min-w-[200px] text-sm text-slate-800 dark:text-slate-100">
+                  <strong>{l?.species ?? 'Animal'}</strong>: {f.parts.map(c => PL[c] ?? c).join(', ')}
+                  <div className={`text-xs mt-0.5 ${overdue ? 'font-bold text-red-700 dark:text-red-300' : 'text-slate-600 dark:text-slate-300'}`}>
+                    {f.plan_date ? `Outfitter's plan: by ${new Date(f.plan_date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}${f.plan_note ? ` (${f.plan_note})` : ''}${overdue ? '. That date has passed' : ''}` : 'The outfitter has not given a date yet'}
+                    {f.reminder_count > 0 ? ` · reminded ${f.reminder_count} time${f.reminder_count > 1 ? 's' : ''}` : ''}
+                  </div>
+                </div>
+                <button type="button" onClick={() => remindNow(f.id)} className="min-h-11 px-3 rounded-lg border-2 border-red-600 text-red-700 dark:text-red-300 font-bold text-sm">Remind the outfitter now</button>
+              </div>
+            );
+          })}
+          <p className="text-xs text-red-800 dark:text-red-300">When the rest has arrived, tick the parts below and mark the animal OK. This closes by itself and the outfitter is thanked.</p>
+        </div>
+      )}
 
       {/* Something is missing */}
       {missingRows.length > 0 && (

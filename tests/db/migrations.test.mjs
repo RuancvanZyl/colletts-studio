@@ -27,7 +27,7 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql', '063_mount_change_rules.sql', '064_conversation_topics.sql', '065_mark_done_permission_fix.sql', '066_live_team_messages.sql', '067_push_notifications.sql', '069_hunt_receivings.sql', '070_arrival_alerts.sql']) {
+for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql', '063_mount_change_rules.sql', '064_conversation_topics.sql', '065_mark_done_permission_fix.sql', '066_live_team_messages.sql', '067_push_notifications.sql', '069_hunt_receivings.sql', '070_arrival_alerts.sql', '071_missing_parts_followup.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
@@ -450,12 +450,64 @@ await as(OUT2);
 ok((await q(`SELECT jsonb_array_length(public.outfitter_overview()->'hunts') n`))[0].n === 0, 'another outfitter sees none of those hunts');
 ok((await fails(`SELECT public.outfitter_add_animals($1, '[{"species":"Zebra"}]'::jsonb)`, [oh]))?.includes('not yours'), 'and cannot add animals to them');
 await as(null);
+
+console.log('\nMissing parts, the outfitter and the reminders');
+const mdoc = (await q(`SELECT id FROM hunt_documents WHERE hunt_id=$1 AND doc_type='job_card' ORDER BY created_at LIMIT 1`, [oh]))[0].id;
+await db.exec(`UPDATE hunt_documents SET current_department='receiving' WHERE id='${mdoc}'`);
+let who = null;   // who is acting, so the message counts can look as an admin and then go back
+const asW = async u => { who = u; await as(u); };
+const msgCount = async (like) => { const back = who; await as(ids.admin); const n = Number((await q(`SELECT count(*)::int n FROM outfitter_messages WHERE hunt_id=$1 AND job_doc_id=$2 AND body ILIKE $3`, [oh, mdoc, like]))[0].n); await as(back); return n; };
+await db.exec(`UPDATE client_hunts SET work_authorised_at = now() WHERE id='${oh}'`);
+await asW(ids.worker);
+const fu = (await q(`SELECT public.staff_open_part_followup($1, ARRAY['CAPE','BSKIN']) id`, [mdoc]))[0].id;
+ok(!!fu, 'staff can open a follow-up for parts that did not arrive');
+ok(await msgCount('%did not arrive: Cape, Back skin%') === 1, 'the outfitter is told in the hunt conversation (topic: a trophy)');
+await db.query(`SELECT public.staff_open_part_followup($1, ARRAY['CAPE','BSKIN'])`, [mdoc]);
+ok(await msgCount('%did not arrive%') === 1, 'opening it again with the same parts does not send the message twice');
+await asW(OUT1);
+const mine = (await q(`SELECT public.outfitter_part_followups() j`))[0].j;
+ok(mine.length === 1 && mine[0].parts === 'Cape, Back skin' && mine[0].plan_date === null, 'the outfitter sees what is missing and that there is no plan yet');
+await db.query(`SELECT public.outfitter_set_part_plan($1, '2099-12-01', 'By courier on Tuesday')`, [fu]);
+ok((await q(`SELECT public.outfitter_part_followups() j`))[0].j[0].plan_date === '2099-12-01', 'the outfitter can give the date the parts will arrive');
+ok(await msgCount('%Plan for the%by 01 Dec 2099%') === 1, 'the plan is written into the conversation for the workshop');
+ok((await fails(`SELECT public.outfitter_set_part_plan($1, NULL, NULL)`, [fu]))?.includes('Choose the date'), 'a plan needs a date');
+await asW(OUT2);
+ok((await q(`SELECT public.outfitter_part_followups() j`))[0].j.length === 0, 'another outfitter sees none of it');
+ok((await fails(`SELECT public.outfitter_set_part_plan($1, '2099-12-01', NULL)`, [fu]))?.includes('not yours'), 'and cannot give a plan for it');
+await asW(ids.worker);
+ok((await q(`SELECT count(*)::int n FROM part_followups WHERE resolved_at IS NULL`))[0].n === 1, 'staff see the open follow-up (it stays until the parts are received)');
+ok(Number((await q(`SELECT public.remind_part_followups() n`))[0].n) === 0, 'no reminder before 3 days have passed');
+await asW(null);
+await db.exec(`UPDATE part_followups SET opened_at = now() - interval '4 days'`);
+await asW(ids.worker);
+ok(Number((await q(`SELECT public.remind_part_followups() n`))[0].n) === 1, 'after 3 days the outfitter is reminded');
+ok(await msgCount('Reminder:%still not arrived%by 01 Dec 2099%') === 1, 'the reminder mentions the date the outfitter gave');
+ok(Number((await q(`SELECT public.remind_part_followups() n`))[0].n) === 0, 'and not again the same day');
+await asW(null);
+await db.exec(`UPDATE part_followups SET last_reminded_at = now() - interval '4 days'`);
+await db.exec(`UPDATE part_followups SET plan_date = '2020-01-01'`);
+await asW(ids.worker);
+await db.query(`SELECT public.remind_part_followups()`);
+ok(await msgCount('Reminder:%That date has passed%') === 1, 'when the date has passed the reminder asks for a new date');
+await asW(null);
+await db.exec(`UPDATE hunt_documents SET current_department='skinning' WHERE id='${mdoc}'`);
+const closedWhy = (await q(`SELECT resolved_reason r FROM part_followups WHERE id=$1`, [fu]))[0].r;
+ok(closedWhy === 'received', 'when the animal moves on from Receiving the follow-up closes by itself');
+ok(await msgCount('Thank you:%has now arrived complete%') === 1, 'and the outfitter is thanked');
+ok(Number((await q(`SELECT count(*)::int n FROM part_followups WHERE resolved_at IS NULL`))[0].n) === 0, 'nothing stays open once it has arrived');
+await db.exec(`UPDATE hunt_documents SET current_department='receiving' WHERE id='${mdoc}'`);
+await asW(ids.worker);
+await db.query(`SELECT public.staff_open_part_followup($1, ARRAY['SKULL'])`, [mdoc]);
+await db.query(`SELECT public.staff_close_part_followup($1, 'never_sent')`, [mdoc]);
+ok((await q(`SELECT resolved_reason r FROM part_followups WHERE doc_id=$1 ORDER BY opened_at DESC LIMIT 1`, [mdoc]))[0].r === 'never_sent', 'staff can close it as "never sent"');
+await asW(null);
+
 const cl = (await q(`SELECT c.outfitter_id o, c.email e, count(d.id)::int n FROM clients c JOIN client_hunts h ON h.client_id=c.id LEFT JOIN hunt_documents d ON d.hunt_id=h.id WHERE h.id=$1 GROUP BY c.outfitter_id, c.email`, [oh]))[0];
 ok(cl.o === 'f1000000-0000-0000-0000-000000000001' && cl.e === 'hank@example.com' && cl.n === 3, 'the hunter becomes a client of the workshop, linked to the outfitter, ready to be invited');
 ok((await q(`SELECT quote_required r FROM client_hunts WHERE id=$1`, [oh]))[0].r === true, 'the hunt goes on the quote track');
 await as(HUN4);
 ok((await q(`SELECT count(*)::int n FROM outfitters`))[0].n === 0, 'a hunter cannot read the outfitter records');
-await as(OUT1);
+await asW(OUT1);
 ok((await q(`SELECT count(*)::int n FROM outfitters`))[0].n === 1, 'an outfitter can read only their own record');
 ok((await q(`SELECT paid_by p FROM quote_payments WHERE reference='Receipt 12'`)).length >= 0, 'payments remember who paid');
 
@@ -464,11 +516,11 @@ const HUN5 = 'b1000000-0000-0000-0000-000000000005';
 await as(ids.admin);
 await db.query(`INSERT INTO document_types (name, responsible, applies_to, needs_signature, needs_stamp) VALUES ('Export permit','outfitter','export',true,true),('Veterinary certificate','outfitter','export',true,true),('Hunter ID copy','hunter','all',false,false),('Local transport note','outfitter','local',true,false)`);
 ok((await q(`SELECT count(*)::int n FROM document_types`))[0].n === 4, 'an admin defines the list of required documents');
-await as(ids.worker);
+await asW(ids.worker);
 ok((await fails(`INSERT INTO document_types (name) VALUES ('Nope')`)) !== null, 'a worker cannot change the list');
-await as(OUT1);
+await asW(OUT1);
 const dh = (await q(`SELECT public.outfitter_register_hunt('{"name":"Doc Hunter","email":"doc@example.com","client_type":"export"}'::jsonb, NULL, '2026-10-01', '', '[{"species":"Kudu"}]'::jsonb) id`))[0].id;
-await as(null);
+await asW(null);
 await db.exec(`UPDATE clients SET auth_user_id = '${HUN5}' WHERE lower(email) = 'doc@example.com'`);
 const reqs = await q(`SELECT id, name, responsible, status FROM hunt_requirements WHERE hunt_id=$1 ORDER BY name`, [dh]);
 ok(reqs.length === 3 && !reqs.some(r => r.name === 'Local transport note'), 'a new export hunt gets the export checklist automatically (and not the local one)');
@@ -476,9 +528,9 @@ const permit = reqs.find(r => r.name === 'Export permit').id, idcopy = reqs.find
 await as(HUN5);
 const ho = (await q(`SELECT public.hunter_documents_overview() j`))[0].j;
 ok(ho.length === 1 && ho[0].outfitter === 'Jimmy Safaris' && ho[0].items.length === 3 && ho[0].items.find(i => i.name === 'Export permit').responsible === 'outfitter', 'the hunter sees every document, who is responsible and which outfitter it is');
-await as(OUT2);
+await asW(OUT2);
 ok((await fails(`SELECT public.submit_requirement($1, ARRAY['x/y.pdf'])`, [permit]))?.includes('cannot hand in'), 'another outfitter cannot hand in their documents');
-await as(OUT1);
+await asW(OUT1);
 ok((await fails(`SELECT public.submit_requirement($1, ARRAY[]::text[])`, [permit]))?.includes('photo or scan'), 'a document needs a file');
 await db.query(`SELECT public.submit_requirement($1, ARRAY['hunt/permit.pdf'])`, [permit]);
 ok((await q(`SELECT status FROM hunt_requirements WHERE id=$1`, [permit]))[0].status === 'received', 'the outfitter hands in a document: it is received, not yet approved');
@@ -486,7 +538,7 @@ ok((await q(`SELECT jsonb_array_length(public.outfitter_documents_overview()) n`
 await as(HUN5);
 await db.query(`SELECT public.submit_requirement($1, ARRAY['hunt/id.jpg'])`, [idcopy]);
 ok((await q(`SELECT status FROM hunt_requirements WHERE id=$1`, [idcopy]))[0].status === 'received', 'a hunter can hand in the documents that are theirs');
-await as(ids.worker);
+await asW(ids.worker);
 ok((await fails(`SELECT public.staff_review_requirement($1, true, true, true, true, true)`, [permit]))?.includes('Only managers'), 'a worker cannot check documents');
 await as(ids.admin);
 ok((await fails(`SELECT public.staff_review_requirement($1, true, true, true, false, true)`, [permit]))?.includes('must be signed'), 'a document that needs a signature cannot be approved unsigned');
@@ -497,7 +549,7 @@ let rj = (await q(`SELECT status, rejection_reason r FROM hunt_requirements WHER
 ok(rj.status === 'rejected' && rj.r === 'Page 2 is missing', 'a rejected document keeps the reason');
 await as(HUN5);
 ok((await q(`SELECT public.hunter_documents_overview()->0->'items' it`))[0].it.find(i => i.name === 'Export permit').reason === 'Page 2 is missing', 'the hunter can see why it is held up');
-await as(OUT1);
+await asW(OUT1);
 await db.query(`SELECT public.submit_requirement($1, ARRAY['hunt/permit-full.pdf'])`, [permit]);
 ok((await q(`SELECT status, file_paths f FROM hunt_requirements WHERE id=$1`, [permit]))[0].f.join() === 'hunt/permit-full.pdf', 'handing it in again replaces the rejected file');
 await as(ids.admin);
@@ -514,32 +566,32 @@ await db.query(`SELECT public.staff_set_requirement($1, 'not_needed', 'Exempt fo
 await db.query(`UPDATE hunt_documents SET status='completed' WHERE id=$1`, [jc]);
 ok((await q(`SELECT status FROM hunt_documents WHERE id=$1`, [jc]))[0].status === 'completed', 'once everything is approved or not needed, dispatch is allowed');
 // chat
-await as(OUT1);
+await asW(OUT1);
 await db.query(`SELECT public.send_outfitter_message($1, 'Permit is on its way by courier')`, [dh]);
 await as(ids.admin);
 ok((await q(`SELECT count(*)::int n FROM outfitter_messages WHERE hunt_id=$1`, [dh]))[0].n === 1, 'the workshop sees the outfitter\'s message in that hunt\'s thread');
 await db.query(`SELECT public.send_outfitter_message($1, 'Thanks, we will watch for it', $2)`, [dh, permit]);
 await db.query(`SELECT public.mark_outfitter_thread_read($1)`, [dh]);
 ok((await q(`SELECT count(*)::int n FROM outfitter_messages WHERE hunt_id=$1 AND sender='outfitter' AND read_at IS NOT NULL`, [dh]))[0].n === 1, 'reading a thread marks the outfitter\'s messages as read');
-await as(OUT2);
+await asW(OUT2);
 ok((await q(`SELECT count(*)::int n FROM outfitter_messages`))[0].n === 0, 'another outfitter sees nothing of this thread');
 ok((await fails(`SELECT public.send_outfitter_message($1, 'hello')`, [dh]))?.includes('Only managers'), 'and cannot write in it');
-await as(ids.worker);
+await asW(ids.worker);
 ok((await fails(`SELECT public.send_outfitter_message($1, 'hello')`, [dh]))?.includes('Only managers'), 'a worker cannot message outfitters');
-await as(OUT1);
+await asW(OUT1);
 ok((await q(`SELECT count(*)::int n FROM outfitter_messages WHERE hunt_id=$1`, [dh]))[0].n === 2, 'the outfitter sees the whole thread');
 
 console.log('\nPaperwork per province');
 await as(ids.admin);
 await db.query(`DELETE FROM document_types`);
 await db.query(`INSERT INTO document_types (name, responsible, applies_to, provinces) VALUES ('Everywhere doc','outfitter','all','{}'),('Limpopo doc','outfitter','all',ARRAY['Limpopo']),('Free State doc','outfitter','all',ARRAY['Free State'])`);
-await as(OUT1);
+await asW(OUT1);
 const ph = (await q(`SELECT public.outfitter_register_hunt('{"name":"Prov Hunter","email":"prov@example.com","client_type":"local"}'::jsonb, NULL, '2026-10-01', '', '[{"species":"Impala"}]'::jsonb) id`))[0].id;
 ok((await q(`SELECT count(*)::int n FROM hunt_requirements WHERE hunt_id=$1`, [ph]))[0].n === 1, 'with no province yet a hunt gets only the paperwork that applies everywhere');
 ok((await fails(`SELECT public.set_hunt_province($1, 'Narnia')`, [ph]))?.includes('nine provinces'), 'only the nine provinces are accepted');
 await db.query(`SELECT public.set_hunt_province($1, 'Limpopo')`, [ph]);
 ok(JSON.stringify((await q(`SELECT name FROM hunt_requirements WHERE hunt_id=$1 ORDER BY name`, [ph])).map(r => r.name)) === JSON.stringify(['Everywhere doc', 'Limpopo doc']), 'choosing Limpopo adds the Limpopo documents');
-await as(OUT2);
+await asW(OUT2);
 ok((await fails(`SELECT public.set_hunt_province($1, 'Gauteng')`, [ph]))?.includes('cannot change'), 'another outfitter cannot change the province');
 await as(ids.admin);
 const lim = (await q(`SELECT id FROM hunt_requirements WHERE hunt_id=$1 AND name='Limpopo doc'`, [ph]))[0].id;
@@ -554,7 +606,7 @@ ok((await q(`SELECT province FROM v_hunt_documents WHERE hunt_id=$1`, [ph]))[0].
 console.log('\nThe hunt register and its cross-checks');
 await as(ids.admin);
 await db.query(`INSERT INTO registered_numbers (kind, holder_name, year, number) VALUES ('ph_permit','Test PH',2026,'PH-100'),('ho_permit','Jimmy Safaris',2026,'HO-1')`);
-await as(OUT1);
+await asW(OUT1);
 const rh = (await q(`SELECT public.outfitter_register_hunt('{"name":"Reg Hunter","email":"reg@example.com","client_type":"export"}'::jsonb, '2026-09-15', '2026-10-01', '', '[{"species":"Kudu"},{"species":"Impala"}]'::jsonb) id`))[0].id;
 await as(ids.admin);
 const fnd = async () => (await q(`SELECT public.check_hunt_register($1) j`, [rh]))[0].j;
@@ -569,7 +621,7 @@ const regLines = [
 await db.query(`SELECT public.staff_save_register($1, $2::jsonb, $3::jsonb)`, [rh, JSON.stringify(header), JSON.stringify(regLines)]);
 const reqId = (await q(`SELECT public.staff_add_requirement($1, 'Hunting permit', 'outfitter', true, true) id`, [rh]))[0].id;
 await db.query(`SELECT public.staff_set_reference_numbers($1, ARRAY['037974'])`, [reqId]);
-await as(null);
+await asW(null);
 await db.exec(`UPDATE hunt_documents SET status='in_progress', form_data = form_data || '{"received_parts":[{"code":"SKULL"},{"code":"CAPE"},{"code":"TAIL"}]}'::jsonb WHERE hunt_id='${rh}' AND form_data->>'species'='Kudu'`);
 await as(ids.admin);
 let f = await fnd();
@@ -582,17 +634,17 @@ ok(!f.some(x => x.key.startsWith('recv:missing') || x.key.startsWith('recv:count
 ok(has(f, 'recv:part_missing:kudu:BSKIN', 'error'), 'a part listed on the register but not received is flagged');
 ok(has(f, 'recv:part_extra:kudu:TAIL', 'error'), 'a part received but not on the register is flagged (it cannot be exported)');
 ok(has(f, 'recv:pending:impala', 'warn'), 'animals that have not arrived yet only warn');
-await as(OUT1);
+await asW(OUT1);
 ok((await q(`SELECT public.check_hunt_register($1) j`, [rh]))[0].j.length > 0, 'the outfitter can see the problems on their register');
-await as(OUT2);
+await asW(OUT2);
 ok((await fails(`SELECT public.check_hunt_register($1)`, [rh]))?.includes('cannot see'), 'another outfitter cannot');
-await as(ids.worker);
+await asW(ids.worker);
 ok((await fails(`SELECT public.staff_save_register($1, '{}'::jsonb, '[]'::jsonb)`, [rh]))?.includes('Only managers'), 'a worker cannot capture a register');
 await as(ids.admin);
 await db.query(`SELECT public.set_hunt_province($1, 'Gauteng')`, [rh]);
 ok(has(await fnd(), 'header:province', 'error'), 'a province that differs from the hunt is flagged');
 await db.query(`SELECT public.staff_add_requirement($1, 'PH Register', 'outfitter', true, true)`, [rh]);
-await as(null);
+await asW(null);
 await db.exec(`UPDATE hunt_requirements SET check_kind='register' WHERE hunt_id='${rh}' AND name='PH Register'`);
 await as(ids.admin);
 const regReq = (await q(`SELECT id FROM hunt_requirements WHERE hunt_id=$1 AND name='PH Register'`, [rh]))[0].id;
@@ -602,7 +654,7 @@ ok(apErr?.includes('open problem'), 'the register cannot be approved while probl
 for (const x of (await fnd()).filter(x => x.level === 'error')) await db.query(`SELECT public.staff_override_check($1, $2, 'Accepted by the manager')`, [rh, x.key]);
 ok((await fails(`SELECT public.staff_override_check($1, 'x', '')`, [rh]))?.includes('Say why'), 'setting a problem aside needs a reason');
 ok((await fnd()).filter(x => x.level === 'error').every(x => x.overridden && x.override_reason), 'set-aside problems show their recorded reason');
-await as(null);
+await asW(null);
 await db.exec(`UPDATE hunt_requirements SET must_show = ARRAY['PH permit number','Hunter name'] WHERE id='${regReq}'`);
 await as(ids.admin);
 ok((await fails(`SELECT public.staff_review_requirement($1, true, true, true, true, true)`, [regReq]))?.includes('Tick everything'), 'a document cannot be approved until everything that must be on it is ticked');
@@ -620,19 +672,19 @@ await db.exec('SET ROLE authenticated');
 ok(reopened === 1, 'taking a reason away reopens the problem');
 
 console.log('\nPermit numbers owned by outfitters, and the AI reader');
-await as(null);
+await asW(null);
 const o1id = (await q(`SELECT id FROM outfitters WHERE auth_user_id = $1`, [OUT1]))[0].id;
 const o2id = (await q(`SELECT id FROM outfitters WHERE auth_user_id = $1`, [OUT2]))[0].id;
 await db.exec(`UPDATE registered_numbers SET outfitter_id='${o1id}' WHERE kind='ho_permit'`);
-await as(OUT1);
+await asW(OUT1);
 ok((await q(`SELECT count(*)::int n FROM registered_numbers`))[0].n === 1, 'an outfitter sees only their own numbers');
 ok((await fails(`INSERT INTO registered_numbers (kind, holder_name, year, number, outfitter_id) VALUES ('ph_permit','X PH',2026,'N1','${o2id}')`)) !== null, 'an outfitter cannot add numbers for another outfitter');
 ok((await fails(`INSERT INTO registered_numbers (kind, holder_name, year, number, outfitter_id) VALUES ('ho_permit','Someone Else',2026,'N2','${o1id}')`)) !== null, 'an outfitter can only set their own permit number under their own name');
 await db.query(`INSERT INTO registered_numbers (kind, holder_name, year, number, outfitter_id) VALUES ('ph_permit','My PH',2026,'MYPH-1',$1)`, [o1id]);
 ok((await q(`SELECT verified_at FROM registered_numbers WHERE holder_name='My PH'`))[0].verified_at === null, 'a number an outfitter adds starts as not verified');
-await as(OUT2);
+await asW(OUT2);
 ok((await q(`SELECT count(*)::int n FROM registered_numbers`))[0].n === 0, 'another outfitter cannot see them');
-await as(OUT1);
+await asW(OUT1);
 await db.query(`UPDATE registered_numbers SET number='HO-1' WHERE kind='ho_permit'`);
 ok((await q(`SELECT verified_at FROM registered_numbers WHERE kind='ho_permit'`))[0].verified_at !== null, 'saving the same number again does not undo the verification');
 await db.query(`UPDATE registered_numbers SET number='HO-2' WHERE kind='ho_permit'`);
@@ -645,16 +697,16 @@ ok(f2.some(x => x.key === 'header:ho_permit_no' && !x.overridden && x.level === 
 await db.query(`SELECT public.staff_verify_number((SELECT id FROM registered_numbers WHERE kind='ho_permit'))`);
 f2 = await fnd();
 ok(!f2.some(x => x.key === 'header:ho_permit_no' && x.level === 'error'), 'once the workshop verifies the number it passes');
-await as(OUT1);
+await asW(OUT1);
 ok((await fails(`SELECT public.staff_verify_number((SELECT id FROM registered_numbers WHERE kind='ho_permit'))`))?.includes('Only managers'), 'an outfitter cannot verify their own number');
 await as(ids.admin);
 await db.query(`SELECT public.staff_save_ai_reading($1, '{"flags":["The stamp is very faint"],"permit_numbers":["037974"]}'::jsonb)`, [reqId]);
 ok((await fnd()).some(x => x.key.startsWith('ai:') && x.level === 'warn' && x.message.includes('stamp is very faint')), 'what the AI reader noticed shows up as a note');
-await as(ids.worker);
+await asW(ids.worker);
 ok((await fails(`SELECT public.staff_save_ai_reading($1, '{}'::jsonb)`, [reqId]))?.includes('Only managers'), 'a worker cannot save an AI reading');
 
 console.log('\nManagement progress check');
-await as(ids.worker);
+await asW(ids.worker);
 ok((await fails(`SELECT public.staff_review_progress($1, 'on_track')`, [rh]))?.includes('Only management'), 'a worker cannot mark progress');
 await as(ids.mgr);
 ok((await fails(`SELECT public.staff_review_progress($1, 'on_track')`, [rh]))?.includes('Only management'), 'a department manager cannot either: it is management only');
@@ -666,13 +718,13 @@ await db.query(`SELECT public.staff_review_progress($1, 'behind', 'Tannery has n
 const lastR = (await q(`SELECT status, note, held_up_in, reviewed_by_name FROM v_last_progress_review WHERE hunt_id=$1`, [rh]))[0];
 ok(lastR.status === 'behind' && lastR.held_up_in === 'tannery' && lastR.reviewed_by_name === 'Ann Admin', 'the latest check is shown with who made it and where it is held up');
 ok((await q(`SELECT count(*)::int n FROM hunt_progress_reviews WHERE hunt_id=$1`, [rh]))[0].n === 2, 'every check is kept, not overwritten');
-await as(OUT1);
+await asW(OUT1);
 ok((await q(`SELECT count(*)::int n FROM hunt_progress_reviews`))[0].n === 0, 'outfitters cannot see management checks');
 
 console.log('\nMilestone feedback');
-await as(null);
+await asW(null);
 await db.exec(`UPDATE client_hunts SET milestones = '[{"key":"m1","label":"Milestone 1","due_date":"2026-01-01","completed":false},{"key":"m2","label":"Milestone 2","due_date":"2026-03-01","completed":false}]'::jsonb WHERE id='${rh}'`);
-await as(ids.worker);
+await asW(ids.worker);
 ok((await fails(`SELECT public.staff_give_milestone_feedback($1, 'm1', 'yellow', 'x')`, [rh]))?.includes('Only management'), 'a worker cannot give milestone feedback');
 await as(ids.admin);
 ok((await fails(`SELECT public.staff_give_milestone_feedback($1, 'm1', 'yellow', '')`, [rh]))?.includes('holding it up'), 'feedback needs a reason');
@@ -682,19 +734,19 @@ ok((await fails(`SELECT public.staff_give_milestone_feedback($1, 'm1', 'yellow',
 await db.query(`SELECT public.staff_give_milestone_feedback($1, 'm1', 'yellow', 'Skins late from the salt room', 'salting', 'Add a second shift', '2999-01-01')`, [rh]);
 await db.query(`SELECT public.staff_give_milestone_feedback($1, 'm2', 'red', 'Tannery has not returned the skins', 'tannery')`, [rh]);
 ok((await q(`SELECT count(*)::int n FROM milestone_feedback WHERE hunt_id=$1`, [rh]))[0].n === 2, 'each missed milestone gets its own feedback and the history is kept');
-await as(OUT1);
+await asW(OUT1);
 ok((await q(`SELECT count(*)::int n FROM milestone_feedback`))[0].n === 0, 'outfitters cannot see management feedback');
 
 console.log('\nDepartment hand-over');
 const HD = 'e7000000-0000-0000-0000-000000000001';
-await as(null);
+await asW(null);
 await db.exec(`INSERT INTO client_hunts (id, client_id, status) VALUES ('d7000000-0000-0000-0000-000000000001','c0000000-0000-0000-0000-000000000001','active')`);
 await db.exec(`INSERT INTO hunt_documents (id, hunt_id, doc_type, title, status, current_department, form_data) VALUES ('${HD}','d7000000-0000-0000-0000-000000000001','job_card','Handover test','in_progress','receiving','{"species":"Kudu","mount_type":"Full Mount"}')`);
 await db.exec(`UPDATE staff_profiles SET manages_departments = ARRAY['skinning','zzdept','mounting'], works_in = ARRAY['skinning','zzdept','mounting'] WHERE id='${ids.mgr}'`);
 await db.exec(`UPDATE staff_profiles SET works_in = ARRAY['skinning','zzdept'] WHERE id='${ids.worker}'`);
 await db.exec(`UPDATE hunt_documents SET current_department='zzdept' WHERE id='${HD}'`);
 ok((await q(`SELECT count(*)::int n FROM job_card_legs WHERE job_doc_id='${HD}' AND department='zzdept' AND accepted_at IS NULL AND completed_at IS NULL`))[0].n === 1, 'a card entering a department opens a leg that waits to be accepted');
-await as(ids.worker);
+await asW(ids.worker);
 ok((await fails(`SELECT public.job_accept('${HD}')`))?.includes('lead can accept'), 'a department member who is not the lead cannot accept');
 ok((await q(`SELECT jsonb_array_length(public.my_incoming_cards()) n`))[0].n === 0, 'and does not see the card as theirs to accept');
 ok((await fails(`UPDATE hunt_documents SET current_department='zzdept2' WHERE id='${HD}'`))?.includes('Not accepted yet'), 'work cannot be completed on a card that has not been accepted');
@@ -709,25 +761,25 @@ ok((await q(`SELECT count(*)::int n FROM job_card_legs`))[0].n === 0, 'time spen
 await as(ids.admin);
 const leg1 = (await q(`SELECT accepted_by_name, accepted_at IS NOT NULL a FROM job_card_legs WHERE job_doc_id='${HD}' AND department='zzdept'`))[0];
 ok(leg1.accepted_by_name === 'Mo Manager' && leg1.a, 'management sees who accepted it and when');
-await as(ids.worker);
+await asW(ids.worker);
 await db.query(`UPDATE hunt_documents SET current_department='zzdept2' WHERE id='${HD}'`);
 await as(ids.admin);
 const closed = (await q(`SELECT completed_by_name, completed_at IS NOT NULL c FROM job_card_legs WHERE job_doc_id='${HD}' AND department='zzdept'`))[0];
 ok(closed.completed_by_name === 'Wally Worker' && closed.c, 'completing the stage closes the leg with who finished it and when');
 ok((await q(`SELECT count(*)::int n FROM job_card_legs WHERE job_doc_id='${HD}' AND department='zzdept2' AND accepted_at IS NULL`))[0].n === 1, 'and the next department gets the card to accept');
-await as(null);
+await asW(null);
 await db.exec(`UPDATE job_card_legs SET sent_at = now() - interval '30 hours' WHERE job_doc_id='${HD}' AND department='zzdept2'`);
 await as(ids.admin);
 ok((await q(`SELECT count(*)::int n FROM job_card_legs WHERE accepted_at IS NULL AND completed_at IS NULL AND sent_at < now() - interval '24 hours'`))[0].n === 1, 'a card waiting more than 24 hours can be found for the flag');
-await as(null);
+await asW(null);
 await db.exec(`UPDATE staff_profiles SET works_in = ARRAY['skinning','zzdept','zzdept2'] WHERE id='${ids.worker}'`);
-await as(ids.worker);
+await asW(ids.worker);
 await db.query(`SELECT public.job_accept('${HD}')`);
 await as(ids.admin);
 ok((await q(`SELECT count(*)::int n FROM job_card_legs WHERE job_doc_id='${HD}' AND department='zzdept2' AND accepted_at IS NOT NULL`))[0].n === 1, 'a department with no lead can have its own staff accept');
 
 // Mounting needs a photo
-await as(null);
+await asW(null);
 await db.exec(`UPDATE hunt_documents SET current_department='mounting' WHERE id='${HD}'`);
 await as(ids.mgr);
 for (const it of await q(`SELECT id FROM department_checklist_items WHERE dept_key='mounting' AND is_active`)) await db.query(`SELECT public.job_check_item('${HD}', '${it.id}', true)`);
@@ -741,7 +793,7 @@ ok((await q(`SELECT override_reason FROM job_card_legs WHERE job_doc_id='${HD}' 
 
 console.log('\nSoak report and rejection');
 const SK = 'e8000000-0000-0000-0000-000000000001';
-await as(null);
+await asW(null);
 await db.exec(`INSERT INTO hunt_documents (id, hunt_id, doc_type, title, status, current_department, form_data) VALUES ('${SK}','${rh}','job_card','Soak test','in_progress','salting','{"species":"Kudu","mount_type":"Shoulder Mount"}')`);
 await db.exec(`UPDATE staff_profiles SET manages_departments = ARRAY['tannery'], works_in = ARRAY['tannery'] WHERE id='${ids.mgr2}'`);
 await db.exec(`UPDATE hunt_documents SET current_department='tannery' WHERE id='${SK}'`);
@@ -759,7 +811,7 @@ const rep1 = (await q(`SELECT public.soak_submit('${SK}', 'in_house', NULL, $1::
 ok((await fails(`SELECT public.soak_submit('${SK}', 'in_house', NULL, $1::jsonb, 1, NULL, NULL)`, [JSON.stringify(good)]))?.includes('already waiting'), 'only one soak report can wait for a decision at a time');
 for (const it of await q(`SELECT id FROM department_checklist_items WHERE dept_key='tannery' AND is_active`)) await db.query(`SELECT public.job_check_item('${SK}', '${it.id}', true)`);
 ok((await fails(`UPDATE hunt_documents SET current_department='mounting' WHERE id='${SK}'`))?.includes('soak report must be done and accepted'), 'a card cannot leave the tannery without an accepted soak report');
-await as(ids.worker);
+await asW(ids.worker);
 ok((await fails(`SELECT public.soak_review('${rep1}', true)`))?.includes('tannery lead'), 'only the tannery lead or management can accept or reject');
 await as(ids.mgr2);
 ok((await fails(`SELECT public.soak_review('${rep1}', false, NULL)`))?.includes('at least one reason'), 'a rejection needs reasons');
@@ -770,10 +822,10 @@ await as(ids.admin);
 const cs = (await q(`SELECT outfitter_id IS NOT NULL o, outfitter_notified_at IS NOT NULL n, outfitter_ack_at, status, reasons FROM quality_cases WHERE id='${caseId}'`))[0];
 ok(cs.o && cs.n && cs.outfitter_ack_at === null && cs.status === 'open' && cs.reasons.length === 3, 'the case belongs to the hunt\'s outfitter, who is notified and has not yet acknowledged it');
 ok((await q(`SELECT count(*)::int n FROM outfitter_messages WHERE case_id='${caseId}' AND channel='system' AND body LIKE '%Rubbery%'`))[0].n === 1, 'the reasons are put in the case thread for the outfitter');
-await as(OUT2);
+await asW(OUT2);
 ok((await q(`SELECT jsonb_array_length(public.outfitter_cases()) n`))[0].n === 0, 'another outfitter sees nothing of it');
 ok((await fails(`SELECT public.outfitter_ack_case('${caseId}')`))?.includes('not yours'), 'and cannot acknowledge it');
-await as(OUT1);
+await asW(OUT1);
 const oc = (await q(`SELECT public.outfitter_cases() j`))[0].j.find(x => x.id === caseId);
 ok(oc && oc.reasons.includes('Hair slip') && oc.species === 'Kudu' && oc.ack_at === null, 'the outfitter sees the case with the reasons');
 await db.query(`SELECT public.outfitter_ack_case('${caseId}')`);
@@ -783,7 +835,7 @@ await as(ids.admin);
 await db.query(`SELECT public.log_case_whatsapp('${caseId}', 'outfitter', 'On WhatsApp: they can replace it by Friday')`);
 const wa = (await q(`SELECT sender, channel, sender_name FROM outfitter_messages WHERE case_id='${caseId}' AND channel='whatsapp'`))[0];
 ok(wa.sender === 'outfitter' && wa.sender_name.includes('WhatsApp, logged by Ann Admin'), 'what was said on WhatsApp is logged into the case, showing who logged it');
-await as(ids.worker);
+await asW(ids.worker);
 ok((await fails(`SELECT public.case_set_outcome('${caseId}', 'outfitter_replacement')`))?.includes('tannery lead'), 'only the lead or management sets the outcome');
 await as(ids.admin);
 ok((await fails(`SELECT public.case_set_outcome('${caseId}', 'something_else')`))?.includes('three outcomes'), 'the outcome is one of the three');
@@ -807,23 +859,23 @@ ok((await q(`SELECT current_department d FROM hunt_documents WHERE id='${SK}'`))
 console.log('\nRejected skins: telling the client, and the AI recommendation');
 await as(ids.mgr2);
 const SK2 = 'e8000000-0000-0000-0000-000000000002';
-await as(null);
+await asW(null);
 await db.exec(`INSERT INTO hunt_documents (id, hunt_id, doc_type, title, status, current_department, form_data) VALUES ('${SK2}','${rh}','job_card','Soak test 2','in_progress','salting','{"species":"Impala","mount_type":"Shoulder Mount"}')`);
 await db.exec(`UPDATE hunt_documents SET current_department='tannery' WHERE id='${SK2}'`);
 await as(ids.mgr2);
 await db.query(`SELECT public.job_accept('${SK2}')`);
 const rep3 = (await q(`SELECT public.soak_submit('${SK2}', 'in_house', NULL, $1::jsonb, 3, NULL, NULL) id`, [JSON.stringify({ ...good, bullet_damage: true })]))[0].id;
 const case2 = (await q(`SELECT public.soak_review('${rep3}', false, ARRAY['Bullet damage']) id`))[0].id;
-await as(ids.worker);
+await asW(ids.worker);
 ok((await fails(`SELECT public.case_save_recommendation('${case2}', '{}'::jsonb)`))?.includes('tannery lead'), 'only the lead or management can save an AI recommendation');
 await as(ids.mgr2);
 await db.query(`SELECT public.case_save_recommendation('${case2}', '{"recommended_outcome":"outfitter_replacement","reasoning":"The outfitter offered a replacement"}'::jsonb)`);
 ok((await q(`SELECT ai_recommendation->>'recommended_outcome' r, ai_recommended_at IS NOT NULL t FROM quality_cases WHERE id='${case2}'`))[0].r === 'outfitter_replacement', 'the recommendation is kept on the case with its time (the outcome is still chosen by a person)');
 ok((await q(`SELECT outcome FROM quality_cases WHERE id='${case2}'`))[0].outcome === null, 'saving a recommendation does not set the outcome');
 await db.query(`SELECT public.case_set_outcome('${case2}', 'client_decision')`);
-await as(OUT2);
+await asW(OUT2);
 ok((await fails(`SELECT public.outfitter_informed_client('${case2}')`))?.includes('not waiting for you'), 'another outfitter cannot say they told the client');
-await as(OUT1);
+await asW(OUT1);
 await db.query(`SELECT public.outfitter_informed_client('${case2}')`);
 const oc2 = (await q(`SELECT public.outfitter_cases() j`))[0].j.find(x => x.id === case2);
 ok(oc2.client_informed_by === 'outfitter' && oc2.client_informed_at && oc2.outcome_at, 'the outfitter confirms they told the client, stamped with the time');
@@ -844,7 +896,7 @@ const rep4 = (await q(`SELECT public.soak_submit('${SK2}', 'in_house', NULL, $1:
 await db.query(`SELECT public.soak_review('${rep4}', true)`);
 ok((await q(`SELECT status, resolution_note FROM quality_cases WHERE id='${case2}'`))[0].status === 'resolved', 'once the new soak report is accepted the trophy has caught up and the problem is solved');
 // cancel a trophy
-await as(null);
+await asW(null);
 const SK3 = 'e8000000-0000-0000-0000-000000000003';
 await db.exec(`INSERT INTO hunt_documents (id, hunt_id, doc_type, title, status, current_department, form_data) VALUES ('${SK3}','${rh}','job_card','Soak test 3','in_progress','salting','{"species":"Warthog","mount_type":"Shoulder Mount"}')`);
 await db.exec(`UPDATE hunt_documents SET current_department='tannery' WHERE id='${SK3}'`);
@@ -860,7 +912,7 @@ const cn = (await q(`SELECT d.status ds, c.status cs, c.needs_quote_change nq, c
 ok(cn.ds === 'cancelled' && cn.cs === 'resolved' && cn.nq && cn.n === 'Ann Admin', 'cancelling closes the problem, cancels that job card and flags the quote for a credit');
 
 console.log('\nCredit and amend an invoice, hide purchase');
-await as(null);
+await asW(null);
 const QA = 'f1000000-0000-0000-0000-000000000001', QB = 'f1000000-0000-0000-0000-000000000002', QC = 'f1000000-0000-0000-0000-000000000003';
 const L1 = 'f2000000-0000-0000-0000-000000000001', L2 = 'f2000000-0000-0000-0000-000000000002';
 await db.exec(`
@@ -873,7 +925,7 @@ await db.exec(`
  INSERT INTO quotes (id, hunt_id, client_id, status, currency, deposit_percent, amount_due_now) SELECT '${QC}', id, client_id, 'paid', 'USD', 50, 500 FROM client_hunts WHERE id='${rh}';
  INSERT INTO quote_lines (id, quote_id, description, amount, sort_order) VALUES ('f2000000-0000-0000-0000-000000000003','${QC}','Zebra rug',1000,1);
  INSERT INTO quote_payments (quote_id, amount, method) VALUES ('${QC}',1000,'eft');`);
-await as(ids.worker);
+await asW(ids.worker);
 ok((await fails(`SELECT public.staff_amend_quote('${QA}', NULL, '[]'::jsonb, '[]'::jsonb, 'x', 'y')`))?.includes('Only managers'), 'a worker cannot credit or amend an invoice');
 await as(ids.admin);
 ok((await fails(`SELECT public.staff_amend_quote('${QA}', NULL, '[]'::jsonb, '[]'::jsonb, '', 'y')`))?.includes('Say why'), 'a change needs a reason');
@@ -903,7 +955,7 @@ ok((await q(`SELECT status FROM quotes WHERE id='${QB}'`))[0].status === 'deposi
 await db.query(`SELECT public.staff_amend_quote('${QC}', NULL, $1::jsonb, '[]'::jsonb, 'Rug cancelled', 'Agreed by email')`, [JSON.stringify([{ line_id: 'f2000000-0000-0000-0000-000000000003', amount: 400 }])]);
 ok((await q(`SELECT status, (SELECT sum(amount)::float FROM quote_lines WHERE quote_id='${QC}') t FROM quotes WHERE id='${QC}'`))[0].t === 600, 'a credit larger than what is owed leaves the client in credit (total 600, paid 1000)');
 // the ordinary quote builder also takes a hide purchase
-await as(null);
+await asW(null);
 await db.exec(`INSERT INTO client_hunts (id, client_id, status) VALUES ('d7000000-0000-0000-0000-000000000002','c0000000-0000-0000-0000-000000000001','active')`);
 await as(ids.admin);
 const dq = (await q(`SELECT public.staff_save_quote('d7000000-0000-0000-0000-000000000002', 'USD', $1::jsonb, 50, NULL, false) id`, [JSON.stringify([{ description: 'Kudu shoulder mount', amount: 1500 }, { description: 'Hide purchase: Kudu', amount: 400, kind: 'hide_purchase', stock_reference: 'Stock hide K-3' }])]))[0].id;
@@ -915,7 +967,7 @@ await db.query(`UPDATE quality_cases SET needs_job_card_change = true WHERE id='
 
 
 console.log('\nChanging a mount: the skin rules, admin-only edits');
-await as(null);
+await asW(null);
 const M = n => `ee800000-0000-0000-0000-00000000000${n}`;
 await db.exec(`
  INSERT INTO hunt_documents (id, hunt_id, doc_type, title, current_department, status, form_data) VALUES
@@ -932,7 +984,7 @@ ok((await prob('Full Mount', 'Half Mount')) === null && (await prob('Full Mount'
 ok((await prob('Full Mount', 'Flat Skin')) === null && (await prob('Full Mount', 'Rug Mount on Felt')) === null && (await prob('Half Mount', 'Tan Only')) === null && !!(await prob('Half Mount', 'Rug Mount on Felt')), 'a full mount can become a flat skin; a half body or shoulder only a tan or dip and pack');
 ok((await prob('Shoulder Mount', 'Offset Shoulder Mount')) === null && (await prob('Full Mount', 'Euro Skull')) === null && (await prob('Shoulder Mount', 'Tan Only')) === null, 'shoulder styles swap freely, and a skull-only or tan-only is always possible');
 ok(!!(await prob('Shoulder Mount', 'Rug Mount on Felt')) && !!(await prob('Euro Skull', 'Shoulder Mount')), 'a rug needs a flat-cut skin; a kept skull cannot grow a skin');
-await as(ids.worker);
+await asW(ids.worker);
 ok((await fails(`SELECT public.staff_change_mount('${M(2)}', 'Shoulder Mount', 'Client asked')`))?.includes('Only an admin'), 'a worker cannot edit a job card');
 await as(ids.mgr);
 ok((await fails(`SELECT public.staff_change_mount('${M(2)}', 'Shoulder Mount', 'Client asked')`))?.includes('Only an admin'), 'a department lead cannot edit a job card either');
@@ -949,24 +1001,24 @@ ok((await q(`SELECT count(*)::int n FROM client_notifications WHERE title='Your 
 await db.query(`SELECT public.staff_edit_card('${M(2)}', 'Head turned left', '77', 'Client sent new notes')`);
 const ed = (await q(`SELECT form_data FROM hunt_documents WHERE id='${M(2)}'`))[0].form_data;
 ok(ed.instructions === 'Head turned left' && ed.tag_number === '77' && ed.edit_history[0].before.instructions === '' , 'instructions and tag can be edited, and what was there before is kept');
-await as(ids.worker);
+await asW(ids.worker);
 ok((await fails(`SELECT public.staff_edit_card('${M(2)}', 'x', '1', 'y')`))?.includes('Only an admin'), 'a worker cannot edit instructions');
 // a hunter choosing again cannot swap to a bigger mount
-await as(null);
+await asW(null);
 await db.exec(`UPDATE hunt_documents SET started_at = NULL, current_department = 'receiving' WHERE id='${M(1)}'; UPDATE hunt_documents SET form_data = form_data || '{"x":1}' WHERE id='${M(1)}'`);
 await as(HUN2);
 ok((await fails(`SELECT public.hunter_choose_mount('${M(1)}', 'Full Mount')`))?.includes('cannot become a full mount'), 'a hunter who chose a shoulder mount cannot choose a full mount instead');
 await db.query(`SELECT public.hunter_choose_mount('${M(1)}', 'Offset Shoulder Mount')`);
 ok((await q(`SELECT form_data->>'mount_type' m FROM hunt_documents WHERE id='${M(1)}'`))[0].m === 'Offset Shoulder Mount', 'but they can pick another shoulder style');
 // mounted trophies cannot be changed
-await as(null);
+await asW(null);
 await db.exec(`INSERT INTO hunt_documents (id, hunt_id, doc_type, title, current_department, status, form_data) VALUES ('${M(6)}','d1000000-0000-0000-0000-000000000001','job_card','Gemsbok - Shoulder Mount','mounting','in_progress','{"species":"Gemsbok","mount_type":"Shoulder Mount"}'), ('${M(7)}','d1000000-0000-0000-0000-000000000001','job_card','Sable - Shoulder Mount','tannery','in_progress','{"species":"Sable","mount_type":"Shoulder Mount"}')`);
 await as(ids.admin);
 ok((await fails(`SELECT public.staff_change_mount('${M(6)}', 'Euro Skull', 'Client changed his mind')`))?.includes('can no longer be changed'), 'once a trophy is being mounted its mount cannot be changed');
 await db.query(`SELECT public.staff_change_mount('${M(7)}', 'Euro Skull', 'Client changed to a Euro mount; the tan is still paid for')`);
 ok((await q(`SELECT form_data->>'mount_type' m, current_department d FROM hunt_documents WHERE id='${M(7)}'`))[0].m === 'Euro Skull', 'before mounting it can still be changed, for example from a shoulder mount at the tannery to a Euro mount');
 // buying a skin from stock: credit the first mount, close its card, new card for the stock skin
-await as(null);
+await asW(null);
 const QS = 'f9000000-0000-0000-0000-000000000001', LS = 'f9100000-0000-0000-0000-000000000001';
 await db.exec(`
  INSERT INTO quotes (id, hunt_id, client_id, status, currency, deposit_percent, amount_due_now) SELECT '${QS}', id, client_id, 'deposit_paid', 'USD', 50, 500 FROM client_hunts WHERE id='d1000000-0000-0000-0000-000000000001';
@@ -988,7 +1040,7 @@ ok((await q(`SELECT sum(amount)::float t FROM quote_lines WHERE quote_id='${QS}'
 
 
 console.log('\nConversation topics');
-await as(null);
+await asW(null);
 const T1 = (await q(`SELECT id FROM outfitters LIMIT 1`))[0];
 ok(!!T1, 'there is an outfitter to talk to');
 await as(ids.admin);
@@ -1011,7 +1063,7 @@ await db.query(`SELECT public.log_outfitter_conversation($1, 'outfitter', 'phone
 const lg = (await q(`SELECT sender, channel, topic, sender_name FROM outfitter_messages WHERE body LIKE 'He said the permit%'`))[0];
 ok(lg.sender === 'outfitter' && lg.channel === 'phone' && lg.topic === 'documents' && lg.sender_name.includes('phone call'), 'what was said on the phone is written into the conversation on its topic');
 ok((await fails(`SELECT public.log_outfitter_conversation($1, 'outfitter', 'carrier pigeon', 'x')`, [TH]))?.includes('WhatsApp or the phone'), 'only WhatsApp or the phone can be written down');
-await as(ids.worker);
+await asW(ids.worker);
 ok((await fails(`SELECT public.log_outfitter_conversation($1, 'workshop', 'phone', 'x')`, [TH]))?.includes('Only managers'), 'a worker cannot write down a conversation');
 await as(ids.admin);
 
