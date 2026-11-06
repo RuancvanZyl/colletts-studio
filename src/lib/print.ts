@@ -246,7 +246,7 @@ export async function printJobCards(filter: JobPrintFilter): Promise<number> {
 export interface ReceivingPrint {
   clientName: string; clientNumber?: string | null; huntRef?: string; year?: number | string | null; operator?: string | null;
   receivedBy?: string;
-  lines: { species: string; mountType: string; quantity: number; tagNumber: string; instructions: string; status: 'pending' | 'ok' | 'issue'; conditionNotes: string }[];
+  lines: { species: string; mountType: string; quantity: number; tagNumber: string; instructions: string; status: 'pending' | 'ok' | 'issue'; conditionNotes: string; received?: string }[];
 }
 
 export function printReceivingSheet(r: ReceivingPrint): void {
@@ -256,7 +256,7 @@ export function printReceivingSheet(r: ReceivingPrint): void {
     <td style="width:11%">${esc(l.tagNumber)}</td>
     <td style="width:26%">${esc(l.instructions)}</td>
     <td style="width:12%;white-space:nowrap"><span class="tick ${l.status === 'ok' ? 'on' : ''}"></span>OK<br><span class="tick ${l.status === 'issue' ? 'on' : ''}"></span>Issue</td>
-    <td style="width:24%">${esc(l.conditionNotes)}</td>
+    <td style="width:24%">${l.received ? `<div>${esc(l.received)}</div>` : ''}${esc(l.conditionNotes)}</td>
   </tr>`).join('');
   const body = `<section class="page">
     ${head('Receiving Sheet', `${esc(r.huntRef ?? '')}${r.year ? ` · ${esc(r.year)}` : ''}<br>${esc(stamp())}`)}

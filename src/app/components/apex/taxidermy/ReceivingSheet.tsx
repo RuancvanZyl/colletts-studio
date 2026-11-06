@@ -9,6 +9,10 @@ import { getPipeline, DEPT_LABELS } from '../../../../lib/pipeline';
 import { PrintButton } from '../shared/PrintButton';
 import { savePhotos, shrinkPhoto } from '../../../../lib/offline/photos';
 import { printReceivingSheet } from '../../../../lib/print';
+import { ReceivedFields, emptyReceived, receivedOk, receivedMissing, type ReceivedValue } from '../shared/ReceivedFields';
+import { PART_LABEL, listParts, partRecords } from '../../../../lib/received';
+import { conditionSummary } from '../../../../lib/condition';
+import { useDraft } from '../../../../lib/draft';
 import {
   ClipboardList, CheckCircle2, Camera, User, AlertTriangle,
   Package, Clock, ChevronRight, XCircle, Loader2, RefreshCw,
@@ -45,6 +49,9 @@ interface TrophyLine {
   conditionNotes: string;
   intakePhotos: File[];
   photoPreviews: string[];
+  // what physically came in, part by part, and its condition
+  rec: ReceivedValue;
+  expectedParts: string[];   // what the hunter or outfitter said would come
 }
 
 // ── Hunt selection list ───────────────────────────────────────────────────────
@@ -190,6 +197,8 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
   const [huntPhotos, setHuntPhotos] = useState<File[]>([]);
   const [huntPhotoPreviews, setHuntPhotoPreviews] = useState<string[]>([]);
   const huntPhotoRef = useRef<HTMLInputElement>(null);
+  // what has been ticked and typed is kept on this device until the receiving is saved (photos have to be taken again)
+  const [edits, setEdits, dEdits] = useDraft<Record<string, { status: CheckStatus; conditionNotes: string; rec: ReceivedValue }>>(`receiving:${huntId}`, {});
 
   useEffect(() => { loadDocs(); }, [huntId]);
 
@@ -213,6 +222,15 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
 
     const mapped: TrophyLine[] = (docs ?? []).map((d: any) => {
       const fd = d.form_data ?? {};
+      const cr = fd.condition_report ?? {};
+      const state = cr.state ?? fd.condition ?? '';
+      const rec: ReceivedValue = {
+        parts: (fd.received_parts ?? []).map((p: any) => p.code),
+        other: fd.received_other ?? '',
+        condition: state === 'fresh' || state === 'salted' ? state : '',
+        salt: cr.salt ?? '', skull: cr.skull ?? '', issues: cr.issues ?? [],
+      };
+      const saved = edits[d.id];
       return {
         preRegistered: d.status === 'awaiting_arrival',
         docId:             d.id,
@@ -222,10 +240,12 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
         tagNumber:         fd.tag_number ?? '',
         expectedCondition: fd.condition ?? 'unknown',
         instructions:      fd.instructions ?? '',
-        status:            d.current_department !== 'receiving' ? 'ok' : 'pending',
-        conditionNotes:    fd.condition_notes ?? '',
+        status:            saved?.status ?? (d.current_department !== 'receiving' ? 'ok' : 'pending'),
+        conditionNotes:    saved?.conditionNotes ?? fd.condition_notes ?? '',
         intakePhotos:      [],
         photoPreviews:     [],
+        rec:               saved?.rec ?? rec,
+        expectedParts:     (fd.parts ?? []).map((p: any) => p.code).filter(Boolean),
       };
     });
 
@@ -234,7 +254,12 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
   }
 
   function updateLine(idx: number, patch: Partial<TrophyLine>) {
-    setLines(prev => prev.map((l, i) => i === idx ? { ...l, ...patch } : l));
+    const l = lines[idx];
+    if (l && ('status' in patch || 'conditionNotes' in patch || 'rec' in patch)) {
+      const next = { status: patch.status ?? l.status, conditionNotes: patch.conditionNotes ?? l.conditionNotes, rec: patch.rec ?? l.rec };
+      setEdits(e => ({ ...e, [l.docId]: next }));
+    }
+    setLines(prev => prev.map((x, i) => i === idx ? { ...x, ...patch } : x));
   }
 
   function addPhotos(idx: number, files: FileList | null) {
@@ -270,6 +295,12 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
       return;
     }
 
+    const noReason = lines.filter(l => l.status === 'issue' && !l.conditionNotes.trim() && l.rec.issues.length === 0 && l.rec.skull !== 'bad');
+    if (noReason.length > 0) {
+      toast.error(`Say what the issue is for ${noReason.map(l => l.species).join(', ')} (write it in the notes, or tick what you see).`);
+      return;
+    }
+
     setSaving(true);
     try {
       // Arrival photos of the delivery — saved on the device first, uploaded when there is a connection
@@ -296,12 +327,29 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
         const { data: doc } = await (supabase as any)
           .from('hunt_documents').select('form_data').eq('id', line.docId).single();
         const fd = doc?.form_data ?? {};
+        const receivedAt = new Date().toISOString();
+        const num = huntInfo?.client_number ?? 'NEW';
+        const lineNo = lines.indexOf(line) + 1;
+        const keep: any[] = Array.isArray(fd.parts) ? fd.parts : [];
+        const known = new Set(keep.map(p => p.code));
+        // what physically came in, part by part (parts that already have a tag keep it; new ones get one)
+        const received = {
+          received_parts: line.rec.parts.map(code => ({ code, label: PART_LABEL[code] ?? code })),
+          received_other: line.rec.other.trim(),
+          condition: line.rec.condition,
+          condition_report: {
+            state: line.rec.condition, ...(line.rec.condition === 'salted' && line.rec.salt ? { salt: line.rec.salt } : {}),
+            issues: line.rec.issues, ...(line.rec.skull ? { skull: line.rec.skull } : {}), notes: line.conditionNotes.trim(),
+            recorded_by: profile?.full_name ?? '', recorded_at: receivedAt,
+          },
+          parts: [...keep.filter(p => line.rec.parts.includes(p.code)), ...partRecords(num, line.species, lineNo, line.rec.parts.filter(c => !known.has(c)))],
+        };
 
         // No mount chosen yet → just record the condition; the animal stays in Receiving until the hunter decides
         if (/^pending instructions$/i.test(line.mountType.trim()) || !line.mountType) {
           await (supabase as any).from('hunt_documents').update({
             status: line.status === 'issue' ? 'flagged' : 'in_progress',
-            form_data: { ...fd, condition_notes: line.conditionNotes },
+            form_data: { ...fd, ...received, condition_notes: line.conditionNotes },
           }).eq('id', line.docId);
           waitingCount++;
           continue;
@@ -322,6 +370,7 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
           status:             line.status === 'issue' ? 'flagged' : 'in_progress',
           form_data: {
             ...fd,
+            ...received,
             condition_notes:     line.conditionNotes,
             intake_photo_paths:  photoPaths,
             arrival_photo_paths: huntPhotoPaths,
@@ -342,6 +391,7 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
         });
       }
 
+      dEdits.clear();
       toast.success(waitingCount ? `Receiving saved — ${waitingCount} animal${waitingCount > 1 ? 's are' : ' is'} waiting for the hunter to choose a mount` : 'Receiving complete — trophies queued into pipeline');
       onBack();
     } catch (err: any) {
@@ -381,7 +431,8 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
             clientName: huntInfo?.client_name ?? '', clientNumber: huntInfo?.client_number, huntRef: huntInfo?.ref,
             year: huntInfo?.year, operator: huntInfo?.operator, receivedBy: profile?.full_name ?? '',
             lines: lines.map(l => ({ species: l.species, mountType: l.mountType, quantity: l.quantity, tagNumber: l.tagNumber,
-              instructions: l.instructions, status: l.status, conditionNotes: l.conditionNotes })),
+              instructions: l.instructions, status: l.status, conditionNotes: l.conditionNotes,
+              received: [l.rec.parts.length ? `Came in: ${listParts(l.rec.parts, l.rec.other)}` : '', conditionSummary({ state: l.rec.condition, salt: l.rec.condition === 'salted' ? l.rec.salt : undefined, issues: l.rec.issues, skull: l.rec.skull })].filter(Boolean).join('. ') })),
           });
         }} />
       </div>
@@ -441,6 +492,7 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
               line={line}
               onStatus={s => updateLine(idx, { status: s })}
               onNotes={n => updateLine(idx, { conditionNotes: n })}
+              onRec={patch => updateLine(idx, { rec: { ...line.rec, ...patch } })}
               onAddPhotos={files => addPhotos(idx, files)}
               onRemovePhoto={pi => removePhoto(idx, pi)}
             />
@@ -470,11 +522,12 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
 // ── Single trophy check card ──────────────────────────────────────────────────
 
 function TrophyCheckCard({
-  line, onStatus, onNotes, onAddPhotos, onRemovePhoto,
+  line, onStatus, onNotes, onRec, onAddPhotos, onRemovePhoto,
 }: {
   line: TrophyLine;
   onStatus: (s: CheckStatus) => void;
   onNotes: (n: string) => void;
+  onRec: (patch: Partial<ReceivedValue>) => void;
   onAddPhotos: (f: FileList | null) => void;
   onRemovePhoto: (i: number) => void;
 }) {
@@ -513,7 +566,7 @@ function TrophyCheckCard({
         {/* Big status buttons */}
         <div className="flex gap-2 shrink-0">
           <button
-            onClick={() => { onStatus('ok'); setExpanded(false); }}
+            onClick={() => { if (!receivedOk(line.rec)) { toast.error(receivedMissing(line.rec)); setExpanded(true); return; } onStatus('ok'); setExpanded(false); }}
             className={`w-14 h-14 rounded-xl flex flex-col items-center justify-center gap-1 font-bold text-xs transition-all ${
               line.status === 'ok'
                 ? 'bg-green-500 text-white shadow-lg scale-105'
@@ -538,6 +591,9 @@ function TrophyCheckCard({
       {/* Expanded section — notes + photos */}
       {(expanded || line.status !== 'pending') && (
         <div className="px-4 pb-4 space-y-2 border-t border-slate-200 dark:border-slate-700 pt-3">
+          {/* What came in, part by part, and the condition */}
+          <ReceivedFields value={line.rec} expected={line.expectedParts} onChange={onRec} />
+
           {/* Notes */}
           <Textarea
             value={line.conditionNotes}
