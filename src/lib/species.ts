@@ -9,7 +9,7 @@ export type SpeciesGroup =
   | 'Antelope' | 'Buffalo and big game' | 'Pigs and warthogs'
   | 'Predators' | 'Small carnivores' | 'Primates' | 'Small game' | 'Birds' | 'Reptiles' | 'Introduced game';
 
-export interface Species { name: string; sci: string; group: SpeciesGroup; priceKey?: string; aliases?: string[]; variants?: string[] }
+export interface Species { name: string; sci: string; group: SpeciesGroup; priceKey?: string; aliases?: string[]; variants?: string[]; note?: string }
 
 const A = (name: string, sci: string, group: SpeciesGroup, priceKey?: string, aliases?: string[], variants?: string[]): Species => ({ name, sci, group, priceKey, aliases, variants });
 
@@ -21,12 +21,24 @@ export const SPECIES: Species[] = [
   A('Nyala (Mountain)', 'Tragelaphus buxtoni', 'Antelope'),
   A('Eland', 'Taurotragus oryx', 'Antelope', 'Eland', ['Eland (Common)']),
   A('Eland (Giant)', 'Taurotragus derbianus', 'Antelope'),
+  A('Eland (Livingstone\'s)', 'Taurotragus oryx livingstonii', 'Antelope'),
   A('Bushbuck', 'Tragelaphus scriptus', 'Antelope', 'Bushbuck'),
+  A('Bushbuck (Cape)', 'Tragelaphus scriptus sylvaticus', 'Antelope'),
+  A('Bushbuck (Chobe)', 'Tragelaphus scriptus ornatus', 'Antelope'),
+  A('Bushbuck (Limpopo)', 'Tragelaphus scriptus roualeyni', 'Antelope'),
+  A('Bushbuck (Harnessed)', 'Tragelaphus scriptus scriptus', 'Antelope'),
+  A('Bushbuck (Nile)', 'Tragelaphus scriptus bor', 'Antelope'),
+  A('Bushbuck (Menelik\'s)', 'Tragelaphus scriptus meneliki', 'Antelope'),
   A('Sitatunga', 'Tragelaphus spekii', 'Antelope'),
   A('Bongo', 'Tragelaphus eurycerus', 'Antelope'),
   // ── Horse antelope and oryx ──
   A('Sable', 'Hippotragus niger', 'Antelope', 'Sable'),
+  A('Sable (Zambezi)', 'Hippotragus niger kirkii', 'Antelope'),
+  A('Sable (Giant)', 'Hippotragus niger variani', 'Antelope'),
+  A('Sable (Eastern)', 'Hippotragus niger roosevelti', 'Antelope'),
   A('Roan', 'Hippotragus equinus', 'Antelope', undefined, ['Roan Antelope']),
+  A('Roan (Western)', 'Hippotragus equinus koba', 'Antelope'),
+  A('Roan (Eastern)', 'Hippotragus equinus langheldi', 'Antelope'),
   A('Gemsbok', 'Oryx gazella', 'Antelope', 'Gemsbok', undefined, ['Golden']),
   A('Oryx (Beisa)', 'Oryx beisa', 'Antelope'),
   A('Oryx (Fringe-eared)', 'Oryx callotis', 'Antelope'),
@@ -35,16 +47,25 @@ export const SPECIES: Species[] = [
   A('Hartebeest (Lichtenstein\'s)', 'Alcelaphus lichtensteinii', 'Antelope'),
   A('Hartebeest (Coke\'s)', 'Alcelaphus buselaphus cokii', 'Antelope'),
   A('Hartebeest (Jackson\'s)', 'Alcelaphus buselaphus jacksoni', 'Antelope'),
+  A('Hartebeest (Western)', 'Alcelaphus buselaphus major', 'Antelope'),
+  A('Hartebeest (Tora)', 'Alcelaphus buselaphus tora', 'Antelope'),
   A('Hartebeest (Lelwel)', 'Alcelaphus buselaphus lelwel', 'Antelope'),
   A('Tsessebe', 'Damaliscus lunatus lunatus', 'Antelope', 'Tsessebe'),
   A('Topi', 'Damaliscus lunatus jimela', 'Antelope'),
+  A('Tiang', 'Damaliscus lunatus tiang', 'Antelope'),
+  A('Korrigum', 'Damaliscus lunatus korrigum', 'Antelope'),
   A('Blesbok', 'Damaliscus pygargus phillipsi', 'Antelope', 'Blesbok', undefined, ['White', 'Yellow']),
   A('Bontebok', 'Damaliscus pygargus pygargus', 'Antelope', 'Bontebok'),
-  A('Wildebeest (Blue)', 'Connochaetes taurinus', 'Antelope', 'Wildebeest (Blue)', undefined, ['Golden']),
+  A('Wildebeest (Blue)', 'Connochaetes taurinus taurinus', 'Antelope', 'Wildebeest (Blue)', undefined, ['Golden', 'King', 'Royal']),
   A('Wildebeest (Black)', 'Connochaetes gnou', 'Antelope', 'Wildebeest (Black)'),
+  A('Wildebeest (Nyassa)', 'Connochaetes taurinus johnstoni', 'Antelope'),
+  A('Wildebeest (Cookson\'s)', 'Connochaetes taurinus cooksoni', 'Antelope'),
+  A('Wildebeest (Eastern white-bearded)', 'Connochaetes taurinus albojubatus', 'Antelope'),
+  A('Wildebeest (Western white-bearded)', 'Connochaetes taurinus mearnsi', 'Antelope'),
   // ── Waterbuck, lechwe, kob and reedbuck ──
   A('Waterbuck', 'Kobus ellipsiprymnus ellipsiprymnus', 'Antelope', 'Waterbuck', ['Waterbuck (Common)']),
   A('Waterbuck (Defassa)', 'Kobus ellipsiprymnus defassa', 'Antelope'),
+  A('Waterbuck (Crawshay\'s)', 'Kobus ellipsiprymnus crawshayi', 'Antelope'),
   A('Lechwe', 'Kobus leche leche', 'Antelope', 'Lechwe', ['Lechwe (Red)']),
   A('Lechwe (Kafue)', 'Kobus leche kafuensis', 'Antelope'),
   A('Lechwe (Black)', 'Kobus smithemani', 'Antelope'),
@@ -52,17 +73,20 @@ export const SPECIES: Species[] = [
   A('Puku', 'Kobus vardonii', 'Antelope'),
   A('Kob (Uganda)', 'Kobus kob thomasi', 'Antelope'),
   A('Kob (Western)', 'Kobus kob kob', 'Antelope'),
+  A('Kob (White-eared)', 'Kobus kob leucotis', 'Antelope'),
   A('Reedbuck (Common)', 'Redunca arundinum', 'Antelope', 'Reedbuck (Common)'),
   A('Reedbuck (Mountain)', 'Redunca fulvorufula', 'Antelope', 'Reedbuck (Mountain)'),
   A('Reedbuck (Bohor)', 'Redunca redunca', 'Antelope'),
   A('Rhebok (Grey / Vaal)', 'Pelea capreolus', 'Antelope', 'Reedbuck (Vaal)', ['Reedbuck (Vaal)', 'Vaal Rhebok', 'Grey Rhebok']),
   // ── Gazelles, springbok and impala ──
-  A('Impala', 'Aepyceros melampus melampus', 'Antelope', 'Impala', undefined, ['Black', 'White']),
+  A('Impala', 'Aepyceros melampus melampus', 'Antelope', 'Impala', undefined, ['Black', 'White', 'Saddleback']),
   A('Impala (Black-faced)', 'Aepyceros melampus petersi', 'Antelope'),
   A('Springbok', 'Antidorcas marsupialis', 'Antelope', 'Springbok', undefined, ['Black', 'White', 'Copper']),
   A('Gazelle (Thomson\'s)', 'Eudorcas thomsonii', 'Antelope'),
   A('Gazelle (Grant\'s)', 'Nanger granti', 'Antelope'),
   A('Gazelle (Dorcas)', 'Gazella dorcas', 'Antelope'),
+  A('Gazelle (Soemmerring\'s)', 'Nanger soemmerringii', 'Antelope'),
+  A('Gazelle (Red-fronted)', 'Eudorcas rufifrons', 'Antelope'),
   A('Gerenuk', 'Litocranius walleri', 'Antelope'),
   // ── Small antelope ──
   A('Steenbok', 'Raphicerus campestris', 'Antelope', 'Steenbok'),
@@ -74,21 +98,38 @@ export const SPECIES: Species[] = [
   A('Dik-dik (Damara)', 'Madoqua damarensis', 'Antelope'),
   A('Dik-dik (Kirk\'s)', 'Madoqua kirkii', 'Antelope'),
   A('Dik-dik (Guenther\'s)', 'Madoqua guentheri', 'Antelope'),
+  A('Dik-dik (Salt\'s)', 'Madoqua saltiana', 'Antelope'),
   A('Duiker (Common)', 'Sylvicapra grimmia', 'Antelope', 'Duiker', ['Duiker', 'Duiker (Grey)']),
   A('Duiker (Blue)', 'Philantomba monticola', 'Antelope'),
   A('Duiker (Red)', 'Cephalophus natalensis', 'Antelope'),
   A('Duiker (Yellow-backed)', 'Cephalophus silvicultor', 'Antelope'),
   A('Duiker (Bay)', 'Cephalophus dorsalis', 'Antelope'),
   A('Duiker (Harvey\'s)', 'Cephalophus harveyi', 'Antelope'),
+  A('Duiker (Black)', 'Cephalophus niger', 'Antelope'),
+  A('Duiker (Zebra)', 'Cephalophus zebra', 'Antelope'),
+  A('Duiker (Peters\')', 'Cephalophus callipygus', 'Antelope'),
+  A('Duiker (Ogilby\'s)', 'Cephalophus ogilbyi', 'Antelope'),
+  A('Duiker (Black-fronted)', 'Cephalophus nigrifrons', 'Antelope'),
+  A('Duiker (White-bellied)', 'Cephalophus leucogaster', 'Antelope'),
+  A('Duiker (Red-flanked)', 'Cephalophus rufilatus', 'Antelope'),
+  A('Duiker (Maxwell\'s)', 'Philantomba maxwellii', 'Antelope'),
   // ── Buffalo and big game ──
   A('Buffalo (Cape)', 'Syncerus caffer caffer', 'Buffalo and big game', 'Buffalo', ['Buffalo']),
   A('Buffalo (Forest)', 'Syncerus caffer nanus', 'Buffalo and big game'),
   A('Buffalo (Nile)', 'Syncerus caffer aequinoctialis', 'Buffalo and big game'),
   A('Buffalo (West African)', 'Syncerus caffer brachyceros', 'Buffalo and big game'),
   A('Elephant', 'Loxodonta africana', 'Buffalo and big game', 'Elephant'),
+  A('Elephant (Forest)', 'Loxodonta cyclotis', 'Buffalo and big game'),
   A('Hippo', 'Hippopotamus amphibius', 'Buffalo and big game', 'Hippo'),
-  A('Giraffe', 'Giraffa camelopardalis', 'Buffalo and big game', 'Giraffe'),
-  A('Zebra (Burchell\'s)', 'Equus quagga burchellii', 'Buffalo and big game', 'Zebra', ['Zebra', 'Zebra (Cape)'], ['Golden']),
+  A('Giraffe', 'Giraffa camelopardalis giraffa', 'Buffalo and big game', 'Giraffe', ['Giraffe (Southern)', 'Giraffe (Cape)']),
+  A('Giraffe (Angolan)', 'Giraffa camelopardalis angolensis', 'Buffalo and big game'),
+  A('Giraffe (Masai)', 'Giraffa camelopardalis tippelskirchi', 'Buffalo and big game'),
+  A('Giraffe (Reticulated)', 'Giraffa camelopardalis reticulata', 'Buffalo and big game'),
+  A('Zebra (Burchell\'s)', 'Equus quagga burchellii', 'Buffalo and big game', 'Zebra', ['Zebra', 'Zebra (Cape)', 'Zebra (Plains)', 'Plains Zebra', 'Burchell\'s Zebra'], ['Golden']),
+  A('Zebra (Grant\'s)', 'Equus quagga boehmi', 'Buffalo and big game'),
+  A('Zebra (Crawshay\'s)', 'Equus quagga crawshayi', 'Buffalo and big game'),
+  A('Zebra (Chapman\'s)', 'Equus quagga chapmani', 'Buffalo and big game'),
+  A('Zebra (Selous\')', 'Equus quagga selousi', 'Buffalo and big game'),
   A('Zebra (Hartmann\'s Mountain)', 'Equus zebra hartmannae', 'Buffalo and big game'),
   A('Zebra (Cape Mountain)', 'Equus zebra zebra', 'Buffalo and big game'),
   A('Rhinoceros (White)', 'Ceratotherium simum', 'Buffalo and big game'),
@@ -106,7 +147,7 @@ export const SPECIES: Species[] = [
   A('Cheetah', 'Acinonyx jubatus', 'Predators'),
   A('Caracal', 'Caracal caracal', 'Predators', 'Caracal'),
   A('Serval', 'Leptailurus serval', 'Predators', 'Serval'),
-  A('Wild Cat', 'Felis lybica', 'Predators', 'Wild Cat', ['Wild cat (African)']),
+  A('Wild Cat', 'Felis lybica', 'Predators', 'Wild Cat', ['Wild cat (African)', 'African Wild Cat', 'Wildcat']),
   A('Hyena (Spotted)', 'Crocuta crocuta', 'Predators', 'Hyena', ['Hyena']),
   A('Hyena (Brown)', 'Parahyaena brunnea', 'Predators'),
   A('Hyena (Striped)', 'Hyaena hyaena', 'Predators'),
@@ -123,6 +164,12 @@ export const SPECIES: Species[] = [
   A('Aardwolf', 'Proteles cristata', 'Small carnivores'),
   A('Mongoose (Slender)', 'Galerella sanguinea', 'Small carnivores'),
   A('Mongoose (Yellow)', 'Cynictis penicillata', 'Small carnivores'),
+  A('Mongoose (White-tailed)', 'Ichneumia albicauda', 'Small carnivores'),
+  A('Mongoose (Banded)', 'Mungos mungo', 'Small carnivores'),
+  A('Mongoose (Dwarf)', 'Helogale parvula', 'Small carnivores'),
+  A('Mongoose (Water)', 'Atilax paludinosus', 'Small carnivores'),
+  A('Genet (Rusty-spotted)', 'Genetta maculata', 'Small carnivores'),
+  A('Polecat (Striped)', 'Ictonyx striatus', 'Small carnivores'),
   A('Porcupine', 'Hystrix africaeaustralis', 'Small game'),
   A('Springhare', 'Pedetes capensis', 'Small game'),
   A('Hare (Scrub)', 'Lepus saxatilis', 'Small game'),
@@ -133,6 +180,8 @@ export const SPECIES: Species[] = [
   A('Baboon (Chacma)', 'Papio ursinus', 'Primates', 'Baboon', ['Baboon']),
   A('Baboon (Olive)', 'Papio anubis', 'Primates'),
   A('Baboon (Yellow)', 'Papio cynocephalus', 'Primates'),
+  A('Monkey (Samango)', 'Cercopithecus albogularis', 'Primates'),
+  A('Monkey (Blue)', 'Cercopithecus mitis', 'Primates'),
   A('Vervet Monkey', 'Chlorocebus pygerythrus', 'Primates', 'Vervet Monkey'),
   // ── Birds ──
   A('Guineafowl (Helmeted)', 'Numida meleagris', 'Birds'),
@@ -157,6 +206,8 @@ export const SPECIES: Species[] = [
   // ── Introduced game found on game farms ──
   A('Fallow Deer', 'Dama dama', 'Introduced game', 'Fallow Deer', undefined, ['Menil', 'Black', 'White']),
   A('Red Deer', 'Cervus elaphus', 'Introduced game'),
+  A('Sika Deer', 'Cervus nippon', 'Introduced game'),
+  A('Axis Deer', 'Axis axis', 'Introduced game'),
   A('Blackbuck', 'Antilope cervicapra', 'Introduced game'),
   A('Himalayan tahr', 'Hemitragus jemlahicus', 'Introduced game'),
   A('Mouflon', 'Ovis aries musimon', 'Introduced game'),
@@ -165,6 +216,20 @@ export const SPECIES: Species[] = [
   A('Nguni', 'Bos taurus', 'Introduced game'),
   A('Other', '', 'Small game'),
 ];
+
+
+/** Another name people use for the same animal, shown small under the scientific name (also searchable). */
+const NOTES: Record<string, string> = {
+  'Kudu': 'Greater kudu', 'Kudu (Lesser)': 'Lesser kudu',
+  'Eland': 'Common or Cape eland', 'Roan': 'Southern roan', 'Sable': 'Southern sable',
+  'Hartebeest': 'Red hartebeest (Cape)', 'Wildebeest (Blue)': 'Common or southern blue wildebeest. Colours: golden, king, royal', 'Wildebeest (Black)': 'White-tailed gnu',
+  'Zebra (Burchell\'s)': 'Plains zebra', 'Zebra (Grant\'s)': 'Plains zebra', 'Zebra (Crawshay\'s)': 'Plains zebra', 'Zebra (Chapman\'s)': 'Plains zebra', 'Zebra (Selous\')': 'Plains zebra',
+  'Zebra (Hartmann\'s Mountain)': 'Mountain zebra', 'Zebra (Cape Mountain)': 'Mountain zebra',
+  'Waterbuck': 'Common waterbuck', 'Bushbuck': 'Bushbuck (general, price list)',
+  'Giraffe': 'South African (Cape) giraffe', 'Buffalo (Cape)': 'Cape buffalo',
+  'Wild Cat': 'African wild cat', 'Rhebok (Grey / Vaal)': 'Vaal rhebok', 'Hyena (Spotted)': 'Spotted hyena', 'Hyena (Brown)': 'Brown hyena',
+};
+for (const sp of SPECIES) if (NOTES[sp.name]) sp.note = NOTES[sp.name];
 
 export const SPECIES_NAMES = SPECIES.map(s => s.name);
 export const SPECIES_GROUPS: SpeciesGroup[] = ['Antelope', 'Buffalo and big game', 'Pigs and warthogs', 'Predators', 'Small carnivores', 'Primates', 'Small game', 'Birds', 'Reptiles', 'Introduced game'];
@@ -190,3 +255,29 @@ export const variantsOf = (name: string): string[] => { const v = findSpecies(na
 export const findSpecies = (name: string | null | undefined): Species | undefined => (name ? INDEX.get(norm(name)) : undefined);
 /** Scientific name for display ('' when unknown). */
 export const sciName = (name: string | null | undefined): string => findSpecies(name)?.sci ?? '';
+
+/**
+ * What an animal has, which decides its trophy parts: horns, tusks, antlers or none, and the extras people often ask for.
+ * Worked out from the animal's group and name, so every type and variant behaves like its family.
+ */
+export interface AnimalKind { horns: 'horns' | 'tusks' | 'antlers' | 'none'; bigGame: boolean; bigCat: boolean; elephant: boolean; warthog: boolean }
+const BIG_GAME = new Set(['Elephant', 'Hippo', 'Giraffe', 'Kudu', 'Gemsbok', 'Sable', 'Roan', 'Hartebeest', 'Waterbuck', 'Nyala', 'Lion', 'Leopard']);
+const BIG_GAME_FAMILY = ['Buffalo', 'Zebra', 'Wildebeest', 'Eland', 'Elephant', 'Giraffe', 'Sable', 'Roan'];
+const BIG_CATS = new Set(['Lion', 'Leopard', 'Cheetah', 'Caracal', 'Serval', 'Wild Cat']);
+export function animalKind(stored: string | null | undefined): AnimalKind {
+  const sp = findSpecies(stored);
+  const base = sp?.name ?? (stored ?? '');
+  const family = base.split(' (')[0];
+  const tusks = sp?.group === 'Pigs and warthogs' || family === 'Elephant' || family === 'Hippo' || family === 'Baboon';
+  const antlers = sp?.group === 'Introduced game' && /deer/i.test(base);
+  const none = !tusks && !antlers && base !== 'Other' && (!sp
+    ? false
+    : ['Predators', 'Small carnivores', 'Primates', 'Small game', 'Birds', 'Reptiles'].includes(sp.group) || family === 'Ostrich');
+  return {
+    horns: tusks ? 'tusks' : antlers ? 'antlers' : none ? 'none' : 'horns',
+    bigGame: BIG_GAME.has(base) || BIG_GAME.has(family) && !/Lesser/.test(base) || BIG_GAME_FAMILY.includes(family),
+    bigCat: BIG_CATS.has(base) || BIG_CATS.has(family),
+    elephant: family === 'Elephant',
+    warthog: family === 'Warthog',
+  };
+}

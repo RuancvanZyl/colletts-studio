@@ -17,7 +17,7 @@ const POPULAR = ['Kudu', 'Impala', 'Wildebeest (Blue)', 'Zebra (Burchell\'s)', '
 
 function matches(sp: Species, q: string) {
   const t = q.toLowerCase();
-  return sp.name.toLowerCase().includes(t) || sp.sci.toLowerCase().includes(t) || (sp.aliases ?? []).some(a => a.toLowerCase().includes(t));
+  return sp.name.toLowerCase().includes(t) || sp.sci.toLowerCase().includes(t) || (sp.aliases ?? []).some(a => a.toLowerCase().includes(t)) || (sp.note ?? '').toLowerCase().includes(t);
 }
 
 function useCatalogue(query: string, group: string) {
@@ -97,6 +97,7 @@ export function AnimalPicker({ items, onChange, hunted, plain = false }: { items
                 <span className="flex-1 min-w-0">
                   <span className="block font-semibold text-slate-900 dark:text-slate-100 leading-tight">{it.base}</span>
                   <span className="block text-xs italic text-slate-500">{sciName(it.base)}</span>
+                  {findSpecies(it.base)?.note && <span className="block text-xs text-slate-500">{findSpecies(it.base)?.note}</span>}
                 </span>
                 {vars.length > 0 && (
                   <label className="order-last w-full flex items-center gap-2 text-sm font-semibold text-slate-600 dark:text-slate-300 pl-10">Colour
@@ -131,6 +132,7 @@ export function AnimalPicker({ items, onChange, hunted, plain = false }: { items
                 <span className="block pl-3 pr-12 pt-2 pb-3 min-h-[76px]">
                   <span className="block text-base font-bold text-slate-900 dark:text-slate-100 leading-tight">{sp.name}</span>
                   {sp.sci && <span className="block text-[11px] italic text-slate-500 leading-snug mt-0.5">{sp.sci}</span>}
+                  {sp.note && <span className="block text-[11px] text-slate-600 dark:text-slate-400 leading-snug">{sp.note}</span>}
                 </span>
               </button>
               <button type="button" aria-label={`About the ${sp.name}`} onClick={() => setGuide(sp.name)} className="absolute bottom-2 left-2 min-h-9 min-w-9 rounded-full bg-white/90 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 flex items-center justify-center"><Info className="w-4 h-4" /></button>
@@ -172,14 +174,14 @@ export function SpeciesField({ value, onChange, labelClass, fieldClass }: { valu
         <label className={labelClass}>Species *</label>
         <input className={fieldClass} placeholder="Start typing — Kudu, Impala…" value={open ? q : base}
           onFocus={() => { setOpen(true); setQ(''); }} onChange={e => setQ(e.target.value)} onBlur={() => setTimeout(() => setOpen(false), 180)} />
-        {!open && found?.sci && <p className="text-xs italic text-slate-500 mt-1">{found.sci}</p>}
+        {!open && found?.sci && <p className="text-xs italic text-slate-500 mt-1">{found.sci}{found.note ? <span className="not-italic"> · {found.note}</span> : null}</p>}
         {open && (
           <div className="absolute z-20 left-0 right-0 mt-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl max-h-72 overflow-y-auto">
             {hits.map(s => (
               <button key={s.name} type="button" className="w-full text-left px-4 py-2 min-h-12 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-900 dark:text-slate-100"
                 onMouseDown={e => e.preventDefault()} onClick={() => { onChange(s.name); setOpen(false); }}>
                 <span className="block text-base leading-tight">{speciesEmoji(s.name)} {s.name}</span>
-                {s.sci && <span className="block text-xs italic text-slate-500">{s.sci}</span>}
+                {s.sci && <span className="block text-xs italic text-slate-500">{s.sci}{s.note ? <span className="not-italic"> · {s.note}</span> : null}</span>}
               </button>
             ))}
             {q.trim().length > 1 && !hits.some(s => s.name.toLowerCase() === q.trim().toLowerCase()) && (

@@ -1,3 +1,5 @@
+import { animalKind } from './species';
+
 // Trophy parts system
 // Each trophy (animal) is made up of physical parts that must be tracked individually.
 // Parts are determined by species + mount type, plus optional species-specific extras
@@ -12,38 +14,18 @@ export interface TrophyPart {
   description: string;
 }
 
-// Species that have tusks instead of horns
-const TUSK_SPECIES = new Set(['Warthog', 'Elephant', 'Hippo', 'Bushpig', 'Baboon']);
-// Species with antlers (no bone horns, just for naming clarity)
-const ANTLER_SPECIES = new Set(['Fallow Deer']);
-// Species with no horns at all
-const NO_HORN_SPECIES = new Set([
-  'Lion', 'Leopard', 'Cheetah', 'Caracal', 'Serval', 'Wild Cat', 'Genet Cat',
-  'Hyena', 'Jackal', 'Baboon', 'Vervet Monkey', 'Crocodile', 'Ostrich',
-]);
-// Big cats — have a floating (penis) bone, prized for jewellery/curios
-const BIG_CAT_SPECIES = new Set(['Lion', 'Leopard', 'Cheetah', 'Caracal', 'Serval', 'Wild Cat']);
-// Dangerous/plains game big enough that feet, tail and scrotum are commonly requested as extra products
-const BIG_GAME_SPECIES = new Set([
-  'Buffalo', 'Elephant', 'Hippo', 'Giraffe', 'Eland', 'Kudu', 'Gemsbok',
-  'Sable', 'Roan Antelope', 'Wildebeest (Black)', 'Wildebeest (Blue)',
-  'Zebra', 'Hartebeest', 'Waterbuck', 'Nyala', 'Lion', 'Leopard',
-]);
-// Elephant tusks and feet are treated as valuable trophy products in their own right
-const ELEPHANT = 'Elephant';
+// Which animals have horns, tusks, antlers or none (and which get the big-game extras) comes from the animal's family: see animalKind in species.ts.
 
 function hornLabel(species: string): string {
-  if (TUSK_SPECIES.has(species)) return 'Tusks';
-  if (ANTLER_SPECIES.has(species)) return 'Antlers';
-  return 'Horns';
+  const h = animalKind(species).horns;
+  return h === 'tusks' ? 'Tusks' : h === 'antlers' ? 'Antlers' : 'Horns';
 }
 function hornCode(species: string): string {
-  if (TUSK_SPECIES.has(species)) return 'TUSKS';
-  if (ANTLER_SPECIES.has(species)) return 'ANTLERS';
-  return 'HORNS';
+  const h = animalKind(species).horns;
+  return h === 'tusks' ? 'TUSKS' : h === 'antlers' ? 'ANTLERS' : 'HORNS';
 }
 function hasHorns(species: string): boolean {
-  return !NO_HORN_SPECIES.has(species);
+  return animalKind(species).horns !== 'none';
 }
 
 function part(code: string, label: string, opts: Partial<TrophyPart> = {}): TrophyPart {
@@ -75,7 +57,7 @@ function coreParts(species: string, mountType: string): TrophyPart[] {
     if (hasHorns(species)) {
       parts.push(part(hornCode(species), hornLabel(species), { required: true, description: `${hornLabel(species)} for mount` }));
     }
-    if (!NO_HORN_SPECIES.has(species)) {
+    if (hasHorns(species)) {
       parts.push(part('SKULL', 'Skull', { description: 'Skull — required for some full mounts' }));
     }
     parts.push(part('HOOVES', 'Hooves', { description: 'Hooves — include if client wants them on mount' }));
@@ -125,7 +107,7 @@ function coreParts(species: string, mountType: string): TrophyPart[] {
   if (hasHorns(species)) {
     parts.push(part(hornCode(species), hornLabel(species), { required: true, description: `${hornLabel(species)} for mount` }));
   }
-  if (species === 'Warthog') {
+  if (animalKind(species).warthog) {
     parts.push(part('SKULL', 'Skull', { required: true, description: 'Skull with warthog face structure' }));
   }
   if (mt.includes('pedestal')) {
@@ -141,22 +123,23 @@ function coreParts(species: string, mountType: string): TrophyPart[] {
  */
 function extraParts(species: string): TrophyPart[] {
   const extras: TrophyPart[] = [];
+  const k = animalKind(species);
 
-  if (BIG_GAME_SPECIES.has(species) || TUSK_SPECIES.has(species)) {
+  if (k.bigGame || k.horns === 'tusks') {
     extras.push(part('FEET', 'Feet', { leatherOption: true, description: 'Feet for gun rack, lamp base, or stools' }));
     extras.push(part('TAIL', 'Tail', { description: 'Tail — e.g. for a fly whisk or display piece' }));
   }
 
-  if (BIG_GAME_SPECIES.has(species) && !BIG_CAT_SPECIES.has(species)) {
+  if (k.bigGame && !k.bigCat) {
     extras.push(part('SCROTUM', 'Scrotum', { description: 'Scrotum — novelty item, some clients request this be preserved' }));
   }
 
-  if (BIG_CAT_SPECIES.has(species)) {
+  if (k.bigCat) {
     extras.push(part('FLOATBONE', 'Floating Bone', { description: 'Floating (baculum) bone — kept for jewellery or curios' }));
     extras.push(part('CLAWS', 'Claws', { description: 'Claws — for jewellery or a claw necklace' }));
   }
 
-  if (species === ELEPHANT) {
+  if (k.elephant) {
     extras.push(part('TUSKPROD', 'Tusks (as product)', { description: 'Tusks kept separately as a standalone carved/polished product rather than mounted' }));
     extras.push(part('EARS', 'Ears', { leatherOption: true, description: 'Ears — leather work or wall display' }));
     extras.push(part('TAILHAIR', 'Tail Hair', { description: 'Tail hair — for bracelets/jewellery' }));
