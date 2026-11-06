@@ -51,3 +51,12 @@ The app will serve many workshops. Every event must carry the workshop (one key 
 4. Battery life, range, and what a gateway costs. What happens if a gateway is offline?
 5. Is there documentation we can keep, and a test setup we can try before handover?
 6. Who supports it after handover, and at what cost?
+
+## Arrival at the workshop (the "green light" on the receiving sheet)
+1. **On the farm** the outfitter (or the hunter) puts a tag on each animal. The tag id is written against that animal in the hunt registration in Apex (the animal's row), by typing it or scanning it. Apex stores it, so the tag system only has to report which tag ids it sees.
+2. **At the workshop** a gateway covers the receiving area. The first time it sees a registered tag there, it sends the event (zone "Receiving") described above.
+3. **Apex shows a green light** on that animal on the Receiving sheet ("Arrived, seen at 14:20") and tells the hunter and outfitter it has arrived. Staff then do the cross-check: tick the parts, take photos, fill in the condition report. The green light only says "it is here", not "it is checked".
+4. **No tag?** Staff tick the animal in by hand (the sheet works the same without tags).
+5. **Unknown tags:** a tag that arrives but is not registered to any animal goes on a short list "Tags that arrived but are not on any hunt", for staff to match.
+
+What the tag developer needs to provide for this: the event described at the top (tag id, zone, time), the tag id printed on or readable from the tag so it can be typed or scanned on the farm, and a "first seen in zone" event when a tag enters the receiving zone.

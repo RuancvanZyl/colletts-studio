@@ -16,12 +16,12 @@ export const receivedMissing = (v: ReceivedValue) =>
 const label = 'block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1';
 const field = 'w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-3 min-h-11 text-base';
 
-export function ReceivedFields({ value, expected = [], onChange }: { value: ReceivedValue; expected?: string[]; onChange: (patch: Partial<ReceivedValue>) => void }) {
+export function ReceivedFields({ value, expected = [], onChange, showParts = true }: { value: ReceivedValue; expected?: string[]; onChange: (patch: Partial<ReceivedValue>) => void; showParts?: boolean }) {
   const toggle = (code: string) => onChange({ parts: value.parts.includes(code) ? value.parts.filter(c => c !== code) : [...value.parts, code] });
   const notTicked = expected.filter(c => c !== 'OTHER' && !value.parts.includes(c));
   return (
     <div className="space-y-4">
-      <div>
+      {showParts && <div>
         <label className={label}>What came in? Tick every part *</label>
         <div className="flex flex-wrap gap-1.5 mb-2">
           {PART_PRESETS.map(p => <button key={p.label} type="button" className="text-xs font-semibold px-3 min-h-9 rounded-full border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200" onClick={() => onChange({ parts: p.codes })}>{p.label}</button>)}
@@ -41,7 +41,7 @@ export function ReceivedFields({ value, expected = [], onChange }: { value: Rece
         </div>
         {value.parts.includes('OTHER') && <input className={`${field} mt-2`} placeholder="What else came in? (e.g. hide, antlers, bones)" value={value.other} onChange={e => onChange({ other: e.target.value })} />}
         {notTicked.length > 0 && <p className="mt-2 text-sm text-amber-700 dark:text-amber-400">The hunter listed {notTicked.map(c => PART_LABEL[c] ?? c).join(', ')}, but you have not ticked {notTicked.length > 1 ? 'them' : 'it'}. If {notTicked.length > 1 ? 'they did' : 'it did'} not arrive, mark this animal as an Issue and say so in the notes.</p>}
-      </div>
+      </div>}
 
       <div className="rounded-xl border-2 border-slate-300 dark:border-slate-600 p-3 space-y-3">
         <p className="font-bold text-slate-900 dark:text-slate-100">Condition report</p>
@@ -84,4 +84,11 @@ export function ReceivedFields({ value, expected = [], onChange }: { value: Rece
       </div>
     </div>
   );
+}
+
+/** Compare what the client listed with what was ticked. */
+export function crossCheck(expected: string[], ticked: string[], listed: boolean) {
+  const exp = expected.filter(c => c !== 'OTHER');
+  const got = ticked.filter(c => c !== 'OTHER');
+  return { missing: exp.filter(c => !got.includes(c)), extra: listed && exp.length > 0 ? got.filter(c => !exp.includes(c)) : [], listedAny: exp.length > 0 };
 }

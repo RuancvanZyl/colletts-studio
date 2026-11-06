@@ -13,10 +13,13 @@ import { ReceivedFields, emptyReceived, receivedOk, receivedMissing, type Receiv
 import { PART_LABEL, listParts, partRecords } from '../../../../lib/received';
 import { conditionSummary } from '../../../../lib/condition';
 import { useDraft } from '../../../../lib/draft';
+import { ReceivingGrid } from './ReceivingGrid';
+import { SpeciesField } from '../shared/AnimalPicker';
+import { crossCheck } from '../shared/ReceivedFields';
 import {
   ClipboardList, CheckCircle2, Camera, User, AlertTriangle,
   Package, Clock, ChevronRight, XCircle, Loader2, RefreshCw,
-  X, Upload,
+  X, Upload, Plus,
 } from 'lucide-react';
 import { useBack } from '../../../../lib/back';
 
@@ -33,7 +36,7 @@ interface PendingHunt {
   checked_in_at: string;
 }
 
-type CheckStatus = 'pending' | 'ok' | 'issue';
+type CheckStatus = 'pending' | 'ok' | 'issue' | 'later';   // later = part of it is here, the rest follows
 
 interface TrophyLine {
   docId: string;
@@ -52,6 +55,7 @@ interface TrophyLine {
   // what physically came in, part by part, and its condition
   rec: ReceivedValue;
   expectedParts: string[];   // what the hunter or outfitter said would come
+  isNew?: boolean;           // arrived but not on the client's list: a job card is made for it when the receiving is saved
 }
 
 // ── Hunt selection list ───────────────────────────────────────────────────────
@@ -200,6 +204,14 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
   // what has been ticked and typed is kept on this device until the receiving is saved (photos have to be taken again)
   const [edits, setEdits, dEdits] = useDraft<Record<string, { status: CheckStatus; conditionNotes: string; rec: ReceivedValue }>>(`receiving:${huntId}`, {});
 
+  // like the top and bottom of the paper sheet
+  const [delivery, setDelivery, dDelivery] = useDraft<{ deliveredBy: string; brought: '' | 'collected' | 'delivered'; mileage: string; note: string }>(`receiving:${huntId}:delivery`, { deliveredBy: '', brought: '', mileage: '', note: '' });
+  // animals that came but are not on the client's list
+  const [extras, setExtras, dExtras] = useDraft<{ docId: string; species: string }[]>(`receiving:${huntId}:extras`, []);
+  const [view, setView] = useDraft<'sheet' | 'cards'>('receiving:view', 'sheet', 30 * 24 * 3600 * 1000);
+  const [addingExtra, setAddingExtra] = useState(false);
+  const [extraSpecies, setExtraSpecies] = useState('');
+
   useEffect(() => { loadDocs(); }, [huntId]);
 
   async function loadDocs() {
@@ -249,7 +261,12 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
       };
     });
 
-    setLines(mapped);
+    const added: TrophyLine[] = extras.map(x => ({
+      docId: x.docId, species: x.species, mountType: '', quantity: 1, tagNumber: '', expectedCondition: 'unknown', instructions: '', preRegistered: false,
+      status: edits[x.docId]?.status ?? 'pending', conditionNotes: edits[x.docId]?.conditionNotes ?? '', intakePhotos: [], photoPreviews: [],
+      rec: edits[x.docId]?.rec ?? emptyReceived(), expectedParts: [], isNew: true,
+    }));
+    setLines([...mapped, ...added]);
     setLoading(false);
   }
 
@@ -291,7 +308,7 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
   async function saveReceiving() {
     const unconfirmed = lines.filter(l => l.status === 'pending');
     if (unconfirmed.length > 0) {
-      toast.error(`${unconfirmed.length} trophies not yet checked — mark each as OK or Issue`);
+      toast.error(`${unconfirmed.length} animal${unconfirmed.length > 1 ? 's' : ''} not checked yet. Mark each one OK, Issue or To follow.`);
       return;
     }
 
@@ -312,8 +329,20 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
       }
 
       // Process each line
-      let waitingCount = 0;
-      for (const line of lines) {
+      let waitingCount = 0; let laterCount = 0; let madeNew = false;
+      for (const line0 of lines) {
+        let line = line0;
+        if (line0.isNew) {
+          // arrived but not on the client's list: make its job card now
+          const { data: made, error: mkErr } = await (supabase as any).from('hunt_documents').insert({
+            hunt_id: huntId, doc_type: 'job_card', status: 'in_progress', current_department: 'receiving',
+            title: `${line0.species} - Pending Instructions`,
+            form_data: { species: line0.species, mount_type: 'Pending Instructions', quantity: 1, instructions: '' },
+          }).select('id').single();
+          if (mkErr) throw new Error(mkErr.message);
+          line = { ...line0, docId: made.id, mountType: 'Pending Instructions' };
+          madeNew = true;
+        }
         // Per-trophy arrival photos — shown to the client in their tracking view
         const photoPaths: string[] = [];
         if (line.intakePhotos.length && huntInfo?.client_id) {
@@ -345,11 +374,21 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
           parts: [...keep.filter(p => line.rec.parts.includes(p.code)), ...partRecords(num, line.species, lineNo, line.rec.parts.filter(c => !known.has(c)))],
         };
 
+        // Part of it is here and the rest follows: write down what came, keep the card in Receiving
+        if (line.status === 'later') {
+          await (supabase as any).from('hunt_documents').update({
+            status: 'in_progress',
+            form_data: { ...fd, ...received, condition_notes: line.conditionNotes, to_follow: true },
+          }).eq('id', line.docId);
+          laterCount++;
+          continue;
+        }
+
         // No mount chosen yet → just record the condition; the animal stays in Receiving until the hunter decides
         if (/^pending instructions$/i.test(line.mountType.trim()) || !line.mountType) {
           await (supabase as any).from('hunt_documents').update({
             status: line.status === 'issue' ? 'flagged' : 'in_progress',
-            form_data: { ...fd, ...received, condition_notes: line.conditionNotes },
+            form_data: { ...fd, ...received, condition_notes: line.conditionNotes, to_follow: false },
           }).eq('id', line.docId);
           waitingCount++;
           continue;
@@ -391,7 +430,15 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
         });
       }
 
-      dEdits.clear();
+      if (madeNew) await (supabase as any).rpc('start_awaiting_instruction', { p_hunt_id: huntId });
+      // the delivery details (who brought it, collected or delivered, mileage, note); skipped quietly until migration 069 is run
+      await (supabase as any).from('hunt_receivings').insert({
+        hunt_id: huntId, received_by: profile?.id ?? null, received_by_name: profile?.full_name ?? null,
+        delivered_by_name: delivery.deliveredBy.trim() || null, brought_by: delivery.brought || null,
+        mileage_km: delivery.mileage ? Number(delivery.mileage) : null, note: delivery.note.trim() || null, animals_count: lines.length,
+      }).then(() => undefined, () => undefined);
+      dEdits.clear(); dDelivery.clear(); dExtras.clear();
+      if (laterCount) toast.info(`${laterCount} animal${laterCount > 1 ? 's are' : ' is'} only partly here. They stay on the receiving list until the rest arrives.`, { duration: 9000 });
       toast.success(waitingCount ? `Receiving saved — ${waitingCount} animal${waitingCount > 1 ? 's are' : ' is'} waiting for the hunter to choose a mount` : 'Receiving complete — trophies queued into pipeline');
       onBack();
     } catch (err: any) {
@@ -404,13 +451,17 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
   const okCount     = lines.filter(l => l.status === 'ok').length;
   const issueCount  = lines.filter(l => l.status === 'issue').length;
   const pendingCount = lines.filter(l => l.status === 'pending').length;
+  const laterCount   = lines.filter(l => l.status === 'later').length;
+  const extraCount   = lines.filter(l => l.isNew).length;
+  const listedCount  = lines.filter(l => !l.isNew).length;
+  const differences  = lines.filter(l => { if (l.isNew || l.rec.parts.length === 0) return false; const c = crossCheck(l.expectedParts, l.rec.parts, true); return c.listedAny && (c.missing.length > 0 || c.extra.length > 0); }).length;
 
   if (loading) {
     return <div className="flex items-center gap-2 text-slate-400 py-12"><Loader2 className="w-5 h-5 animate-spin" />Loading job cards…</div>;
   }
 
   return (
-    <div className="space-y-5 max-w-2xl">
+    <div className={`space-y-5 ${view === 'sheet' ? 'max-w-6xl' : 'max-w-2xl'}`}>
       {/* Header */}
       <div className="flex items-center gap-3">
         <button onClick={onBack} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
@@ -425,12 +476,15 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
           {pendingCount > 0 && <Badge className="bg-slate-200 text-slate-700">{pendingCount} pending</Badge>}
           {okCount > 0      && <Badge className="bg-green-100 text-green-700">{okCount} OK</Badge>}
           {issueCount > 0   && <Badge className="bg-red-100 text-red-700">{issueCount} issues</Badge>}
+          {laterCount > 0   && <Badge className="bg-amber-100 text-amber-800">{laterCount} to follow</Badge>}
         </div>
         <PrintButton compact label="Print sheet" onPrint={() => {
           printReceivingSheet({
             clientName: huntInfo?.client_name ?? '', clientNumber: huntInfo?.client_number, huntRef: huntInfo?.ref,
             year: huntInfo?.year, operator: huntInfo?.operator, receivedBy: profile?.full_name ?? '',
-            lines: lines.map(l => ({ species: l.species, mountType: l.mountType, quantity: l.quantity, tagNumber: l.tagNumber,
+            deliveredBy: delivery.deliveredBy, brought: delivery.brought, mileage: delivery.mileage, note: delivery.note,
+            lines: lines.map(l => ({ parts: l.rec.parts, other: l.rec.other, visual: conditionSummary({ state: l.rec.condition, salt: l.rec.condition === 'salted' ? l.rec.salt : undefined, issues: l.rec.issues, skull: l.rec.skull }),
+              species: l.species, mountType: l.mountType, quantity: l.quantity, tagNumber: l.tagNumber,
               instructions: l.instructions, status: l.status, conditionNotes: l.conditionNotes,
               received: [l.rec.parts.length ? `Came in: ${listParts(l.rec.parts, l.rec.other)}` : '', conditionSummary({ state: l.rec.condition, salt: l.rec.condition === 'salted' ? l.rec.salt : undefined, issues: l.rec.issues, skull: l.rec.skull })].filter(Boolean).join('. ') })),
           });
@@ -478,12 +532,71 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
         </div>
       )}
 
+      {/* Delivery details — the top and bottom of the paper sheet */}
+      <div className="rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 p-4 space-y-3">
+        <p className="font-bold text-slate-900 dark:text-slate-100">Delivery</p>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300">Delivered by (name)
+            <input className="mt-1 w-full min-h-11 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 text-base font-normal text-slate-900 dark:text-slate-100" value={delivery.deliveredBy} onChange={e => setDelivery(d => ({ ...d, deliveredBy: e.target.value }))} placeholder="Who brought them in?" />
+          </label>
+          <div>
+            <span className="block text-xs font-semibold text-slate-600 dark:text-slate-300">How did they get here?</span>
+            <div className="mt-1 grid grid-cols-2 gap-2">
+              {([['collected', 'We collected them'], ['delivered', 'They were delivered']] as const).map(([v, t]) => (
+                <button key={v} type="button" aria-pressed={delivery.brought === v} onClick={() => setDelivery(d => ({ ...d, brought: d.brought === v ? '' : v }))}
+                  className={`min-h-11 rounded-lg border-2 text-sm font-semibold ${delivery.brought === v ? 'border-green-600 bg-green-600 text-white' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}>{t}</button>
+              ))}
+            </div>
+          </div>
+          {delivery.brought === 'collected' && (
+            <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300">Kilometres driven
+              <input inputMode="decimal" className="mt-1 w-full min-h-11 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 text-base font-normal text-slate-900 dark:text-slate-100" value={delivery.mileage} onChange={e => setDelivery(d => ({ ...d, mileage: e.target.value.replace(/[^0-9.]/g, '') }))} placeholder="e.g. 254" />
+            </label>
+          )}
+          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 sm:col-span-2">Note
+            <input className="mt-1 w-full min-h-11 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 text-base font-normal text-slate-900 dark:text-slate-100" value={delivery.note} onChange={e => setDelivery(d => ({ ...d, note: e.target.value }))} placeholder="For example: skins to follow with the courier" />
+          </label>
+        </div>
+        <p className="text-xs text-slate-500">Received by {profile?.full_name ?? 'you'} on {new Date().toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' })}. The client's own details are on the client's file.</p>
+      </div>
+
+      {/* What the client listed against what came in */}
+      {lines.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3">
+          <p className="flex-1 min-w-[220px] text-sm text-slate-700 dark:text-slate-200">
+            The client listed <strong>{listedCount}</strong> animal{listedCount === 1 ? '' : 's'}.
+            {extraCount > 0 && <> <strong className="text-sky-600 dark:text-sky-300">{extraCount}</strong> came that {extraCount === 1 ? 'is' : 'are'} not on the list.</>}
+            {differences > 0 && <> <strong className="text-amber-600 dark:text-amber-400">{differences}</strong> {differences === 1 ? 'has' : 'have'} parts that do not match what the client listed.</>}
+            {differences === 0 && extraCount === 0 && lines.some(l => l.rec.parts.length > 0) && <> Everything ticked so far matches.</>}
+          </p>
+          <div className="flex gap-1 rounded-lg border border-slate-300 dark:border-slate-600 p-1">
+            {([['sheet', 'Sheet'], ['cards', 'Cards']] as const).map(([v, t]) => (
+              <button key={v} type="button" aria-pressed={view === v} onClick={() => setView(v)} className={`min-h-9 px-3 rounded-md text-sm font-semibold ${view === v ? 'bg-[#0073ea] text-white' : 'text-slate-600 dark:text-slate-300'}`}>{t}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {lines.length === 0 ? (
         <div className="text-center py-10 text-slate-400">
           <Package className="w-10 h-10 mx-auto mb-2 opacity-30" />
           <p>No job cards found for this hunt.</p>
           <p className="text-xs mt-1">Use Arrival Check-In to add trophies first.</p>
         </div>
+      ) : view === 'sheet' ? (
+        <ReceivingGrid
+          lines={lines}
+          onRec={(idx, patch) => updateLine(idx, { rec: { ...lines[idx].rec, ...patch } })}
+          onStatus={(idx, s) => updateLine(idx, { status: s })}
+          onRemove={idx => { const id = lines[idx].docId; setExtras(x => x.filter(e => e.docId !== id)); setLines(prev => prev.filter((_, i) => i !== idx)); }}
+          renderDetails={idx => (
+            <>
+              {lines[idx].instructions && <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded px-2 py-1">The client wrote: {lines[idx].instructions}</p>}
+              <ReceivedFields value={lines[idx].rec} expected={lines[idx].expectedParts} showParts={false} onChange={patch => updateLine(idx, { rec: { ...lines[idx].rec, ...patch } })} />
+              <LineExtras line={lines[idx]} onNotes={n => updateLine(idx, { conditionNotes: n })} onAddPhotos={files => addPhotos(idx, files)} onRemovePhoto={pi => removePhoto(idx, pi)} />
+            </>
+          )}
+        />
       ) : (
         <div className="space-y-3">
           {lines.map((line, idx) => (
@@ -500,6 +613,26 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
         </div>
       )}
 
+      {/* An animal that came but the client did not list */}
+      <div className="rounded-xl border border-dashed border-slate-400 dark:border-slate-600 p-4 space-y-3">
+        {!addingExtra ? (
+          <button type="button" onClick={() => setAddingExtra(true)} className="inline-flex items-center gap-2 text-base font-semibold text-[#0073ea] min-h-11"><Plus className="w-5 h-5" />An animal came that is not on the client's list</button>
+        ) : (
+          <>
+            <SpeciesField value={extraSpecies} onChange={setExtraSpecies} labelClass="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1" fieldClass="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-3 min-h-11 text-base" />
+            <div className="flex gap-2">
+              <button type="button" className="min-h-11 px-4 rounded-lg border border-slate-300 dark:border-slate-600 font-semibold" onClick={() => { setAddingExtra(false); setExtraSpecies(''); }}>Cancel</button>
+              <button type="button" disabled={!extraSpecies.trim()} className="min-h-11 px-4 rounded-lg bg-[#0073ea] text-white font-bold disabled:opacity-50" onClick={() => {
+                const id = `new:${crypto.randomUUID()}`;
+                setExtras(x => [...x, { docId: id, species: extraSpecies.trim() }]);
+                setLines(prev => [...prev, { docId: id, species: extraSpecies.trim(), mountType: '', quantity: 1, tagNumber: '', expectedCondition: 'unknown', instructions: '', preRegistered: false, status: 'pending', conditionNotes: '', intakePhotos: [], photoPreviews: [], rec: emptyReceived(), expectedParts: [], isNew: true }]);
+                setAddingExtra(false); setExtraSpecies('');
+              }}>Add it to the sheet</button>
+            </div>
+          </>
+        )}
+      </div>
+
       {/* Footer action */}
       <div className="sticky bottom-4 pt-4">
         <Button
@@ -511,9 +644,45 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
         >
           {saving ? <><Loader2 className="w-4 h-4 animate-spin" />Saving…</> :
             pendingCount > 0
-              ? `Check all ${pendingCount} remaining trophies first`
+              ? `Check the ${pendingCount} remaining animal${pendingCount > 1 ? 's' : ''} first (OK, Issue or To follow)`
               : <><CheckCircle2 className="w-4 h-4" />Complete Receiving & Queue Trophies</>}
         </Button>
+      </div>
+    </div>
+  );
+}
+
+// ── Notes and photos for one animal ───────────────────────────────────────────
+
+function LineExtras({ line, onNotes, onAddPhotos, onRemovePhoto }: {
+  line: TrophyLine; onNotes: (n: string) => void; onAddPhotos: (f: FileList | null) => void; onRemovePhoto: (i: number) => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  return (
+    <div className="space-y-2">
+      <Textarea
+        value={line.conditionNotes}
+        onChange={e => onNotes(e.target.value)}
+        placeholder={line.status === 'issue' ? 'Describe the issue (required)…' : line.status === 'later' ? 'What is still to come, and how? (for example: skins with the courier)' : 'Notes, for example: hooves on back skin (optional)…'}
+        className="text-sm h-14 resize-none"
+      />
+      <div className="flex gap-2 flex-wrap">
+        {line.photoPreviews.map((src, i) => (
+          <div key={i} className="relative">
+            <img src={src} alt="" className="w-14 h-14 object-cover rounded-lg border" />
+            <button onClick={() => onRemovePhoto(i)} aria-label="Remove photo"
+              className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center">
+              <X className="w-2.5 h-2.5" />
+            </button>
+          </div>
+        ))}
+        <button onClick={() => fileRef.current?.click()}
+          className="w-14 h-14 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg flex flex-col items-center justify-center text-slate-400 hover:border-blue-400 hover:text-blue-400 transition-colors">
+          <Camera className="w-4 h-4" />
+          <span className="text-[10px] mt-0.5">Photo</span>
+        </button>
+        <input ref={fileRef} type="file" accept="image/*" multiple capture="environment"
+          className="hidden" onChange={e => onAddPhotos(e.target.files)} />
       </div>
     </div>
   );
@@ -531,13 +700,14 @@ function TrophyCheckCard({
   onAddPhotos: (f: FileList | null) => void;
   onRemovePhoto: (i: number) => void;
 }) {
-  const fileRef = useRef<HTMLInputElement>(null);
   const [expanded, setExpanded] = useState(line.status === 'pending');
 
   const borderColor =
     line.status === 'ok'    ? 'border-green-400 bg-green-50 dark:bg-green-950/20' :
     line.status === 'issue' ? 'border-red-400 bg-red-50 dark:bg-red-950/20' :
+    line.status === 'later' ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/20' :
                               'border-slate-200 dark:border-slate-700';
+  const btn = (on: boolean, onCls: string, offCls: string) => `w-14 h-14 rounded-xl flex flex-col items-center justify-center gap-1 font-bold text-xs transition-all ${on ? `${onCls} shadow-lg scale-105` : offCls}`;
 
   return (
     <div className={`rounded-xl border-2 transition-all overflow-hidden ${borderColor}`}>
@@ -550,6 +720,7 @@ function TrophyCheckCard({
             {line.preRegistered && (
               <Badge className="text-[10px] bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 border-0">Pre-registered</Badge>
             )}
+            {line.isNew && <Badge className="text-[10px] bg-sky-100 text-sky-700 border-0">Not on the client's list</Badge>}
           </div>
           <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-400 flex-wrap">
             {line.tagNumber && <span className="font-mono">Tag: {line.tagNumber}</span>}
@@ -567,60 +738,31 @@ function TrophyCheckCard({
         <div className="flex gap-2 shrink-0">
           <button
             onClick={() => { if (!receivedOk(line.rec)) { toast.error(receivedMissing(line.rec)); setExpanded(true); return; } onStatus('ok'); setExpanded(false); }}
-            className={`w-14 h-14 rounded-xl flex flex-col items-center justify-center gap-1 font-bold text-xs transition-all ${
-              line.status === 'ok'
-                ? 'bg-green-500 text-white shadow-lg scale-105'
-                : 'bg-green-100 text-green-600 hover:bg-green-200'
-            }`}>
+            className={btn(line.status === 'ok', 'bg-green-500 text-white', 'bg-green-100 text-green-600 hover:bg-green-200')}>
             <CheckCircle2 className="w-6 h-6" />
             OK
           </button>
           <button
             onClick={() => { onStatus('issue'); setExpanded(true); }}
-            className={`w-14 h-14 rounded-xl flex flex-col items-center justify-center gap-1 font-bold text-xs transition-all ${
-              line.status === 'issue'
-                ? 'bg-red-500 text-white shadow-lg scale-105'
-                : 'bg-red-100 text-red-600 hover:bg-red-200'
-            }`}>
+            className={btn(line.status === 'issue', 'bg-red-500 text-white', 'bg-red-100 text-red-600 hover:bg-red-200')}>
             <XCircle className="w-6 h-6" />
             Issue
+          </button>
+          <button
+            onClick={() => { onStatus('later'); setExpanded(true); }}
+            title="Part of it is here, the rest follows"
+            className={btn(line.status === 'later', 'bg-amber-500 text-white', 'bg-amber-100 text-amber-700 hover:bg-amber-200')}>
+            <Clock className="w-6 h-6" />
+            Later
           </button>
         </div>
       </div>
 
-      {/* Expanded section — notes + photos */}
+      {/* Expanded section — what came in, condition, notes + photos */}
       {(expanded || line.status !== 'pending') && (
         <div className="px-4 pb-4 space-y-2 border-t border-slate-200 dark:border-slate-700 pt-3">
-          {/* What came in, part by part, and the condition */}
           <ReceivedFields value={line.rec} expected={line.expectedParts} onChange={onRec} />
-
-          {/* Notes */}
-          <Textarea
-            value={line.conditionNotes}
-            onChange={e => onNotes(e.target.value)}
-            placeholder={line.status === 'issue' ? 'Describe the issue (required)…' : 'Condition notes (optional)…'}
-            className="text-sm h-14 resize-none"
-          />
-
-          {/* Photos */}
-          <div className="flex gap-2 flex-wrap">
-            {line.photoPreviews.map((src, i) => (
-              <div key={i} className="relative">
-                <img src={src} alt="" className="w-14 h-14 object-cover rounded-lg border" />
-                <button onClick={() => onRemovePhoto(i)}
-                  className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center">
-                  <X className="w-2.5 h-2.5" />
-                </button>
-              </div>
-            ))}
-            <button onClick={() => fileRef.current?.click()}
-              className="w-14 h-14 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg flex flex-col items-center justify-center text-slate-400 hover:border-blue-400 hover:text-blue-400 transition-colors">
-              <Camera className="w-4 h-4" />
-              <span className="text-[10px] mt-0.5">Photo</span>
-            </button>
-            <input ref={fileRef} type="file" accept="image/*" multiple capture="environment"
-              className="hidden" onChange={e => onAddPhotos(e.target.files)} />
-          </div>
+          <LineExtras line={line} onNotes={onNotes} onAddPhotos={onAddPhotos} onRemovePhoto={onRemovePhoto} />
         </div>
       )}
     </div>

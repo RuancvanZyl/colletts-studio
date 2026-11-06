@@ -245,34 +245,39 @@ export async function printJobCards(filter: JobPrintFilter): Promise<number> {
 
 export interface ReceivingPrint {
   clientName: string; clientNumber?: string | null; huntRef?: string; year?: number | string | null; operator?: string | null;
-  receivedBy?: string;
-  lines: { species: string; mountType: string; quantity: number; tagNumber: string; instructions: string; status: 'pending' | 'ok' | 'issue'; conditionNotes: string; received?: string }[];
+  receivedBy?: string; deliveredBy?: string; brought?: '' | 'collected' | 'delivered'; mileage?: string; note?: string;
+  lines: { species: string; mountType: string; quantity: number; tagNumber: string; instructions: string; status: 'pending' | 'ok' | 'issue' | 'later'; conditionNotes: string;
+           parts?: string[]; other?: string; visual?: string; received?: string }[];
 }
 
+// the columns of the paper sheet
+const RECEIVING_COLS: [string, string][] = [['SKULL', 'Skull'], ['CAPE', 'Cape'], ['BSKIN', 'B/Skin'], ['FLATSKIN', 'F/Skin'], ['FSKIN', 'FMT/Skin'], ['FEET', 'Feet'],
+  ['LEGBONES', 'Leg bones'], ['SCROTUM', 'Scrotum'], ['TAIL', 'Tail'], ['TUSKS', 'Tusks'], ['PANEL', 'Panel']];
+
 export function printReceivingSheet(r: ReceivingPrint): void {
-  const rows = r.lines.map((l, i) => `<tr>
-    <td style="width:4%">${i + 1}</td>
-    <td><strong>${esc(l.species)}</strong><div class="sub">${esc(l.mountType)}${l.quantity > 1 ? ` × ${esc(l.quantity)}` : ''}</div></td>
-    <td style="width:11%">${esc(l.tagNumber)}</td>
-    <td style="width:26%">${esc(l.instructions)}</td>
-    <td style="width:12%;white-space:nowrap"><span class="tick ${l.status === 'ok' ? 'on' : ''}"></span>OK<br><span class="tick ${l.status === 'issue' ? 'on' : ''}"></span>Issue</td>
-    <td style="width:24%">${l.received ? `<div>${esc(l.received)}</div>` : ''}${esc(l.conditionNotes)}</td>
+  const rows = r.lines.map(l => `<tr>
+    <td><strong>${esc(l.species)}</strong><div class="sub">${esc(l.mountType)}${l.quantity > 1 ? ` × ${esc(l.quantity)}` : ''}${l.tagNumber ? ` · tag ${esc(l.tagNumber)}` : ''}</div></td>
+    ${RECEIVING_COLS.map(([code]) => `<td style="text-align:center;width:4.5%">${(l.parts ?? []).includes(code) ? '&#10003;' : ''}</td>`).join('')}
+    <td style="width:9%">${esc(l.other ?? '')}</td>
+    <td style="width:20%">${esc(l.visual ?? '')}${l.visual && l.conditionNotes ? '<br>' : ''}${esc(l.conditionNotes)}</td>
+    <td style="width:8%;white-space:nowrap"><span class="tick ${l.status === 'ok' ? 'on' : ''}"></span>OK<br><span class="tick ${l.status === 'issue' ? 'on' : ''}"></span>Issue<br><span class="tick ${l.status === 'later' ? 'on' : ''}"></span>Later</td>
   </tr>`).join('');
   const body = `<section class="page">
     ${head('Receiving Sheet', `${esc(r.huntRef ?? '')}${r.year ? ` · ${esc(r.year)}` : ''}<br>${esc(stamp())}`)}
     <table>
       <tr><td class="k">Client</td><td><strong>${esc(r.clientName)}</strong></td><td class="k">Client no.</td><td>${esc(r.clientNumber ?? '') || '—'}</td></tr>
       <tr><td class="k">Outfitter</td><td>${esc(r.operator ?? '') || '—'}</td><td class="k">Date received</td><td>${esc(fmtDate(new Date().toISOString()))}</td></tr>
-      <tr><td class="k">Received by</td><td colspan="3">${esc(r.receivedBy ?? '') || '&nbsp;'}</td></tr>
     </table>
     <h3>Trophies received — ${r.lines.length} item${r.lines.length === 1 ? '' : 's'}</h3>
     <table>
-      <tr><th>#</th><th>Trophy</th><th>Tag</th><th>Client instructions</th><th>Check</th><th>Condition / notes</th></tr>
-      ${rows || '<tr><td colspan="6">No trophies listed</td></tr>'}
+      <tr><th>Species</th>${RECEIVING_COLS.map(([, label]) => `<th style="font-size:8px">${esc(label)}</th>`).join('')}<th>Other</th><th>Visual check / notes</th><th>Check</th></tr>
+      ${rows || `<tr><td colspan="${RECEIVING_COLS.length + 4}">No trophies listed</td></tr>`}
     </table>
-    <h3>Delivery details &amp; notes</h3>
-    <div class="lines"><div></div><div></div><div></div></div>
-    <div class="sig"><div>Received by (name &amp; signature)</div><div>Delivered by (name &amp; signature)</div><div>Date</div></div>
+    <table>
+      <tr><td class="k">Delivered by</td><td>${esc(r.deliveredBy ?? '') || '&nbsp;'}</td><td class="k">Collected / delivered</td><td>${r.brought === 'collected' ? 'Collected by us' : r.brought === 'delivered' ? 'Delivered to us' : '&nbsp;'}</td><td class="k">Mileage km</td><td>${esc(r.mileage ?? '') || '&nbsp;'}</td></tr>
+      <tr><td class="k">Note</td><td colspan="5">${esc(r.note ?? '') || '&nbsp;'}</td></tr>
+    </table>
+    <div class="sig"><div>Received by (${esc(r.receivedBy ?? '')}) — signature</div><div>Delivered by — name &amp; signature</div><div>Date</div></div>
     <div class="foot">Apex Trophy Solutions · receiving sheet · ${esc(r.clientName)}</div>
   </section>`;
   printHtml(`Receiving Sheet — ${r.clientName}`, body);
