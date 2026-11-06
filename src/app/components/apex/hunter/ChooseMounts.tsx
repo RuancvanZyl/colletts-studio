@@ -37,13 +37,13 @@ export function ChooseMounts({ animals, clientType, clientId, combinable = [], o
 }) {
   // the choices are kept on this device while the person works, so a refresh or an update never loses them
   const dKey = 'mounts:' + hashKey(animals.map(a => a.docId));
-  const [i, setI, dStep] = useDraft(dKey + ':step', 0);
+  const [i, setI, dStep] = useDraft(dKey + ':step', 0, undefined, undefined, clientId);
   const [picks, setPicks, dPicks] = useDraft<Record<string, MountPick>>(dKey + ':picks', () => Object.fromEntries(animals.map(a => [a.docId, blank(a)])), undefined, saved => {
     const fresh = Object.fromEntries(animals.map(a => [a.docId, blank(a)])) as Record<string, MountPick>;
     for (const a of animals) { const p = (saved as any)?.[a.docId]; if (p) fresh[a.docId] = { ...fresh[a.docId], ...p, custom: { ...fresh[a.docId].custom, ...(p.custom ?? {}), files: [] }, replica: { ...fresh[a.docId].replica, ...(p.replica ?? {}) } }; }
     return fresh;   // photos cannot be kept: the person adds them again
-  });
-  const [review, setReview, dReview] = useDraft(dKey + ':review', false);
+  }, clientId);
+  const [review, setReview, dReview] = useDraft(dKey + ':review', false, undefined, undefined, clientId);
   const clearWork = () => { dStep.clear(); dPicks.clear(); dReview.clear(); };
   const startAgain = () => { dStep.reset(); dPicks.reset(); dReview.reset(); };
   useBack(review, () => setReview(false));

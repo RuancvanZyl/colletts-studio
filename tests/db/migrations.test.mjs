@@ -27,7 +27,7 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql', '063_mount_change_rules.sql', '064_conversation_topics.sql', '065_mark_done_permission_fix.sql', '066_live_team_messages.sql', '067_push_notifications.sql', '069_hunt_receivings.sql', '070_arrival_alerts.sql', '071_missing_parts_followup.sql']) {
+for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql', '063_mount_change_rules.sql', '064_conversation_topics.sql', '065_mark_done_permission_fix.sql', '066_live_team_messages.sql', '067_push_notifications.sql', '069_hunt_receivings.sql', '070_arrival_alerts.sql', '071_missing_parts_followup.sql', '072_client_drafts.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
@@ -166,6 +166,23 @@ ok((await fails(`SELECT mark_arrived($1, NULL, 'carrier pigeon')`, [arrHunt]))?.
 await as(null);
 await db.query(`UPDATE hunt_documents SET arrived_at=NULL WHERE hunt_id=$1`, [arrHunt]);
 ok((await q(`SELECT mark_arrived($1, NULL, 'tag') n`, [arrHunt]))[0].n >= 1, 'the system itself (the tag function) can mark animals as arrived');
+
+console.log('\nWhat a hunter has typed but not sent');
+await as(null);
+await db.exec(`INSERT INTO auth.users (id, email) VALUES ('b3000000-0000-0000-0000-0000000000d0','draft.hunter@example.com') ON CONFLICT DO NOTHING;
+ INSERT INTO clients (id, full_name, auth_user_id) VALUES ('c9000000-0000-0000-0000-0000000000d0', 'Draft Hunter', 'b3000000-0000-0000-0000-0000000000d0') ON CONFLICT DO NOTHING`);
+const hc = { id: 'c9000000-0000-0000-0000-0000000000d0', auth_user_id: 'b3000000-0000-0000-0000-0000000000d0' };
+await db.exec(`INSERT INTO clients (id, full_name) VALUES ('c9000000-0000-0000-0000-0000000000d1', 'Draft Other Hunter') ON CONFLICT DO NOTHING`);
+const hcOther = { id: 'c9000000-0000-0000-0000-0000000000d1' };
+await as(hc.auth_user_id);
+await db.query(`INSERT INTO client_drafts (client_id, name, data) VALUES ($1, 'mounts:x:picks', '{"a":1}'::jsonb) ON CONFLICT (client_id, name) DO UPDATE SET data = excluded.data`, [hc.id]);
+ok((await q(`SELECT count(*)::int n FROM client_drafts`))[0].n === 1, 'a hunter can keep their unfinished work on the server');
+ok((await fails(`INSERT INTO client_drafts (client_id, name, data) VALUES ($1, 'x', '{}'::jsonb)`, [hcOther.id])) !== null, 'but not for someone else');
+await as(ids.worker);
+ok((await q(`SELECT count(*)::int n FROM client_drafts`))[0].n === 1, 'the workshop can see it');
+ok((await fails(`INSERT INTO client_drafts (client_id, name, data) VALUES ($1, 'y', '{}'::jsonb)`, [hc.id])) !== null, 'but staff cannot write into a hunter\'s drafts');
+await as(null);
+await db.exec(`DELETE FROM client_drafts`);
 
 console.log('\nClient messages');
 await as(ids.worker);

@@ -20,12 +20,12 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 export function AddAnimalsFlow({ clientId, clientType, onClose, onSaved }: { clientId: string; clientType: string; onClose: () => void; onSaved: () => void }) {
   // what the hunter has filled in is kept on this device until the animals are registered
-  const [step, setStep, dStep] = useDraft<'hunt' | 'pick' | 'mounts'>(`add:${clientId}:step`, 'hunt');
+  const [step, setStep, dStep] = useDraft<'hunt' | 'pick' | 'mounts'>(`add:${clientId}:step`, 'hunt', undefined, undefined, clientId);
   useBack(step !== 'hunt', () => setStep(s => (s === 'mounts' ? 'pick' : 'hunt')));
-  const [endDate, setEndDate, dEnd] = useDraft(`add:${clientId}:end`, today());
-  const [startDate, setStartDate, dStart] = useDraft(`add:${clientId}:start`, '');
-  const [operator, setOperator, dOp] = useDraft(`add:${clientId}:operator`, '');
-  const [items, setItems, dItems] = useDraft<PickedAnimal[]>(`add:${clientId}:items`, []);
+  const [endDate, setEndDate, dEnd] = useDraft(`add:${clientId}:end`, today(), undefined, undefined, clientId);
+  const [startDate, setStartDate, dStart] = useDraft(`add:${clientId}:start`, '', undefined, undefined, clientId);
+  const [operator, setOperator, dOp] = useDraft(`add:${clientId}:operator`, '', undefined, undefined, clientId);
+  const [items, setItems, dItems] = useDraft<PickedAnimal[]>(`add:${clientId}:items`, [], undefined, undefined, clientId);
   const clearAll = () => { dStep.clear(); dEnd.clear(); dStart.clear(); dOp.clear(); dItems.clear(); };
   const { animals: existing } = useHunterAnimals();
   const before = collectionOf(existing.map(a => a.species));

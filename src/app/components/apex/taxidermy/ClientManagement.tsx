@@ -23,6 +23,7 @@ import { toast } from 'sonner';
 import { HuntTimeline } from './HuntTimeline';
 import { ClientAttention } from './ClientAttention';
 import { ClientJobCards } from './ClientJobCards';
+import { ClientEntries } from './ClientEntries';
 import { CommunicationPanel } from './CommunicationPanel';
 import { ClientRegistrationForm } from '../shared/ClientRegistrationForm';
 import type { Database } from '../../../../lib/database.types';
@@ -285,7 +286,7 @@ function PassportUploadSection({ clientId }: { clientId: string | null }) {
 }
 
 // ── Detail tabs ───────────────────────────────────────────────────────────────
-type DetailTab = 'info' | 'hunts' | 'photos' | 'messages' | 'jobcards' | 'money';
+type DetailTab = 'info' | 'hunts' | 'photos' | 'messages' | 'jobcards' | 'money' | 'entries';
 
 /** One button per hunt that has an outfitter: the conversation with the outfitter about this client, saved against the hunt. */
 function ClientOutfitterChats({ clientId }: { clientId: string }) {
@@ -327,6 +328,7 @@ function ClientDetailPanel({ client, onEdit, onBack, onOpenQuote }: { client: Cl
 
   const TABS: { key: DetailTab; label: string }[] = [
     { key: 'jobcards', label: 'Job Cards' },
+    { key: 'entries',  label: 'What the client entered' },
     { key: 'money',    label: 'Money' },
     { key: 'hunts',    label: 'Hunts & Docs' },
     { key: 'messages', label: 'Messages' },
@@ -441,6 +443,7 @@ function ClientDetailPanel({ client, onEdit, onBack, onOpenQuote }: { client: Cl
         )}
 
         {tab === 'jobcards' && <ClientJobCards clientId={client.id} />}
+        {tab === 'entries' && <ClientEntries clientId={client.id} />}
         {tab === 'money' && <ClientMoney clientId={client.id} onOpenQuote={onOpenQuote ?? (() => {})} />}
         {tab === 'hunts' && <HuntTimeline clientId={client.id} />}
 

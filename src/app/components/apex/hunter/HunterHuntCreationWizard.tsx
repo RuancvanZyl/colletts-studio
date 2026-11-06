@@ -65,7 +65,7 @@ interface Props {
 
 export function HunterHuntCreationWizard({ clientId, clientName, clientEmail, clientType, onComplete, onCancel }: Props) {
   // what the hunter has filled in is kept on this device until the hunt is submitted
-  const [step, setStep, dStep] = useDraft<Step>(`hunt:${clientId}:step`, 'hunt');
+  const [step, setStep, dStep] = useDraft<Step>(`hunt:${clientId}:step`, 'hunt', undefined, undefined, clientId);
   useBack(step !== 'hunt', () => setStep(s => (s === 'review' ? 'trophies' : 'hunt')));
   const [submitting, setSubmitting] = useState(false);
 
@@ -76,16 +76,16 @@ export function HunterHuntCreationWizard({ clientId, clientName, clientEmail, cl
     farm: '',
     country: '',
     notes: '',
-  });
+  }, undefined, undefined, clientId);
 
-  const [trophies, setTrophies, dTrophies] = useDraft<TrophyEntry[]>(`hunt:${clientId}:trophies`, []);
+  const [trophies, setTrophies, dTrophies] = useDraft<TrophyEntry[]>(`hunt:${clientId}:trophies`, [], undefined, undefined, clientId);
   const [draftTrophy, setDraftTrophy, dDraft] = useDraft<TrophyEntry>(`hunt:${clientId}:draft`, {
     species: '',
     mountType: '',
     quantity: 1,
     instructions: '',
     extras: [],
-  });
+  }, undefined, undefined, clientId);
   const [addingTrophy, setAddingTrophy] = useState(false);
   const clearAll = () => { dStep.clear(); dHunt.clear(); dTrophies.clear(); dDraft.clear(); };
 
