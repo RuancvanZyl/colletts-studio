@@ -197,6 +197,7 @@ function BehindPopup({ h, onClose, onSave }: { h: HuntProgress; onClose: () => v
           <select className={field} value={dept} onChange={e => setDept(e.target.value)}><option value="">Not sure</option>{ALL_DEPARTMENTS.map(d => <option key={d} value={d}>{deptLabel(d)}</option>)}</select></div>
         <div><label className="block text-sm font-semibold text-slate-300 mb-1">What is holding it up?</label>
           <textarea rows={3} className={field} value={note} onChange={e => setNote(e.target.value)} placeholder="For example: skins have not come back from the tannery" autoFocus /></div>
+        {!note.trim() && <p className="text-sm text-amber-300">Write what is holding it up, then the button works.</p>}
         <div className="flex gap-2">
           <button className="min-h-12 px-5 rounded-xl border border-slate-500 text-slate-100 font-semibold" onClick={onClose}>Cancel</button>
           <button className="flex-1 min-h-12 rounded-xl bg-red-600 hover:bg-red-700 text-white text-lg font-bold disabled:opacity-50" disabled={!note.trim()} onClick={() => onSave(note, dept)}>Mark as behind</button>
