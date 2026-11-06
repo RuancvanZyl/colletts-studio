@@ -2,7 +2,9 @@
  * Staff messaging — every message is a permanent record. Only department managers and admins can send;
  * everyone can read what is addressed to them. Sending works offline (queued, sent with the real time).
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { toast } from 'sonner';
+import { useLiveRefresh } from '../liveRefresh';
 import { supabase } from '../supabase';
 import { useAuth } from '../auth';
 import { performAction } from '../offline/outbox';
@@ -30,19 +32,21 @@ export function useStaffMessages() {
   const [reads, setReads] = useState<MessageRead[]>([]);
   const [people, setPeople] = useState<StaffPerson[]>([]);
   const [loading, setLoading] = useState(true);
+  const loadedOnce = useRef(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!loadedOnce.current) setLoading(true);   // spinner on the first load only, so a new message appears quietly
     try {
       const { data: msgs } = await (supabase as any).from('staff_messages').select('*').order('sent_at', { ascending: false }).limit(300);
       const { data: rd } = await (supabase as any).from('staff_message_reads').select('message_id, user_id, read_at, acknowledged')
         .in('message_id', (msgs ?? []).map((m: any) => m.id).slice(0, 300));
       const { data: ppl } = await (supabase as any).from('staff_profiles').select('id, full_name, role, works_in, manages_departments, is_active').eq('is_active', true).order('full_name');
       setMessages(msgs ?? []); setReads(rd ?? []); setPeople(ppl ?? []);
-    } finally { setLoading(false); }
+    } finally { setLoading(false); loadedOnce.current = true; }
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  useLiveRefresh(['staff_messages', 'staff_message_reads'], load);
 
   const myId = profile?.id;
   const myReads = new Set(reads.filter(r => r.user_id === myId).map(r => r.message_id));
@@ -74,6 +78,9 @@ export function useStaffMessages() {
 export function useUnreadMessages(): number {
   const { profile } = useAuth();
   const [n, setN] = useState(0);
+  const seenCount = useRef<number | null>(null);
+  const runRef = useRef<() => void>(() => {});
+  useLiveRefresh(['staff_messages', 'staff_message_reads'], () => runRef.current());
   useEffect(() => {
     if (!profile?.id) return;
     let alive = true;
@@ -84,9 +91,14 @@ export function useUnreadMessages(): number {
         if (mine.length === 0) { if (alive) setN(0); return; }
         const { data: rd } = await (supabase as any).from('staff_message_reads').select('message_id').eq('user_id', profile.id).in('message_id', mine);
         const seen = new Set((rd ?? []).map((r: any) => r.message_id));
-        if (alive) setN(mine.filter((id: string) => !seen.has(id)).length);
+        const count = mine.filter((id: string) => !seen.has(id)).length;
+        if (alive) {
+          if (seenCount.current !== null && count > seenCount.current) toast.info(count - seenCount.current === 1 ? 'You have a new message. Open Messages to read it.' : `You have ${count - seenCount.current} new messages. Open Messages to read them.`, { duration: 8000 });
+          seenCount.current = count; setN(count);
+        }
       } catch { /* offline: keep the last number */ }
     };
+    runRef.current = run;
     run();
     const t = setInterval(run, 60_000);
     const onVis = () => { if (document.visibilityState === 'visible') run(); };

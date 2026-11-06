@@ -226,3 +226,8 @@
 - Staff, outfitters and hunters can now change their own password: "Change my password" (staff: bottom of the left menu; outfitter: Account; hunter: Profile) in `shared/ChangePassword.tsx`.
 - The bulk password script (every @apextrophy.co.za staff account) was run by the owner on 2026-11-05; passwords were handed out, and each person should change theirs with the new button.
 - Today → Needs you no longer lists "animals stuck for far too long" (a department-timer count, 353 on the imported data). It opened the Daily list, which only shows the person's own departments, so it looked empty. Department time is a record for management only; milestones are the clock.
+
+## 2026-11-06 — Team messages arrive live (migration 066)
+- Owner sent a message from Cecilia to Ruan; nothing showed on Ruan's side and no notification. Cause: team messages only reloaded when Messages was reopened, and the Messages badge polled once a minute; there is no phone/push notification yet.
+- Now `useStaffMessages` and `useUnreadMessages` use `useLiveRefresh` (staff_messages, staff_message_reads) and a small pop-up says "You have a new message" when one arrives while the app is open. NEEDS: the owner runs `supabase/launch/release_066_live_team_messages.sql` (publishes `staff_messages`, `staff_message_reads`, `client_messages` for live updates; the check query at the end lists them).
+- Not built: phone/push notifications when the app is closed, e-mail or WhatsApp nudges (needs the sending service).
