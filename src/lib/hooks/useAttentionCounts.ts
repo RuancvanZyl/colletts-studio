@@ -7,8 +7,10 @@ import { useLiveRefresh } from '../liveRefresh';
 export interface AttentionCounts {
   toCheck: number; fromOutfitter: number; unreadChat: number; unverified: number; lateAccept: number;
   notAcked: number; needOutcome: number; clientOverdue: number; heldAside: number;
+  arrivedToCheck: number;   // hunters whose trophies have arrived (tag or button) and still need the condition report
+  missingParts: number;     // animals received with parts missing / still to follow
 }
-const ZERO: AttentionCounts = { toCheck: 0, fromOutfitter: 0, unreadChat: 0, unverified: 0, lateAccept: 0, notAcked: 0, needOutcome: 0, clientOverdue: 0, heldAside: 0 };
+const ZERO: AttentionCounts = { toCheck: 0, fromOutfitter: 0, unreadChat: 0, unverified: 0, lateAccept: 0, notAcked: 0, needOutcome: 0, clientOverdue: 0, heldAside: 0, arrivedToCheck: 0, missingParts: 0 };
 
 export function useAttentionCounts(): AttentionCounts {
   const [c, setC] = useState<AttentionCounts>(ZERO);
@@ -21,7 +23,14 @@ export function useAttentionCounts(): AttentionCounts {
       const { count: late } = await db.from('job_card_legs').select('id', { count: 'exact', head: true }).is('accepted_at', null).is('completed_at', null).lt('sent_at', new Date(Date.now() - 24 * 3_600_000).toISOString());
       const { data: qc } = await db.from('quality_cases').select('status, outfitter_id, outfitter_ack_at, outcome, outcome_at, client_informed_at, order_override_at').neq('status', 'resolved');
       const cases: any[] = qc ?? [];
+      // trophies at the receiving stage: arrived but not checked yet, and animals with parts missing
+      const { data: rc } = await db.from('hunt_documents').select('hunt_id, status, arrived_at, received:form_data->received_parts, tf:form_data->>to_follow, mp:form_data->missing_parts')
+        .eq('doc_type', 'job_card').eq('current_department', 'receiving').in('status', ['awaiting_arrival', 'in_progress', 'flagged']);
+      const atReceiving: any[] = rc ?? [];
+      const arrivedHunts = new Set(atReceiving.filter(x => x.arrived_at && !(Array.isArray(x.received) && x.received.length > 0)).map(x => x.hunt_id));
+      const missing = atReceiving.filter(x => x.tf === 'true' || (x.status === 'flagged' && Array.isArray(x.mp) && x.mp.length > 0)).length;
       setC({
+        arrivedToCheck: arrivedHunts.size, missingParts: missing,
         heldAside: cases.filter(x => x.order_override_at).length,
         clientOverdue: cases.filter(x => { const d = informDaysLeft(x); return d !== null && d < 0; }).length,
         notAcked: cases.filter(x => x.outfitter_id && !x.outfitter_ack_at).length,
@@ -33,6 +42,6 @@ export function useAttentionCounts(): AttentionCounts {
     })().catch(() => {});
   }, []);
   useEffect(() => { load(); }, [load]);
-  useLiveRefresh(['hunt_requirements', 'quality_cases', 'job_card_legs', 'registered_numbers', 'outfitter_messages'], load);
+  useLiveRefresh(['hunt_requirements', 'quality_cases', 'job_card_legs', 'registered_numbers', 'outfitter_messages', 'hunt_documents'], load);
   return c;
 }

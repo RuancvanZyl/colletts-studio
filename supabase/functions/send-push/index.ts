@@ -23,6 +23,23 @@ Deno.serve(async (req) => {
     webpush.setVapidDetails(Deno.env.get('VAPID_SUBJECT') ?? 'mailto:office@apextrophysolutions.com', pub, priv);
 
     const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+    const body = await req.json().catch(() => ({} as any));
+
+    // Trophies arrived: tell the receiving team and the admins that a condition report needs to be done
+    if (body?.kind === 'arrival' && body?.hunt) {
+      const { data: hunt } = await admin.from('client_hunts').select('id, clients(full_name)').eq('id', body.hunt).maybeSingle();
+      const who = (hunt as any)?.clients?.full_name ?? 'A hunter';
+      const { data: staff } = await admin.from('staff_profiles').select('id, role, works_in, manages_departments').eq('is_active', true);
+      const targets = (staff ?? []).filter((p: any) => p.id !== user.id && (['admin', 'studio_manager'].includes(p.role) || (p.works_in ?? []).includes('receiving') || (p.manages_departments ?? []).includes('receiving'))).map((p: any) => p.id);
+      const { data: subs } = targets.length ? await admin.from('push_subscriptions').select('*').in('user_id', targets) : { data: [] as any[] };
+      const payload = JSON.stringify({ title: `${who}: trophies arrived`, body: 'The trophies have arrived. The condition report needs to be done.', tag: 'arrival', url: '/?open=receiving' });
+      let n = 0;
+      await Promise.all((subs ?? []).map(async (s: any) => {
+        try { await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload); n++; }
+        catch (e: any) { if (e?.statusCode === 404 || e?.statusCode === 410) await admin.from('push_subscriptions').delete().eq('id', s.id); }
+      }));
+      return json({ ok: true, sent: n });
+    }
     // only the caller's own recent messages that nobody was told about yet
     const { data: msgs } = await admin.from('staff_messages').select('*')
       .eq('sender_id', user.id).eq('push_sent', false).gte('sent_at', new Date(Date.now() - 3600_000).toISOString());

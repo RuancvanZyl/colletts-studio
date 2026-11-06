@@ -27,7 +27,7 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql', '063_mount_change_rules.sql', '064_conversation_topics.sql', '065_mark_done_permission_fix.sql', '066_live_team_messages.sql', '067_push_notifications.sql', '069_hunt_receivings.sql']) {
+for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql', '063_mount_change_rules.sql', '064_conversation_topics.sql', '065_mark_done_permission_fix.sql', '066_live_team_messages.sql', '067_push_notifications.sql', '069_hunt_receivings.sql', '070_arrival_alerts.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
@@ -152,6 +152,20 @@ ok((await q('SELECT id FROM staff_messages')).length === 2, 'admin sees every st
 await db.query(`SELECT send_staff_message('everyone',NULL,NULL,'Notice','Workshop closes at 15:00 Friday')`);
 await as(ids.other);
 ok((await q(`SELECT id FROM staff_messages WHERE recipient_kind='everyone'`)).length === 1, 'everyone-messages reach every staff member');
+
+console.log('\nArrival of trophies');
+await as(null);
+const arrHunt = (await q(`SELECT hunt_id FROM hunt_documents WHERE doc_type='job_card' LIMIT 1`))[0].hunt_id;
+await db.query(`UPDATE hunt_documents SET current_department='receiving', status='in_progress', arrived_at=NULL WHERE hunt_id=$1 AND doc_type='job_card'`, [arrHunt]);
+await as(ids.worker);
+const marked = (await q(`SELECT mark_arrived($1) n`, [arrHunt]))[0].n;
+ok(marked >= 1, 'staff can mark the animals of a hunt as arrived');
+ok((await q(`SELECT count(*)::int n FROM hunt_documents WHERE hunt_id=$1 AND arrived_at IS NOT NULL AND arrived_via='manual'`, [arrHunt]))[0].n === marked, 'each animal records when it arrived and how');
+ok((await q(`SELECT mark_arrived($1) n`, [arrHunt]))[0].n === 0, 'marking again changes nothing (the first time stays)');
+ok((await fails(`SELECT mark_arrived($1, NULL, 'carrier pigeon')`, [arrHunt]))?.includes('Unknown way'), 'only tag or manual are accepted');
+await as(null);
+await db.query(`UPDATE hunt_documents SET arrived_at=NULL WHERE hunt_id=$1`, [arrHunt]);
+ok((await q(`SELECT mark_arrived($1, NULL, 'tag') n`, [arrHunt]))[0].n >= 1, 'the system itself (the tag function) can mark animals as arrived');
 
 console.log('\nClient messages');
 await as(ids.worker);

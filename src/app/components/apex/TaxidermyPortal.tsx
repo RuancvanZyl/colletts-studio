@@ -316,7 +316,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
   useEffect(() => {
-    const open = (v: string) => { if (v === 'messages') navigateRef.current('messages'); };
+    const open = (v: string) => { if (v === 'messages' || v === 'receiving') navigateRef.current(v); };
     const first = takeOpenRequest();
     if (first) open(first);
     return onOpenRequest(open);

@@ -45,6 +45,8 @@ export function TodayScreen({ onNavigate }: { onNavigate: (view: string, clientI
     { n: toQuote, text: plural(toQuote, 'hunter has chosen their mounts and needs a quote', 'hunters have chosen their mounts and need a quote'), go: 'quotes', tone: 'amber' },
     { n: changes, text: plural(changes, 'hunter asked for changes to their quote', 'hunters asked for changes to their quote'), go: 'quotes', tone: 'red' },
     { n: awaitingPay, text: plural(awaitingPay, 'accepted quote is waiting for payment', 'accepted quotes are waiting for payment'), go: 'quotes', tone: 'amber' },
+    { n: docs.arrivedToCheck, text: plural(docs.arrivedToCheck, 'hunter\'s trophies have arrived and need a condition report', 'hunters\' trophies have arrived and need a condition report'), go: 'receiving', tone: 'red' },
+    { n: docs.missingParts, text: plural(docs.missingParts, 'animal was received with parts missing or still to follow', 'animals were received with parts missing or still to follow'), go: 'receiving', tone: 'amber' },
     { n: docs.toCheck, text: plural(docs.toCheck, 'document has arrived and needs checking', 'documents have arrived and need checking'), go: 'documents', tone: 'amber' },
     { n: docs.unverified, text: plural(docs.unverified, 'permit number from an outfitter needs verifying', 'permit numbers from outfitters need verifying'), go: 'permit-numbers', tone: 'amber' },
     { n: docs.unreadChat, text: plural(docs.unreadChat, 'unread message from an outfitter', 'unread messages from outfitters'), go: 'outfitter-chat', tone: 'amber' },

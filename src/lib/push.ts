@@ -48,6 +48,17 @@ export async function disablePush(): Promise<void> {
   } catch { /* nothing to switch off */ }
 }
 
+/** Trophies have arrived: tell the receiving team and the admins (condition report needed). Never blocks or fails the arrival. */
+export async function tellAboutArrival(huntId: string): Promise<void> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-push`, {
+      method: 'POST', headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'arrival', hunt: huntId }),
+    });
+  } catch { /* the arrival itself is saved; the notification is only a nudge */ }
+}
+
 /** After a message is sent: ask the server to tell the other people's devices. Never blocks or fails the send. */
 export async function tellOthersAboutNewMessages(): Promise<void> {
   try {

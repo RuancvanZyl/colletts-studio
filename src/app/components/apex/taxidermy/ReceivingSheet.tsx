@@ -13,6 +13,9 @@ import { ReceivedFields, emptyReceived, receivedOk, receivedMissing, type Receiv
 import { PART_LABEL, listParts, partRecords } from '../../../../lib/received';
 import { conditionSummary } from '../../../../lib/condition';
 import { useDraft } from '../../../../lib/draft';
+import { tellAboutArrival } from '../../../../lib/push';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
+import { PART_LABEL as PL } from '../../../../lib/received';
 import { ReceivingGrid } from './ReceivingGrid';
 import { SpeciesField } from '../shared/AnimalPicker';
 import { crossCheck } from '../shared/ReceivedFields';
@@ -34,6 +37,7 @@ interface PendingHunt {
   client_email: string | null;
   operator: string | null;
   checked_in_at: string;
+  arrivedAt?: string | null;   // when the tag was seen or someone pressed "Trophies have arrived"
 }
 
 type CheckStatus = 'pending' | 'ok' | 'issue' | 'later';   // later = part of it is here, the rest follows
@@ -55,6 +59,7 @@ interface TrophyLine {
   // what physically came in, part by part, and its condition
   rec: ReceivedValue;
   expectedParts: string[];   // what the hunter or outfitter said would come
+  moved?: boolean;           // already past Receiving (received earlier): no missing-parts alerts
   isNew?: boolean;           // arrived but not on the client's list: a job card is made for it when the receiving is saved
 }
 
@@ -80,7 +85,7 @@ export function ReceivingSheet({ onNavigate }: { onNavigate: (v: string) => void
       for (let from = 0; from < 5000; from += 1000) {
         let q = (supabase as any)
           .from('hunt_documents')
-          .select('hunt_id, client_hunts(id, year, client_type, operator, created_at, status, clients(full_name, client_number, email))')
+          .select('hunt_id, arrived_at, client_hunts(id, year, client_type, operator, created_at, status, clients(full_name, client_number, email))')
           .eq('doc_type', 'job_card');
         q = tab === 'pending'
           ? q.in('status', ['awaiting_arrival', 'in_progress']).eq('current_department', 'receiving')
@@ -91,6 +96,8 @@ export function ReceivingSheet({ onNavigate }: { onNavigate: (v: string) => void
         if (!data || data.length < 1000) break;
       }
 
+      const arrivedBy: Record<string, string> = {};
+      for (const r of rows) if (r.arrived_at && (!arrivedBy[r.hunt_id] || r.arrived_at < arrivedBy[r.hunt_id])) arrivedBy[r.hunt_id] = r.arrived_at;
       const seen = new Set<string>();
       const mapped: PendingHunt[] = [];
       for (const r of rows) {
@@ -106,9 +113,11 @@ export function ReceivingSheet({ onNavigate }: { onNavigate: (v: string) => void
           client_email:  h.clients?.email ?? null,
           operator:      h.operator ?? null,
           checked_in_at: h.created_at,
+          arrivedAt:     arrivedBy[h.id] ?? null,
         });
       }
-      mapped.sort((a, b) => a.client_name.localeCompare(b.client_name));
+      // trophies that have arrived and wait for their condition report come first
+      mapped.sort((a, b) => (a.arrivedAt ? 0 : 1) - (b.arrivedAt ? 0 : 1) || a.client_name.localeCompare(b.client_name));
 
       if (tab === 'pending') setHunts(mapped);
       else setReceived(mapped);
@@ -180,6 +189,7 @@ export function ReceivingSheet({ onNavigate }: { onNavigate: (v: string) => void
                   {hunt.client_type === 'local' && <Badge className="text-[10px] bg-green-100 text-green-700">Local</Badge>}
                 </div>
                 {hunt.operator && <p className="text-xs text-slate-400">{hunt.operator}</p>}
+                {hunt.arrivedAt && tab === 'pending' && <p className="text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1.5 mt-0.5"><span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500" />Arrived {new Date(hunt.arrivedAt).toLocaleString('en-ZA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}. Condition report needed</p>}
               </div>
               <ChevronRight className="w-4 h-4 text-slate-300 shrink-0" />
             </button>
@@ -209,6 +219,9 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
   // animals that came but are not on the client's list
   const [extras, setExtras, dExtras] = useDraft<{ docId: string; species: string }[]>(`receiving:${huntId}:extras`, []);
   const [view, setView] = useDraft<'sheet' | 'cards'>('receiving:view', 'sheet', 30 * 24 * 3600 * 1000);
+  const [arrival, setArrival] = useState<{ at: string; via: string } | null>(null);
+  const [missingAsk, setMissingAsk] = useState<{ docId: string; species: string; missing: string[] }[] | null>(null);
+  const [neverSent, setNeverSent] = useState<Set<string>>(new Set());
   const [addingExtra, setAddingExtra] = useState(false);
   const [extraSpecies, setExtraSpecies] = useState('');
 
@@ -227,7 +240,7 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
     // Job cards: awaiting_arrival (pre-registered export) + in_progress at receiving
     const { data: docs } = await (supabase as any)
       .from('hunt_documents')
-      .select('id, title, form_data, current_department, status')
+      .select('id, title, form_data, current_department, status, arrived_at, arrived_via')
       .eq('hunt_id', huntId)
       .eq('doc_type', 'job_card')
       .in('status', ['awaiting_arrival', 'in_progress']);
@@ -258,9 +271,12 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
         photoPreviews:     [],
         rec:               saved?.rec ?? rec,
         expectedParts:     (fd.parts ?? []).map((p: any) => p.code).filter(Boolean),
+        moved:             d.current_department !== 'receiving',
       };
     });
 
+    const arrivedDocs = (docs ?? []).filter((d: any) => d.arrived_at).sort((a: any, b: any) => (a.arrived_at < b.arrived_at ? -1 : 1));
+    setArrival(arrivedDocs.length ? { at: arrivedDocs[0].arrived_at, via: arrivedDocs[0].arrived_via ?? 'manual' } : null);
     const added: TrophyLine[] = extras.map(x => ({
       docId: x.docId, species: x.species, mountType: '', quantity: 1, tagNumber: '', expectedCondition: 'unknown', instructions: '', preRegistered: false,
       status: edits[x.docId]?.status ?? 'pending', conditionNotes: edits[x.docId]?.conditionNotes ?? '', intakePhotos: [], photoPreviews: [],
@@ -309,6 +325,13 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
     const unconfirmed = lines.filter(l => l.status === 'pending');
     if (unconfirmed.length > 0) {
       toast.error(`${unconfirmed.length} animal${unconfirmed.length > 1 ? 's' : ''} not checked yet. Mark each one OK, Issue or To follow.`);
+      return;
+    }
+
+    // something is missing but the animal is marked OK: ask what it is before saving
+    const okButMissing = lines.filter(l => l.status === 'ok' && missingFor(l).length > 0 && !neverSent.has(l.docId));
+    if (okButMissing.length > 0 && !missingAsk) {
+      setMissingAsk(okButMissing.map(l => ({ docId: l.docId, species: l.species, missing: missingFor(l) })));
       return;
     }
 
@@ -371,6 +394,7 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
             issues: line.rec.issues, ...(line.rec.skull ? { skull: line.rec.skull } : {}), notes: line.conditionNotes.trim(),
             recorded_by: profile?.full_name ?? '', recorded_at: receivedAt,
           },
+          missing_parts: missingFor(line),
           parts: [...keep.filter(p => line.rec.parts.includes(p.code)), ...partRecords(num, line.species, lineNo, line.rec.parts.filter(c => !known.has(c)))],
         };
 
@@ -448,6 +472,29 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
     }
   }
 
+  // the trophies are here: tell the receiving team and the admins (the same alert a tag will raise)
+  async function markArrived() {
+    const { error } = await (supabase as any).rpc('mark_arrived', { p_hunt: huntId, p_doc: null, p_via: 'manual' });
+    if (error) { toast.error(error.message); return; }
+    setArrival({ at: new Date().toISOString(), via: 'manual' });
+    void tellAboutArrival(huntId);
+    toast.success('The receiving team and the admins have been told that the trophies arrived.');
+  }
+  const [saveSoon, setSaveSoon] = useState(false);
+  useEffect(() => { if (saveSoon) { setSaveSoon(false); saveReceiving(); } }, [saveSoon]);
+  function answerMissing(choice: 'later' | 'issue' | 'never' | 'back') {
+    const ask = missingAsk ?? [];
+    setMissingAsk(null);
+    if (choice === 'back') return;
+    if (choice === 'never') setNeverSent(prev => new Set([...prev, ...ask.map(a => a.docId)]));
+    else for (const a of ask) { const i = lines.findIndex(l => l.docId === a.docId); if (i >= 0) updateLine(i, { status: choice }); }
+    setSaveSoon(true);
+  }
+
+  // parts the client listed that were not ticked, for animals that have been looked at
+  const missingFor = (l: TrophyLine) => (l.isNew || l.moved ? [] : l.expectedParts.filter(c => c !== 'OTHER' && !l.rec.parts.includes(c)));
+  const lookedAt = (l: TrophyLine) => l.status !== 'pending' || l.rec.parts.length > 0;
+  const missingRows = lines.filter(l => lookedAt(l) && missingFor(l).length > 0 && !neverSent.has(l.docId));
   const okCount     = lines.filter(l => l.status === 'ok').length;
   const issueCount  = lines.filter(l => l.status === 'issue').length;
   const pendingCount = lines.filter(l => l.status === 'pending').length;
@@ -490,6 +537,34 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
           });
         }} />
       </div>
+
+      {/* Arrival: the green light (a tag will switch it on by itself; until then a person can) */}
+      {lines.length > 0 && (arrival ? (
+        <div className="rounded-xl border-2 border-green-500 bg-green-50 dark:bg-green-950/30 px-4 py-3 flex items-center gap-3">
+          <span className="inline-block w-4 h-4 rounded-full bg-green-500 shrink-0" />
+          <p className="text-sm text-green-900 dark:text-green-200">
+            <strong>Arrived</strong> {new Date(arrival.at).toLocaleString('en-ZA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} {arrival.via === 'tag' ? '(the tag was seen at the workshop)' : '(marked by hand)'}.
+            {pendingCount > 0 && ' The condition report needs to be done: tick the parts that came in and fill in the condition for each animal.'}
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 flex items-center gap-3 flex-wrap">
+          <span className="inline-block w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600 shrink-0" />
+          <p className="flex-1 min-w-[200px] text-sm text-slate-700 dark:text-slate-200">Not marked as arrived yet. When the trophies are here, press the button so the receiving team and the admins know a condition report is needed.</p>
+          <button type="button" onClick={markArrived} className="min-h-11 px-4 rounded-lg bg-green-600 hover:bg-green-700 text-white font-bold">Trophies have arrived</button>
+        </div>
+      ))}
+
+      {/* Something is missing */}
+      {missingRows.length > 0 && (
+        <div role="alert" className="rounded-xl border-2 border-red-500 bg-red-50 dark:bg-red-950/30 p-4 space-y-1.5">
+          <p className="font-bold text-red-800 dark:text-red-200 flex items-center gap-2"><AlertTriangle className="w-5 h-5" />Something is missing</p>
+          <ul className="text-sm text-red-900 dark:text-red-100 list-disc pl-5">
+            {missingRows.map(l => <li key={l.docId}><strong>{l.species}</strong>: {missingFor(l).map(c => PL[c] ?? c).join(', ')}</li>)}
+          </ul>
+          <p className="text-sm text-red-800 dark:text-red-200">The client listed these parts, but they are not ticked. If they did not arrive, mark the animal <strong>Issue</strong> or <strong>To follow</strong>.</p>
+        </div>
+      )}
 
       {/* Hunt-level arrival photos */}
       <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
@@ -632,6 +707,26 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
           </>
         )}
       </div>
+
+      {/* Saving with parts missing: ask what to do */}
+      {missingAsk && (
+        <Dialog open onOpenChange={(o: boolean) => { if (!o) answerMissing('back'); }}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader><DialogTitle className="text-xl">Parts are missing</DialogTitle></DialogHeader>
+            <p className="text-sm text-slate-600 dark:text-slate-300">These animals are marked OK, but the client listed parts that are not ticked:</p>
+            <ul className="text-sm list-disc pl-5 text-slate-800 dark:text-slate-100">
+              {missingAsk.map(a => <li key={a.docId}><strong>{a.species}</strong>: {a.missing.map(c => PL[c] ?? c).join(', ')}</li>)}
+            </ul>
+            <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">What happened?</p>
+            <div className="grid gap-2">
+              <button type="button" className="min-h-12 rounded-xl bg-amber-500 text-white font-bold px-4" onClick={() => answerMissing('later')}>The rest is still coming: mark To follow</button>
+              <button type="button" className="min-h-12 rounded-xl bg-red-600 text-white font-bold px-4" onClick={() => answerMissing('issue')}>Something is wrong or lost: mark Issue</button>
+              <button type="button" className="min-h-12 rounded-xl border-2 border-slate-400 font-semibold px-4 text-slate-800 dark:text-slate-100" onClick={() => answerMissing('never')}>They were never sent. Keep OK and save</button>
+              <button type="button" className="min-h-12 rounded-xl border border-slate-300 dark:border-slate-600 font-semibold px-4 text-slate-600 dark:text-slate-300" onClick={() => answerMissing('back')}>Go back and tick them</button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Footer action */}
       <div className="sticky bottom-4 pt-4">
