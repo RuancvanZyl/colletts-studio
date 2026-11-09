@@ -27,7 +27,7 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql', '063_mount_change_rules.sql', '064_conversation_topics.sql', '065_mark_done_permission_fix.sql', '066_live_team_messages.sql', '067_push_notifications.sql', '069_hunt_receivings.sql', '070_arrival_alerts.sql', '071_missing_parts_followup.sql', '072_client_drafts.sql', '073_local_clients_no_documents.sql']) {
+for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql', '063_mount_change_rules.sql', '064_conversation_topics.sql', '065_mark_done_permission_fix.sql', '066_live_team_messages.sql', '067_push_notifications.sql', '069_hunt_receivings.sql', '070_arrival_alerts.sql', '071_missing_parts_followup.sql', '072_client_drafts.sql', '073_local_clients_no_documents.sql', '074_receiving_issues.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
@@ -534,6 +534,38 @@ await db.query(`SELECT public.staff_open_part_followup($1, ARRAY['SKULL'])`, [md
 await db.query(`SELECT public.staff_close_part_followup($1, 'never_sent')`, [mdoc]);
 ok((await q(`SELECT resolved_reason r FROM part_followups WHERE doc_id=$1 ORDER BY opened_at DESC LIMIT 1`, [mdoc]))[0].r === 'never_sent', 'staff can close it as "never sent"');
 await asW(null);
+
+console.log('\nIssues found when receiving');
+await db.exec(`UPDATE hunt_documents SET current_department='receiving', form_data = jsonb_set(coalesce(form_data,'{}'::jsonb),'{species}','"Kudu"') WHERE id='${mdoc}'`);
+await asW(ids.worker);
+await db.query(`SELECT public.staff_tell_outfitter_receiving($1, 'issue', 'Horn tip is broken', 'Salted, bullet damage')`, [mdoc]);
+ok(await msgCount('There is an issue with the Kudu%Horn tip is broken%Salted, bullet damage%') === 1, 'the outfitter gets a copy of the issue, with the note and how it arrived');
+await db.query(`SELECT public.staff_tell_outfitter_receiving($1, 'later', 'The cape comes with the courier')`, [mdoc]);
+ok(await msgCount('Part of the Kudu%still to follow: The cape comes with the courier%') === 1, 'and of a "to follow" note');
+ok((await fails(`SELECT public.staff_tell_outfitter_receiving($1, 'issue', '  ')`, [mdoc]))?.includes('Write the note'), 'a note is needed');
+const fu2 = (await q(`SELECT public.staff_open_part_followup($1, ARRAY['CAPE'], 'Courier on Tuesday') id`, [mdoc]))[0].id;
+ok(await msgCount('%did not arrive: Cape. Note from the workshop: Courier on Tuesday%') === 1, 'the missing-parts message carries the workshop\'s note too');
+await asW(null);
+await db.exec(`UPDATE hunt_documents SET form_data = jsonb_set(form_data,'{receiving_issue}','{"open": true, "note": "Horn tip is broken"}'::jsonb) WHERE id='${mdoc}'`);
+await asW(ids.worker);
+ok((await fails(`SELECT public.staff_resolve_receiving_issue($1)`, [mdoc]))?.includes('Only a manager'), 'a worker cannot mark an issue as solved');
+ok((await fails(`SELECT public.staff_decide_receiving_issue($1, 'repair')`, [mdoc]))?.includes('Only a manager'), 'a worker cannot decide what happens with it');
+await asW(ids.admin);
+ok((await fails(`SELECT public.staff_decide_receiving_issue($1, 'stock_replacement')`, [mdoc]))?.includes('which one from stock'), 'a stock replacement needs to say which one');
+ok((await fails(`SELECT public.staff_decide_receiving_issue($1, 'accept_as_is')`, [mdoc]))?.includes('who agreed'), 'carrying on as it is needs to say who agreed');
+ok((await fails(`SELECT public.staff_decide_receiving_issue($1, 'burn_it')`, [mdoc]))?.includes('Choose one'), 'only the listed options are accepted');
+await db.query(`SELECT public.staff_decide_receiving_issue($1, 'stock_replacement', 'Same size', 'Kudu skin K-12')`, [mdoc]);
+ok((await q(`SELECT form_data->'receiving_issue'->'decision'->>'option' o, form_data->'receiving_issue'->>'open' op FROM hunt_documents WHERE id=$1`, [mdoc]))[0].o === 'stock_replacement', 'the decision is written on the animal');
+ok((await q(`SELECT form_data->'receiving_issue'->>'open' op FROM hunt_documents WHERE id=$1`, [mdoc]))[0].op === 'true', 'and the issue stays open until it is solved');
+ok(await msgCount('About the issue with the Kudu%replace it from our own stock (Kudu skin K-12).%Same size%') === 1, 'the outfitter is told what was decided');
+await db.query(`SELECT public.staff_decide_receiving_issue($1, 'client_decides')`, [mdoc]);
+ok(await msgCount('About the issue with the Kudu%the client has to decide%') === 1, 'a decision can be changed, and the outfitter is told again');
+await db.query(`SELECT public.staff_resolve_receiving_issue($1, 'Replaced the horn')`, [mdoc]);
+ok((await q(`SELECT form_data->'receiving_issue'->>'open' o FROM hunt_documents WHERE id=$1`, [mdoc]))[0].o === 'false', 'a manager marks it solved');
+ok(await msgCount('The issue with the Kudu%is solved. Replaced the horn') === 1, 'and the outfitter is told');
+await asW(null);
+await db.exec(`DELETE FROM part_followups WHERE id='${fu2}'`);
+
 
 const cl = (await q(`SELECT c.outfitter_id o, c.email e, count(d.id)::int n FROM clients c JOIN client_hunts h ON h.client_id=c.id LEFT JOIN hunt_documents d ON d.hunt_id=h.id WHERE h.id=$1 GROUP BY c.outfitter_id, c.email`, [oh]))[0];
 ok(cl.o === 'f1000000-0000-0000-0000-000000000001' && cl.e === 'hank@example.com' && cl.n === 3, 'the hunter becomes a client of the workshop, linked to the outfitter, ready to be invited');

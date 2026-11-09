@@ -7,6 +7,7 @@ import { conditionSummary } from '../../../../lib/condition';
 import { CaseTag, type OpenCase } from './CaseTag';
 import { SoakReportButton } from './SoakReportButton';
 import { EditJobCardButton } from './EditJobCard';
+import { ReceivingIssueBox, type ReceivingIssue } from './ReceivingIssueBox';
 import { MessageOutfitterButton } from '../shared/MessageOutfitterButton';
 import { useLiveRefresh } from '../../../../lib/liveRefresh';
 import { Button } from '../../ui/button';
@@ -36,6 +37,7 @@ interface JobCard {
   species: string;
   mountType: string;
   instructions: string;
+  receivingIssue: ReceivingIssue | null;
   received: string;
   condition: string;
   specialRequests: string[];
@@ -130,6 +132,7 @@ export function WorkshopInstructions() {
         species:         fd.species       ?? '—',
         mountType:       fd.mount_type    ?? '—',
         instructions:    fd.instructions  ?? '',
+        receivingIssue:  fd.receiving_issue ?? null,
         received:        (fd.received_parts ?? []).length ? (fd.received_parts as any[]).map(p => p.label ?? p.code).join(', ') + (fd.received_other ? ` (${fd.received_other})` : '') : '',
         condition:       conditionSummary(fd.condition_report, fd.condition),
         specialRequests: custByHunt[doc.hunt_id] ?? [],
@@ -417,6 +420,7 @@ function AnimalBlock({ card, expanded, toggle, completing, markDone, photos, add
             {card.specialRequests.map((r, i) => <p key={i} className="text-base text-amber-900 dark:text-amber-200 leading-relaxed">{r}</p>)}
           </div>
         )}
+        {card.receivingIssue?.open && <ReceivingIssueBox card={card} isAdmin={isAdmin} reload={reload} />}
         <div className="flex flex-wrap items-center gap-2 pt-0.5">
           <JobPhotosButton docId={card.docId} dept={card.department} huntId={card.huntId} title={`${card.species} — ${card.clientName}`} />
           <PrintButton compact label="Print this card" onPrint={() => printJobCards({ docIds: [card.docId] })} />

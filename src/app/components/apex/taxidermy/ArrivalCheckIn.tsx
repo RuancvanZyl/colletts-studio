@@ -199,7 +199,7 @@ export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
         }
         if (a.photos.length) {
           const blobs = await Promise.all(a.photos.map(f => shrinkPhoto(f)));
-          await savePhotos({ clientId: c.id, huntId: docHunt, docId, kind: 'arrival', shared: true, files: blobs, staffId: profile?.id ?? null, staffName: profile?.full_name ?? null });
+          await savePhotos({ clientId: c.id, huntId: docHunt, docId, kind: 'arrival', shared: false, files: blobs, staffId: profile?.id ?? null, staffName: profile?.full_name ?? null });
         }
       }
       // 4. the workshop is now waiting for the hunter's mount choices (starts the reminder clock)
@@ -224,7 +224,7 @@ export function ArrivalCheckIn({ onComplete }: { onComplete: () => void }) {
   const dropOff = (r: NonNullable<typeof result>): DropOffPrint => ({
     clientName: r.name, clientNumber: r.number, huntRef: r.huntRef, receivedBy: profile?.full_name ?? '', workshop: WORKSHOP,
     inviteLink: r.registered ? null : r.link,
-    animals: r.animals.map(a => ({ species: a.species, tag: a.tag, condition: conditionSummary({ state: a.condition, salt: a.condition === 'salted' ? a.salt : undefined, issues: a.issues, skull: a.skull || undefined }), parts: a.parts, other: a.other, notes: a.notes })),
+    animals: r.animals.map(a => ({ species: a.species, tag: a.tag, condition: '', parts: a.parts, other: a.other, notes: a.notes })),
   });
 
   // ── done ───────────────────────────────────────────────────────────────────

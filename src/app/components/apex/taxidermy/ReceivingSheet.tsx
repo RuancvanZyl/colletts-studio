@@ -60,6 +60,7 @@ interface TrophyLine {
   // what physically came in, part by part, and its condition
   rec: ReceivedValue;
   expectedParts: string[];   // what the hunter or outfitter said would come
+  hold?: boolean;            // an animal with an issue is normally allowed to carry on into production; tick to keep it in Receiving until the issue is solved
   moved?: boolean;           // already past Receiving (received earlier): no missing-parts alerts
   isNew?: boolean;           // arrived but not on the client's list: a job card is made for it when the receiving is saved
 }
@@ -219,7 +220,7 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
   const [huntPhotoPreviews, setHuntPhotoPreviews] = useState<string[]>([]);
   const huntPhotoRef = useRef<HTMLInputElement>(null);
   // what has been ticked and typed is kept on this device until the receiving is saved (photos have to be taken again)
-  const [edits, setEdits, dEdits] = useDraft<Record<string, { status: CheckStatus; conditionNotes: string; rec: ReceivedValue }>>(`receiving:${huntId}`, {});
+  const [edits, setEdits, dEdits] = useDraft<Record<string, { status: CheckStatus; conditionNotes: string; rec: ReceivedValue; hold?: boolean }>>(`receiving:${huntId}`, {});
 
   // like the top and bottom of the paper sheet
   const [delivery, setDelivery, dDelivery] = useDraft<{ deliveredBy: string; brought: '' | 'collected' | 'delivered'; mileage: string; note: string }>(`receiving:${huntId}:delivery`, { deliveredBy: '', brought: '', mileage: '', note: '' });
@@ -271,6 +272,7 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
         expectedCondition: fd.condition ?? 'unknown',
         instructions:      fd.instructions ?? '',
         status:            saved?.status ?? (d.current_department !== 'receiving' ? 'ok' : 'pending'),
+        hold:              saved?.hold,
         conditionNotes:    saved?.conditionNotes ?? fd.condition_notes ?? '',
         intakePhotos:      [],
         photoPreviews:     [],
@@ -287,7 +289,7 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
     const added: TrophyLine[] = extras.map(x => ({
       docId: x.docId, species: x.species, mountType: '', quantity: 1, tagNumber: '', expectedCondition: 'unknown', instructions: '', preRegistered: false,
       status: edits[x.docId]?.status ?? 'pending', conditionNotes: edits[x.docId]?.conditionNotes ?? '', intakePhotos: [], photoPreviews: [],
-      rec: edits[x.docId]?.rec ?? emptyReceived(), expectedParts: [], isNew: true,
+      rec: edits[x.docId]?.rec ?? emptyReceived(), expectedParts: [], isNew: true, hold: edits[x.docId]?.hold,
     }));
     setLines([...mapped, ...added]);
     setLoading(false);
@@ -295,8 +297,8 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
 
   function updateLine(idx: number, patch: Partial<TrophyLine>) {
     const l = lines[idx];
-    if (l && ('status' in patch || 'conditionNotes' in patch || 'rec' in patch)) {
-      const next = { status: patch.status ?? l.status, conditionNotes: patch.conditionNotes ?? l.conditionNotes, rec: patch.rec ?? l.rec };
+    if (l && ('status' in patch || 'conditionNotes' in patch || 'rec' in patch || 'hold' in patch)) {
+      const next = { status: patch.status ?? l.status, conditionNotes: patch.conditionNotes ?? l.conditionNotes, rec: patch.rec ?? l.rec, hold: patch.hold ?? l.hold };
       setEdits(e => ({ ...e, [l.docId]: next }));
     }
     setLines(prev => prev.map((x, i) => i === idx ? { ...x, ...patch } : x));
@@ -347,13 +349,18 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
       toast.error(`Say what the issue is for ${noReason.map(l => l.species).join(', ')} (write it in the notes, or tick what you see).`);
       return;
     }
+    const noFollow = lines.filter(l => l.status === 'later' && !l.conditionNotes.trim() && missingFor(l).length === 0);
+    if (noFollow.length > 0) {
+      toast.error(`Say what is still to come for ${noFollow.map(l => l.species).join(', ')}, and how (write it in the notes).`);
+      return;
+    }
 
     setSaving(true);
     try {
       // Arrival photos of the delivery — saved on the device first, uploaded when there is a connection
       const huntPhotoPaths: string[] = [];
       if (huntPhotos.length && huntInfo?.client_id) {
-        const r = await savePhotos({ clientId: huntInfo.client_id, huntId, kind: 'arrival', shared: true, staffId: profile?.id ?? null, staffName: profile?.full_name ?? null,
+        const r = await savePhotos({ clientId: huntInfo.client_id, huntId, kind: 'arrival', shared: false, staffId: profile?.id ?? null, staffName: profile?.full_name ?? null,
           files: await Promise.all(huntPhotos.map(f => shrinkPhoto(f))) });
         if (r.error) throw new Error(r.error);
       }
@@ -376,7 +383,7 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
         // Per-trophy arrival photos — shown to the client in their tracking view
         const photoPaths: string[] = [];
         if (line.intakePhotos.length && huntInfo?.client_id) {
-          const r = await savePhotos({ clientId: huntInfo.client_id, huntId, docId: line.docId, kind: 'arrival', shared: true,
+          const r = await savePhotos({ clientId: huntInfo.client_id, huntId, docId: line.docId, kind: 'arrival', shared: false,
             staffId: profile?.id ?? null, staffName: profile?.full_name ?? null,
             files: await Promise.all(line.intakePhotos.map(f => shrinkPhoto(f))) });
           if (r.error) throw new Error(r.error);
@@ -407,13 +414,22 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
 
         // parts that did not arrive: open the follow-up (the outfitter is told, gives a plan and is reminded until they arrive)
         const miss = missingFor(line);
+        const summary = conditionSummary({ state: line.rec.condition, salt: line.rec.condition === 'salted' ? line.rec.salt : undefined, issues: line.rec.issues, skull: line.rec.skull });
         if ((line.status === 'later' || line.status === 'issue') && miss.length > 0) {
-          const { error: fuErr } = await (supabase as any).rpc('staff_open_part_followup', { p_doc: line.docId, p_parts: miss });
+          const { error: fuErr } = await (supabase as any).rpc('staff_open_part_followup', { p_doc: line.docId, p_parts: miss, p_note: line.conditionNotes || null });
           if (fuErr) toast.warning(`The outfitter could not be told about the missing ${line.species} parts automatically. Please tell them yourself. (${fuErr.message})`, { duration: 12000 });
           else followedUp++;
+        } else if (line.status === 'later' || line.status === 'issue') {
+          // nothing from the parts list is missing: the outfitter still gets a copy of the issue / to-follow note
+          const { error: tellErr } = await (supabase as any).rpc('staff_tell_outfitter_receiving', { p_doc: line.docId, p_kind: line.status, p_note: line.conditionNotes.trim() || summary || 'See the receiving sheet', p_summary: line.status === 'issue' ? summary : null });
+          if (tellErr && !/no outfitter/i.test(tellErr.message ?? '')) toast.warning(`The outfitter could not be told about the ${line.species} automatically. Please tell them yourself. (${tellErr.message})`, { duration: 12000 });
+          else if (!tellErr) followedUp++;
         } else if (line.status === 'ok' && miss.length > 0 && neverSent.has(line.docId)) {
           await (supabase as any).rpc('staff_close_part_followup', { p_doc: line.docId, p_reason: 'never_sent' }).then(() => undefined, () => undefined);
         }
+
+        // an issue stays on the animal's card (and on Needs you) until a manager marks it solved
+        const issueNote = line.status === 'issue' ? { receiving_issue: { open: true, note: line.conditionNotes.trim(), summary, at: receivedAt, by: profile?.full_name ?? '', hold: !!line.hold } } : {};
 
         // Part of it is here and the rest follows: write down what came, keep the card in Receiving
         if (line.status === 'later') {
@@ -428,8 +444,8 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
         // No mount chosen yet → just record the condition; the animal stays in Receiving until the hunter decides
         if (/^pending instructions$/i.test(line.mountType.trim()) || !line.mountType) {
           await (supabase as any).from('hunt_documents').update({
-            status: line.status === 'issue' ? 'flagged' : 'in_progress',
-            form_data: { ...fd, ...received, condition_notes: line.conditionNotes, to_follow: false },
+            status: line.status === 'issue' && line.hold ? 'flagged' : 'in_progress',
+            form_data: { ...fd, ...received, ...issueNote, condition_notes: line.conditionNotes, to_follow: false },
           }).eq('id', line.docId);
           waitingCount++;
           continue;
@@ -446,11 +462,12 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
         };
 
         await (supabase as any).from('hunt_documents').update({
-          current_department: line.status === 'issue' ? 'receiving' : nextDept,
-          status:             line.status === 'issue' ? 'flagged' : 'in_progress',
+          current_department: line.status === 'issue' && line.hold ? 'receiving' : nextDept,   // an issue does not stop production unless it is held
+          status:             line.status === 'issue' && line.hold ? 'flagged' : 'in_progress',
           form_data: {
             ...fd,
             ...received,
+            ...issueNote,
             condition_notes:     line.conditionNotes,
             intake_photo_paths:  photoPaths,
             arrival_photo_paths: huntPhotoPaths,
@@ -472,6 +489,15 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
       }
 
       if (madeNew) await (supabase as any).rpc('start_awaiting_instruction', { p_hunt_id: huntId });
+      // the client is told what has arrived at the workshop: the animals only, never damage or condition
+      const arrivedNames = lines.filter(l => l.rec.parts.length > 0 || l.status === 'ok').map(l => l.species);
+      if (arrivedNames.length && huntInfo?.client_id) {
+        await (supabase as any).from('client_notifications').insert({
+          client_id: huntInfo.client_id, hunt_id: huntId, type: 'update', stage: 'receiving',
+          title: 'Your trophies have arrived at the workshop',
+          body: `We have received: ${[...new Set(arrivedNames)].join(', ')}. We will keep you updated as the work goes on.`,
+        }).then(() => undefined, () => undefined);
+      }
       // the delivery details (who brought it, collected or delivered, mileage, note); skipped quietly until migration 069 is run
       await (supabase as any).from('hunt_receivings').insert({
         hunt_id: huntId, received_by: profile?.id ?? null, received_by_name: profile?.full_name ?? null,
@@ -715,6 +741,7 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
               {lines[idx].instructions && <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded px-2 py-1">The client wrote: {lines[idx].instructions}</p>}
               <ReceivedFields value={lines[idx].rec} expected={lines[idx].expectedParts} showParts={false} onChange={patch => updateLine(idx, { rec: { ...lines[idx].rec, ...patch } })} />
               <LineExtras line={lines[idx]} onNotes={n => updateLine(idx, { conditionNotes: n })} onAddPhotos={files => addPhotos(idx, files)} onRemovePhoto={pi => removePhoto(idx, pi)} />
+              <HoldChoice line={lines[idx]} onHold={v => updateLine(idx, { hold: v })} />
             </>
           )}
         />
@@ -727,6 +754,7 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
               onStatus={s => updateLine(idx, { status: s })}
               onNotes={n => updateLine(idx, { conditionNotes: n })}
               onRec={patch => updateLine(idx, { rec: { ...line.rec, ...patch } })}
+              onHold={v => updateLine(idx, { hold: v })}
               onAddPhotos={files => addPhotos(idx, files)}
               onRemovePhoto={pi => removePhoto(idx, pi)}
             />
@@ -793,6 +821,21 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
   );
 }
 
+/** What happens to an animal with an issue: production carries on, unless it is held in Receiving until the issue is solved. */
+function HoldChoice({ line, onHold }: { line: TrophyLine; onHold: (v: boolean) => void }) {
+  if (line.status !== 'issue') return null;
+  return (
+    <div className="rounded-xl border-2 border-red-300 dark:border-red-800 p-3 space-y-2">
+      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">What happens to this animal while the issue is sorted out?</p>
+      {[[false, 'Production carries on. The issue stays on its card and the outfitter is told.'], [true, 'Hold it in Receiving until the issue is solved (for example a missing part it cannot start without).']].map(([v, t]) => (
+        <label key={String(v)} className="flex items-start gap-2 text-sm text-slate-800 dark:text-slate-100 min-h-11">
+          <input type="radio" name={`hold-${line.docId}`} className="mt-1" checked={!!line.hold === v} onChange={() => onHold(v as boolean)} />{t as string}
+        </label>
+      ))}
+    </div>
+  );
+}
+
 // ── Notes and photos for one animal ───────────────────────────────────────────
 
 function LineExtras({ line, onNotes, onAddPhotos, onRemovePhoto }: {
@@ -832,10 +875,11 @@ function LineExtras({ line, onNotes, onAddPhotos, onRemovePhoto }: {
 // ── Single trophy check card ──────────────────────────────────────────────────
 
 function TrophyCheckCard({
-  line, onStatus, onNotes, onRec, onAddPhotos, onRemovePhoto,
+  line, onStatus, onNotes, onRec, onHold, onAddPhotos, onRemovePhoto,
 }: {
   line: TrophyLine;
   onStatus: (s: CheckStatus) => void;
+  onHold: (v: boolean) => void;
   onNotes: (n: string) => void;
   onRec: (patch: Partial<ReceivedValue>) => void;
   onAddPhotos: (f: FileList | null) => void;
@@ -904,6 +948,7 @@ function TrophyCheckCard({
         <div className="px-4 pb-4 space-y-2 border-t border-slate-200 dark:border-slate-700 pt-3">
           <ReceivedFields value={line.rec} expected={line.expectedParts} onChange={onRec} />
           <LineExtras line={line} onNotes={onNotes} onAddPhotos={onAddPhotos} onRemovePhoto={onRemovePhoto} />
+          <HoldChoice line={line} onHold={onHold} />
         </div>
       )}
     </div>

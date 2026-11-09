@@ -9,8 +9,10 @@ export interface AttentionCounts {
   notAcked: number; needOutcome: number; clientOverdue: number; heldAside: number;
   arrivedToCheck: number;   // hunters whose trophies have arrived (tag or button) and still need the condition report
   missingParts: number;     // animals received with parts missing / still to follow
+  receivingIssues: number;  // animals received with an issue that nobody has decided about yet
+  receivingFixing: number;  // animals with an issue that has a decision but is not marked solved yet
 }
-const ZERO: AttentionCounts = { toCheck: 0, fromOutfitter: 0, unreadChat: 0, unverified: 0, lateAccept: 0, notAcked: 0, needOutcome: 0, clientOverdue: 0, heldAside: 0, arrivedToCheck: 0, missingParts: 0 };
+const ZERO: AttentionCounts = { toCheck: 0, fromOutfitter: 0, unreadChat: 0, unverified: 0, lateAccept: 0, notAcked: 0, needOutcome: 0, clientOverdue: 0, heldAside: 0, arrivedToCheck: 0, missingParts: 0, receivingIssues: 0, receivingFixing: 0 };
 
 export function useAttentionCounts(): AttentionCounts {
   const [c, setC] = useState<AttentionCounts>(ZERO);
@@ -30,10 +32,12 @@ export function useAttentionCounts(): AttentionCounts {
       const atReceiving: any[] = rc ?? [];
       const arrivedHunts = new Set(atReceiving.filter(x => x.arrived_at && !(Array.isArray(x.received) && x.received.length > 0)).map(x => x.hunt_id));
       const oldMissing = atReceiving.filter(x => x.tf === 'true' || (x.status === 'flagged' && Array.isArray(x.mp) && x.mp.length > 0)).length;
+      const ri = await db.from('hunt_documents').select('dec:form_data->receiving_issue->decision->>option').eq('doc_type', 'job_card').filter('form_data->receiving_issue->>open', 'eq', 'true');
+      const issues: any[] = ri.error ? [] : (ri.data ?? []);
       const fu = await db.from('part_followups').select('id', { count: 'exact', head: true }).is('resolved_at', null);
       const missing = fu.error ? oldMissing : (fu.count ?? 0);
       setC({
-        arrivedToCheck: arrivedHunts.size, missingParts: missing,
+        arrivedToCheck: arrivedHunts.size, missingParts: missing, receivingIssues: issues.filter(x => !x.dec).length, receivingFixing: issues.filter(x => x.dec).length,
         heldAside: cases.filter(x => x.order_override_at).length,
         clientOverdue: cases.filter(x => { const d = informDaysLeft(x); return d !== null && d < 0; }).length,
         notAcked: cases.filter(x => x.outfitter_id && !x.outfitter_ack_at).length,
