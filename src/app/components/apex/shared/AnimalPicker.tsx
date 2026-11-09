@@ -21,21 +21,25 @@ function matches(sp: Species, q: string) {
   return sp.name.toLowerCase().includes(t) || sp.sci.toLowerCase().includes(t) || (sp.aliases ?? []).some(a => a.toLowerCase().includes(t)) || (sp.note ?? '').toLowerCase().includes(t);
 }
 
-function useCatalogue(query: string, group: string) {
+/** Only what SCI officially recognises is shown, until the person asks for the animals SCI does not list (zebra, giraffe, birds ...). */
+function useCatalogue(query: string, group: string, showOthers: boolean) {
   return useMemo(() => {
-    if (query.trim().length >= 2) return SPECIES.filter(s => matches(s, query.trim())).slice(0, 60);
-    if (group === 'Popular') return POPULAR.map(n => SPECIES.find(s => s.name === n)!).filter(Boolean);
+    const ok = (s: Species) => showOthers || isSci(s);
+    if (query.trim().length >= 2) return SPECIES.filter(s => ok(s) && matches(s, query.trim())).slice(0, 60);
+    if (group === 'Popular') return POPULAR.map(n => SPECIES.find(s => s.name === n)!).filter(Boolean).filter(ok);
     if (group === 'SCI list') return SPECIES.filter(s => isSci(s));
-    return SPECIES.filter(s => s.group === group);
-  }, [query, group]);
+    return SPECIES.filter(s => s.group === group && ok(s));
+  }, [query, group, showOthers]);
 }
 
 const select = 'rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-3 min-h-11 text-base';
 
-function GroupChips({ group, setGroup }: { group: string; setGroup: (g: string) => void }) {
+function GroupChips({ group, setGroup, showOthers }: { group: string; setGroup: (g: string) => void; showOthers: boolean }) {
+  // a group with nothing SCI recognises (birds, small game ...) is hidden until the other animals are shown
+  const groups = SPECIES_GROUPS.filter(g => showOthers || SPECIES.some(s => s.group === g && isSci(s)));
   return (
     <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 [scrollbar-width:none]">
-      {['Popular', 'SCI list', ...SPECIES_GROUPS].map(g => (
+      {['SCI list', 'Popular', ...groups].map(g => (
         <button key={g} type="button" onClick={() => setGroup(g)}
           className={`whitespace-nowrap rounded-full border-2 px-4 min-h-10 text-sm font-semibold ${group === g ? 'border-[#0073ea] bg-[#0073ea] text-white' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}>{g}</button>
       ))}
@@ -69,11 +73,12 @@ export function CollectionStrip({ speciesCount, total }: { speciesCount: number;
 
 export function AnimalPicker({ items, onChange, hunted, plain = false }: { items: PickedAnimal[]; onChange: (next: PickedAnimal[]) => void; hunted?: Set<string>; plain?: boolean }) {
   const [query, setQuery] = useState('');
-  const [group, setGroup] = useState('Popular');
+  const [group, setGroup] = useState('SCI list');
+  const [showOthers, setShowOthers] = useState(false);
   const [justAdded, setJustAdded] = useState<string | null>(null);
   const [guide, setGuide] = useState<string | null>(null);
   const [openFamily, setOpenFamily] = useState<string | null>(null);
-  const list = useCatalogue(query, group);
+  const list = useCatalogue(query, group, showOthers);
   const before = hunted ?? new Set<string>();
   const live = new Set<string>([...before, ...items.map(i => i.base)]);
   const count = (name: string) => items.filter(i => i.base === name).length;
@@ -120,9 +125,13 @@ export function AnimalPicker({ items, onChange, hunted, plain = false }: { items
         <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
         <input className={`${select} w-full pl-9`} placeholder="Search by name or scientific name" value={query} onChange={e => setQuery(e.target.value)} />
       </div>
-      {query.trim().length < 2 && <GroupChips group={group} setGroup={setGroup} />}
+      {query.trim().length < 2 && <GroupChips group={group} setGroup={setGroup} showOthers={showOthers} />}
+      <button type="button" onClick={() => { setShowOthers(o => !o); if (showOthers && group !== 'SCI list' && group !== 'Popular' && !SPECIES.some(s => s.group === group && isSci(s))) setGroup('SCI list'); }}
+        className="w-full text-left rounded-xl border border-dashed border-slate-400 dark:border-slate-600 px-4 min-h-12 text-sm font-semibold text-sky-700 dark:text-sky-300">
+        {showOthers ? 'Showing every animal. Tap to show only the animals SCI officially recognises.' : 'Not finding it? Tap here to also show animals SCI does not list (zebra, giraffe, birds and more).'}
+      </button>
 
-      {list.length === 0 && <p className="p-4 text-sm text-slate-500">No animal found. Try another spelling, or pick “Other” and tell us in the notes.</p>}
+      {list.length === 0 && <p className="p-4 text-sm text-slate-500">No animal found. Try another spelling. If it is not on SCI’s list, tap “Not finding it?” above to show every animal, and pick “Other” if it is still not there.</p>}
       <div className="grid grid-cols-2 gap-3">
         {groupFamilies(list).map(g => {
           const types = typesOfFamily(g.family);
