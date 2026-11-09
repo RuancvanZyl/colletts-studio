@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SPECIES, findSpecies, sciName, variantsOf, animalKind, splitVariant } from '../src/lib/species.ts';
+import { SPECIES, findSpecies, sciName, variantsOf, animalKind, splitVariant, familyOf, typesOfFamily, groupFamilies } from '../src/lib/species.ts';
 
 test('every animal has a scientific name and a unique name', () => {
   const names = new Set<string>();
@@ -74,4 +74,28 @@ test('the African wild cat is easy to find', () => {
   assert.equal(findSpecies('African Wild Cat')?.name, 'Wild Cat');
   assert.equal(sciName('Wild Cat'), 'Felis lybica');
   assert.equal(findSpecies('Wild Cat')?.note, 'African wild cat');
+});
+
+test('colour variants are the ones the trade sells, and keep the animal\'s own scientific name', () => {
+  assert.deepEqual(variantsOf('Springbok'), ['Normal', 'Black', 'White', 'Copper', 'King']);
+  assert.deepEqual(variantsOf('Impala'), ['Normal', 'Black', 'White', 'White-flanked', 'Saddleback']);
+  assert.deepEqual(variantsOf('Blesbok'), ['Normal', 'White', 'Yellow', 'Copper', 'Saddleback']);
+  assert.deepEqual(variantsOf('Gemsbok'), ['Normal', 'Golden', 'King', 'Black', 'Red', 'White']);
+  assert.deepEqual(variantsOf('Wildebeest (Blue)'), ['Normal', 'Golden', 'King', 'Royal']);
+  assert.equal(findSpecies('Springbok, Copper')?.name, 'Springbok');
+  assert.equal(sciName('Springbok, Copper'), 'Antidorcas marsupialis');
+  assert.equal(sciName('Impala, Saddleback'), 'Aepyceros melampus melampus');
+});
+
+test('every type of an animal is listed together, each with its own scientific name', () => {
+  assert.equal(familyOf("Zebra (Cape Mountain)"), 'Zebra');
+  const zebra = typesOfFamily('Zebra');
+  assert.ok(zebra.length >= 7);
+  assert.deepEqual(zebra.filter(z => z.note === 'Mountain zebra').map(z => z.sci).sort(), ['Equus zebra hartmannae', 'Equus zebra zebra']);
+  assert.ok(zebra.some(z => z.sci === 'Equus quagga burchellii' && z.note === 'Plains zebra'));
+  const wild = typesOfFamily('Wildebeest').map(w => w.sci);
+  assert.ok(wild.includes('Connochaetes gnou') && wild.includes('Connochaetes taurinus taurinus') && wild.includes('Connochaetes taurinus mearnsi'));
+  for (const f of ['Kudu', 'Eland', 'Bushbuck', 'Sable', 'Roan', 'Hartebeest', 'Waterbuck', 'Giraffe', 'Duiker']) assert.ok(typesOfFamily(f).length >= 2, f);
+  const g = groupFamilies(SPECIES.filter(s => s.name.startsWith('Zebra') || s.name === 'Kudu'));
+  assert.equal(g.filter(x => x.family === 'Zebra').length, 1);
 });

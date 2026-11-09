@@ -7,7 +7,8 @@
 import { useMemo, useState } from 'react';
 import { Plus, Search, Trash2, Minus } from 'lucide-react';
 import { toast } from 'sonner';
-import { SPECIES, SPECIES_GROUPS, findSpecies, sciName, composeName, variantsOf, splitVariant, type Species } from '../../../../lib/species';
+import { SPECIES, SPECIES_GROUPS, findSpecies, sciName, composeName, variantsOf, splitVariant, groupFamilies, typesOfFamily, type Species } from '../../../../lib/species';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
 import { GROUP_STYLE, rankOf } from '../../../../lib/collection';
 import { SpeciesGuide } from '../hunter/SpeciesGuide';
 import { Info } from 'lucide-react';
@@ -70,6 +71,7 @@ export function AnimalPicker({ items, onChange, hunted, plain = false }: { items
   const [group, setGroup] = useState('Popular');
   const [justAdded, setJustAdded] = useState<string | null>(null);
   const [guide, setGuide] = useState<string | null>(null);
+  const [openFamily, setOpenFamily] = useState<string | null>(null);
   const list = useCatalogue(query, group);
   const before = hunted ?? new Set<string>();
   const live = new Set<string>([...before, ...items.map(i => i.base)]);
@@ -100,7 +102,7 @@ export function AnimalPicker({ items, onChange, hunted, plain = false }: { items
                   {findSpecies(it.base)?.note && <span className="block text-xs text-slate-500">{findSpecies(it.base)?.note}</span>}
                 </span>
                 {vars.length > 0 && (
-                  <label className="order-last w-full flex items-center gap-2 text-sm font-semibold text-slate-600 dark:text-slate-300 pl-10">Colour
+                  <label className="order-last w-full flex items-center gap-2 text-sm font-semibold text-slate-600 dark:text-slate-300 pl-10" title={`A colour of the same animal: ${sciName(it.base)}`}>Colour
                     <select className={`${select} min-h-10 flex-1`} value={it.variant} onChange={e => onChange(items.map(x => x.id === it.id ? { ...x, variant: e.target.value } : x))}>
                       {vars.map(v => <option key={v} value={v}>{v}</option>)}
                     </select>
@@ -121,7 +123,26 @@ export function AnimalPicker({ items, onChange, hunted, plain = false }: { items
 
       {list.length === 0 && <p className="p-4 text-sm text-slate-500">No animal found. Try another spelling, or pick “Other” and tell us in the notes.</p>}
       <div className="grid grid-cols-2 gap-3">
-        {list.map(sp => {
+        {groupFamilies(list).map(g => {
+          const types = typesOfFamily(g.family);
+          if (types.length > 1) {
+            const total = types.reduce((s, t) => s + count(t.name), 0);
+            const st0 = GROUP_STYLE[types[0].group] ?? GROUP_STYLE['Antelope'];
+            return (
+              <div key={`family:${g.family}`} className={`relative rounded-2xl overflow-hidden border-2 bg-white dark:bg-slate-900 ${total > 0 ? 'border-green-600' : 'border-slate-200 dark:border-slate-700'}`}>
+                <button type="button" aria-label={`Choose the type of ${g.family}`} onClick={() => setOpenFamily(g.family)} className="block w-full text-left">
+                  <span className="flex items-center justify-center h-24 text-6xl" style={{ background: st0.bg }}>{speciesEmoji(types[0].name)}</span>
+                  <span className="block pl-3 pr-12 pt-2 pb-3 min-h-[76px]">
+                    <span className="block text-base font-bold text-slate-900 dark:text-slate-100 leading-tight">{g.family}</span>
+                    <span className="block text-[11px] text-slate-600 dark:text-slate-400 leading-snug mt-0.5">{types.length} types, each with its scientific name</span>
+                  </span>
+                </button>
+                {total > 0 && <span className="absolute top-2 left-2 text-[11px] font-bold rounded-full bg-green-700 text-white px-2 py-0.5">{total} added</span>}
+                <span className="absolute bottom-2 right-2 min-h-9 min-w-9 rounded-full bg-green-700 text-white flex items-center justify-center pointer-events-none"><Plus className="w-5 h-5" /></span>
+              </div>
+            );
+          }
+          const sp = g.members[0];
           const n = count(sp.name);
           const isNew = !plain && !before.has(sp.name) && sp.name !== 'Other';
           const st = GROUP_STYLE[sp.group] ?? GROUP_STYLE['Antelope'];
@@ -151,6 +172,40 @@ export function AnimalPicker({ items, onChange, hunted, plain = false }: { items
           );
         })}
       </div>
+
+      {openFamily && (
+        <Dialog open onOpenChange={(o: boolean) => { if (!o) setOpenFamily(null); }}>
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader><DialogTitle className="text-xl">Which {openFamily}?</DialogTitle></DialogHeader>
+            <p className="text-sm text-slate-500">Every type, with its scientific name. Tap + for the one you shot.</p>
+            <div className="space-y-2">
+              {typesOfFamily(openFamily).map(t => {
+                const n = count(t.name); const vars = t.variants ?? [];
+                return (
+                  <div key={t.name} className={`rounded-xl border-2 p-3 flex items-center gap-3 ${n > 0 ? 'border-green-600' : 'border-slate-200 dark:border-slate-700'}`}>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-slate-900 dark:text-slate-100 leading-tight">{t.name}</p>
+                      <p className="text-xs italic text-slate-500">{t.sci}</p>
+                      {t.note && <p className="text-xs text-slate-600 dark:text-slate-400">{t.note}</p>}
+                      {vars.length > 0 && <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">Colours (same animal, same scientific name): {vars.join(', ')}</p>}
+                    </div>
+                    {n > 0 ? (
+                      <div className="flex items-center gap-1 bg-green-700 text-white rounded-full pl-1 pr-1 shrink-0">
+                        <button type="button" aria-label={`Remove one ${t.name}`} className="min-h-10 min-w-10 flex items-center justify-center" onClick={() => removeOne(t.name)}><Minus className="w-4 h-4" /></button>
+                        <span className="font-bold w-4 text-center">{n}</span>
+                        <button type="button" aria-label={`Add another ${t.name}`} className="min-h-10 min-w-10 flex items-center justify-center" onClick={() => add(t.name)}><Plus className="w-4 h-4" /></button>
+                      </div>
+                    ) : (
+                      <button type="button" aria-label={`Add ${t.name}`} className="shrink-0 min-h-11 min-w-11 rounded-full bg-green-700 text-white flex items-center justify-center" onClick={() => add(t.name)}><Plus className="w-5 h-5" /></button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <button type="button" className="w-full min-h-12 rounded-xl bg-[#0073ea] text-white font-bold" onClick={() => setOpenFamily(null)}>Done</button>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

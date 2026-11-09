@@ -39,7 +39,7 @@ export const SPECIES: Species[] = [
   A('Roan', 'Hippotragus equinus', 'Antelope', undefined, ['Roan Antelope']),
   A('Roan (Western)', 'Hippotragus equinus koba', 'Antelope'),
   A('Roan (Eastern)', 'Hippotragus equinus langheldi', 'Antelope'),
-  A('Gemsbok', 'Oryx gazella', 'Antelope', 'Gemsbok', undefined, ['Golden']),
+  A('Gemsbok', 'Oryx gazella', 'Antelope', 'Gemsbok', undefined, ['Golden', 'King', 'Black', 'Red', 'White']),
   A('Oryx (Beisa)', 'Oryx beisa', 'Antelope'),
   A('Oryx (Fringe-eared)', 'Oryx callotis', 'Antelope'),
   // ── Hartebeest, wildebeest and relatives ──
@@ -54,7 +54,7 @@ export const SPECIES: Species[] = [
   A('Topi', 'Damaliscus lunatus jimela', 'Antelope'),
   A('Tiang', 'Damaliscus lunatus tiang', 'Antelope'),
   A('Korrigum', 'Damaliscus lunatus korrigum', 'Antelope'),
-  A('Blesbok', 'Damaliscus pygargus phillipsi', 'Antelope', 'Blesbok', undefined, ['White', 'Yellow']),
+  A('Blesbok', 'Damaliscus pygargus phillipsi', 'Antelope', 'Blesbok', undefined, ['White', 'Yellow', 'Copper', 'Saddleback']),
   A('Bontebok', 'Damaliscus pygargus pygargus', 'Antelope', 'Bontebok'),
   A('Wildebeest (Blue)', 'Connochaetes taurinus taurinus', 'Antelope', 'Wildebeest (Blue)', undefined, ['Golden', 'King', 'Royal']),
   A('Wildebeest (Black)', 'Connochaetes gnou', 'Antelope', 'Wildebeest (Black)'),
@@ -79,9 +79,9 @@ export const SPECIES: Species[] = [
   A('Reedbuck (Bohor)', 'Redunca redunca', 'Antelope'),
   A('Rhebok (Grey / Vaal)', 'Pelea capreolus', 'Antelope', 'Reedbuck (Vaal)', ['Reedbuck (Vaal)', 'Vaal Rhebok', 'Grey Rhebok']),
   // ── Gazelles, springbok and impala ──
-  A('Impala', 'Aepyceros melampus melampus', 'Antelope', 'Impala', undefined, ['Black', 'White', 'Saddleback']),
+  A('Impala', 'Aepyceros melampus melampus', 'Antelope', 'Impala', undefined, ['Black', 'White', 'White-flanked', 'Saddleback']),
   A('Impala (Black-faced)', 'Aepyceros melampus petersi', 'Antelope'),
-  A('Springbok', 'Antidorcas marsupialis', 'Antelope', 'Springbok', undefined, ['Black', 'White', 'Copper']),
+  A('Springbok', 'Antidorcas marsupialis', 'Antelope', 'Springbok', undefined, ['Black', 'White', 'Copper', 'King']),
   A('Gazelle (Thomson\'s)', 'Eudorcas thomsonii', 'Antelope'),
   A('Gazelle (Grant\'s)', 'Nanger granti', 'Antelope'),
   A('Gazelle (Dorcas)', 'Gazella dorcas', 'Antelope'),
@@ -232,6 +232,17 @@ const NOTES: Record<string, string> = {
 for (const sp of SPECIES) if (NOTES[sp.name]) sp.note = NOTES[sp.name];
 
 export const SPECIES_NAMES = SPECIES.map(s => s.name);
+
+/** The animal a type belongs to: "Zebra (Cape Mountain)" and "Zebra (Burchell's)" are both "Zebra". */
+export const familyOf = (name: string) => name.split(' (')[0];
+/** Every type of one animal, in list order (Zebra: plains and mountain types, each with its own scientific name). */
+export const typesOfFamily = (family: string): Species[] => SPECIES.filter(s => familyOf(s.name) === family);
+/** Group a list of animals by family, keeping the list's order. */
+export function groupFamilies(list: Species[]): { family: string; members: Species[] }[] {
+  const out: { family: string; members: Species[] }[] = [];
+  for (const sp of list) { const f = familyOf(sp.name); const g = out.find(x => x.family === f); if (g) g.members.push(sp); else out.push({ family: f, members: [sp] }); }
+  return out;
+}
 export const SPECIES_GROUPS: SpeciesGroup[] = ['Antelope', 'Buffalo and big game', 'Pigs and warthogs', 'Predators', 'Small carnivores', 'Primates', 'Small game', 'Birds', 'Reptiles', 'Introduced game'];
 
 const norm = (s: string) => s.trim().toLowerCase();
