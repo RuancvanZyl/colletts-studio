@@ -41,21 +41,23 @@ export function ReceivingGrid({ lines, onRec, onStatus, onRemove, renderDetails 
     onRec(idx, { parts: l.rec.parts.includes(code) ? l.rec.parts.filter(c => c !== code) : [...l.rec.parts, code] });
 
   return (
-    <div className="rounded-xl border border-slate-300 dark:border-slate-600 overflow-x-auto bg-white dark:bg-slate-900">
+    <div className="rounded-xl border border-slate-300 dark:border-slate-600 overflow-auto max-h-[78vh] bg-white dark:bg-slate-900">
       <table className="min-w-[1000px] w-full text-sm border-collapse">
         <thead>
           <tr className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
-            <th className="sticky left-0 z-10 bg-slate-100 dark:bg-slate-800 text-left px-3 py-2 min-w-[170px] border-b border-slate-300 dark:border-slate-600">Species</th>
-            {COLS.map(c => <th key={c.code} title={c.hint} className="px-1 py-2 w-[54px] text-xs font-bold border-b border-l border-slate-300 dark:border-slate-600">{c.label}</th>)}
-            <th className="px-2 py-2 min-w-[120px] text-xs font-bold border-b border-l border-slate-300 dark:border-slate-600">Other (specify)</th>
-            <th className="px-2 py-2 min-w-[130px] text-xs font-bold border-b border-l border-slate-300 dark:border-slate-600">Visual check</th>
-            <th className="px-2 py-2 min-w-[170px] text-xs font-bold border-b border-l border-slate-300 dark:border-slate-600">Checked</th>
+            <th className="sticky left-0 top-0 z-30 bg-slate-100 dark:bg-slate-800 text-left px-3 py-2 min-w-[170px] border-b border-slate-300 dark:border-slate-600">Species</th>
+            {COLS.map(c => <th key={c.code} title={c.hint} className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 px-1 py-2 w-[54px] text-xs font-bold border-b border-l border-slate-300 dark:border-slate-600">{c.label}</th>)}
+            <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 px-2 py-2 min-w-[120px] text-xs font-bold border-b border-l border-slate-300 dark:border-slate-600">Other (specify)</th>
+            <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 px-2 py-2 min-w-[130px] text-xs font-bold border-b border-l border-slate-300 dark:border-slate-600">Visual check</th>
+            <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 px-2 py-2 min-w-[170px] text-xs font-bold border-b border-l border-slate-300 dark:border-slate-600">Checked</th>
           </tr>
         </thead>
         <tbody>
           {lines.map((l, idx) => {
             const cc = crossCheck(l.expectedParts, l.rec.parts, !l.isNew);
             const rowTone = l.status === 'ok' ? 'bg-green-50 dark:bg-green-950/20' : l.status === 'issue' ? 'bg-red-50 dark:bg-red-950/20' : l.status === 'later' ? 'bg-amber-50 dark:bg-amber-950/20' : '';
+            // the pinned name column must be solid, or the squares show through it when the sheet is scrolled sideways
+            const solidTone = l.status === 'ok' ? 'bg-green-50 dark:bg-[#10281f]' : l.status === 'issue' ? 'bg-red-50 dark:bg-[#2b1416]' : l.status === 'later' ? 'bg-amber-50 dark:bg-[#2b2411]' : 'bg-white dark:bg-slate-900';
             const note = l.isNew ? { t: 'Not on the client’s list', c: 'text-blue-600 dark:text-blue-300' }
               : !cc.listedAny ? { t: 'The client did not list the parts', c: 'text-slate-500' }
               : cc.missing.length === 0 && cc.extra.length === 0 && l.rec.parts.length > 0 ? { t: 'Matches the client’s list ✓', c: 'text-green-700 dark:text-green-400' }
@@ -63,7 +65,7 @@ export function ReceivingGrid({ lines, onRec, onStatus, onRemove, renderDetails 
             return (
               <>
                 <tr key={l.docId} className={`border-b border-slate-200 dark:border-slate-700 ${rowTone}`}>
-                  <td className={`sticky left-0 z-10 px-3 py-2 align-top ${rowTone || 'bg-white dark:bg-slate-900'} bg-clip-padding`}>
+                  <td className={`sticky left-0 z-10 px-3 py-2 align-top ${solidTone} bg-clip-padding`}>
                     <button type="button" className="text-left w-full" onClick={() => setOpen(o => (o === l.docId ? null : l.docId))} aria-expanded={open === l.docId}>
                       <span className="block font-bold text-slate-900 dark:text-slate-100 leading-tight">{l.species}</span>
                       <span className="block text-xs text-slate-500">{l.mountType && !/pending/i.test(l.mountType) ? l.mountType : 'Mount not chosen yet'}{l.tagNumber ? ` · tag ${l.tagNumber}` : ''}</span>
@@ -77,8 +79,9 @@ export function ReceivingGrid({ lines, onRec, onStatus, onRemove, renderDetails 
                     return (
                       <td key={c.code} className="border-l border-slate-200 dark:border-slate-700 p-0 text-center">
                         <button type="button" aria-pressed={on} aria-label={`${l.species}: ${c.hint}${exp ? ' (the client listed it)' : ''}`} onClick={() => tick(idx, l, c.code)}
-                          className={`w-full min-h-14 flex items-center justify-center ${on ? (exp || !cc.listedAny || l.isNew ? 'bg-green-600 text-white' : 'bg-sky-600 text-white') : exp ? 'text-amber-600' : 'text-slate-300 dark:text-slate-600'}`}>
+                          className={`w-full min-h-16 flex flex-col items-center justify-center gap-0.5 ${on ? (exp || !cc.listedAny || l.isNew ? 'bg-green-600 text-white' : 'bg-sky-600 text-white') : exp ? 'text-amber-600' : 'text-slate-300 dark:text-slate-600'}`}>
                           {on ? <Check className="w-6 h-6" /> : exp ? <CircleDashed className="w-6 h-6" /> : <span className="block w-5 h-5 rounded border border-slate-300 dark:border-slate-600" />}
+                          <span className="text-[9px] leading-none font-semibold">{c.label}</span>
                         </button>
                       </td>
                     );
