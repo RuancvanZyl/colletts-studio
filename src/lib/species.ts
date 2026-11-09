@@ -5,11 +5,23 @@
  * `aliases` are older spellings already on job cards, so they still resolve (scientific name, prices).
  * Scientific names follow common hunting-trade usage — check anything the workshop disagrees with.
  */
+import { SCI_CATEGORIES, SCI_COLOURS } from './sciCategories.ts';
+
 export type SpeciesGroup =
   | 'Antelope' | 'Buffalo and big game' | 'Pigs and warthogs'
   | 'Predators' | 'Small carnivores' | 'Primates' | 'Small game' | 'Birds' | 'Reptiles' | 'Introduced game';
 
-export interface Species { name: string; sci: string; group: SpeciesGroup; priceKey?: string; aliases?: string[]; variants?: string[]; note?: string }
+export interface Species {
+  name: string; sci: string; group: SpeciesGroup; priceKey?: string; aliases?: string[]; variants?: string[]; note?: string;
+  /** SCI's official name(s) for this type, when Safari Club International recognises it as a category of its own */
+  sciCategory?: string[];
+  /** the colours of this animal that SCI recognises as categories (the other colours are not SCI categories) */
+  sciColours?: string[];
+  /** the scientific name should be confirmed by someone who knows SCI's maps */
+  sciGuess?: boolean;
+  /** a regional SCI category that shares its scientific name with another */
+  sciShared?: boolean;
+}
 
 const A = (name: string, sci: string, group: SpeciesGroup, priceKey?: string, aliases?: string[], variants?: string[]): Species => ({ name, sci, group, priceKey, aliases, variants });
 
@@ -231,7 +243,29 @@ const NOTES: Record<string, string> = {
 };
 for (const sp of SPECIES) if (NOTES[sp.name]) sp.note = NOTES[sp.name];
 
+// ── SCI: mark what Safari Club International officially recognises, and add the official categories that were missing ──
+{
+  const have = new Map(SPECIES.map(s => [s.name.toLowerCase(), s]));
+  for (const c of SCI_CATEGORIES) {
+    const existing = have.get(c.name.toLowerCase());
+    if (existing) {
+      existing.sciCategory = [...(existing.sciCategory ?? []), c.category];
+      if (c.sci.startsWith(existing.sci) && c.sci.length > existing.sci.length) existing.sci = c.sci;   // SCI names the type, so use the more exact scientific name
+      if (c.guess) existing.sciGuess = true;
+      if (c.shared) existing.sciShared = true;
+    } else {
+      const sp: Species = { name: c.name, sci: c.sci, group: c.group as SpeciesGroup, sciCategory: [c.category], sciGuess: c.guess, sciShared: c.shared };
+      SPECIES.splice(Math.max(0, SPECIES.findIndex(s => s.name === 'Other')), 0, sp);
+      have.set(c.name.toLowerCase(), sp);
+    }
+  }
+  for (const [animal, colours] of Object.entries(SCI_COLOURS)) { const sp = SPECIES.find(s => s.name === animal); if (sp) sp.sciColours = colours; }
+}
+
 export const SPECIES_NAMES = SPECIES.map(s => s.name);
+
+/** Is this type an official SCI category? */
+export const isSci = (s: Species | undefined) => !!s?.sciCategory?.length;
 
 /** The animal a type belongs to: "Zebra (Cape Mountain)" and "Zebra (Burchell's)" are both "Zebra". */
 export const familyOf = (name: string) => name.split(' (')[0];

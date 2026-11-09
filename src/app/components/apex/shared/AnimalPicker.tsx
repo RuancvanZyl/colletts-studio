@@ -7,7 +7,7 @@
 import { useMemo, useState } from 'react';
 import { Plus, Search, Trash2, Minus } from 'lucide-react';
 import { toast } from 'sonner';
-import { SPECIES, SPECIES_GROUPS, findSpecies, sciName, composeName, variantsOf, splitVariant, groupFamilies, typesOfFamily, type Species } from '../../../../lib/species';
+import { SPECIES, SPECIES_GROUPS, findSpecies, sciName, composeName, variantsOf, splitVariant, groupFamilies, typesOfFamily, isSci, type Species } from '../../../../lib/species';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
 import { GROUP_STYLE, rankOf } from '../../../../lib/collection';
 import { SpeciesGuide } from '../hunter/SpeciesGuide';
@@ -25,6 +25,7 @@ function useCatalogue(query: string, group: string) {
   return useMemo(() => {
     if (query.trim().length >= 2) return SPECIES.filter(s => matches(s, query.trim())).slice(0, 60);
     if (group === 'Popular') return POPULAR.map(n => SPECIES.find(s => s.name === n)!).filter(Boolean);
+    if (group === 'SCI list') return SPECIES.filter(s => isSci(s));
     return SPECIES.filter(s => s.group === group);
   }, [query, group]);
 }
@@ -34,7 +35,7 @@ const select = 'rounded-lg border border-slate-300 dark:border-slate-600 bg-whit
 function GroupChips({ group, setGroup }: { group: string; setGroup: (g: string) => void }) {
   return (
     <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 [scrollbar-width:none]">
-      {['Popular', ...SPECIES_GROUPS].map(g => (
+      {['Popular', 'SCI list', ...SPECIES_GROUPS].map(g => (
         <button key={g} type="button" onClick={() => setGroup(g)}
           className={`whitespace-nowrap rounded-full border-2 px-4 min-h-10 text-sm font-semibold ${group === g ? 'border-[#0073ea] bg-[#0073ea] text-white' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}>{g}</button>
       ))}
@@ -104,7 +105,7 @@ export function AnimalPicker({ items, onChange, hunted, plain = false }: { items
                 {vars.length > 0 && (
                   <label className="order-last w-full flex items-center gap-2 text-sm font-semibold text-slate-600 dark:text-slate-300 pl-10" title={`A colour of the same animal: ${sciName(it.base)}`}>Colour
                     <select className={`${select} min-h-10 flex-1`} value={it.variant} onChange={e => onChange(items.map(x => x.id === it.id ? { ...x, variant: e.target.value } : x))}>
-                      {vars.map(v => <option key={v} value={v}>{v}</option>)}
+                      {vars.map(v => <option key={v} value={v}>{v}{findSpecies(it.base)?.sciColours?.includes(v) ? ' (SCI category)' : ''}</option>)}
                     </select>
                   </label>
                 )}
@@ -154,6 +155,7 @@ export function AnimalPicker({ items, onChange, hunted, plain = false }: { items
                   <span className="block text-base font-bold text-slate-900 dark:text-slate-100 leading-tight">{sp.name}</span>
                   {sp.sci && <span className="block text-[11px] italic text-slate-500 leading-snug mt-0.5">{sp.sci}</span>}
                   {sp.note && <span className="block text-[11px] text-slate-600 dark:text-slate-400 leading-snug">{sp.note}</span>}
+                  {isSci(sp) && <span className="block text-[11px] font-semibold text-sky-700 dark:text-sky-300 leading-snug">SCI: {sp.sciCategory!.join(' / ')}</span>}
                 </span>
               </button>
               <button type="button" aria-label={`About the ${sp.name}`} onClick={() => setGuide(sp.name)} className="absolute bottom-2 left-2 min-h-9 min-w-9 rounded-full bg-white/90 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 flex items-center justify-center"><Info className="w-4 h-4" /></button>
@@ -187,7 +189,8 @@ export function AnimalPicker({ items, onChange, hunted, plain = false }: { items
                       <p className="font-bold text-slate-900 dark:text-slate-100 leading-tight">{t.name}</p>
                       <p className="text-xs italic text-slate-500">{t.sci}</p>
                       {t.note && <p className="text-xs text-slate-600 dark:text-slate-400">{t.note}</p>}
-                      {vars.length > 0 && <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">Colours (same animal, same scientific name): {vars.join(', ')}</p>}
+                      {isSci(t) ? <p className="text-xs font-semibold text-sky-700 dark:text-sky-300">SCI category: {t.sciCategory!.join(' / ')}{t.sciGuess ? ' (scientific name to be confirmed)' : ''}</p> : <p className="text-xs text-slate-500">Not an SCI category</p>}
+                      {vars.length > 0 && <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">Colours (same animal, same scientific name): {vars.map(v => `${v}${t.sciColours?.includes(v) ? ' (SCI category)' : ''}`).join(', ')}. Colours that are not marked are not SCI categories.</p>}
                     </div>
                     {n > 0 ? (
                       <div className="flex items-center gap-1 bg-green-700 text-white rounded-full pl-1 pr-1 shrink-0">

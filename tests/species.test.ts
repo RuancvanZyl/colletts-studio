@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SPECIES, findSpecies, sciName, variantsOf, animalKind, splitVariant, familyOf, typesOfFamily, groupFamilies } from '../src/lib/species.ts';
+import { SPECIES, findSpecies, sciName, variantsOf, animalKind, splitVariant, familyOf, typesOfFamily, groupFamilies, isSci } from '../src/lib/species.ts';
+import { SCI_CATEGORIES } from '../src/lib/sciCategories.ts';
 
 test('every animal has a scientific name and a unique name', () => {
   const names = new Set<string>();
@@ -16,8 +17,8 @@ test('two types never share the same scientific name', () => {
   for (const s of SPECIES) {
     if (!s.sci) continue;
     const other = seen.get(s.sci);
-    assert.ok(!other || other === s.name, `${s.name} and ${other} have the same scientific name (${s.sci})`);
-    seen.set(s.sci, s.name);
+    assert.ok(!other || other === s.name || s.sciShared || findSpecies(other)?.sciShared, `${s.name} and ${other} have the same scientific name (${s.sci})`);
+    if (!s.sciShared) seen.set(s.sci, s.name);
   }
 });
 
@@ -83,7 +84,7 @@ test('colour variants are the ones the trade sells, and keep the animal\'s own s
   assert.deepEqual(variantsOf('Gemsbok'), ['Normal', 'Golden', 'King', 'Black', 'Red', 'White']);
   assert.deepEqual(variantsOf('Wildebeest (Blue)'), ['Normal', 'Golden', 'King', 'Royal']);
   assert.equal(findSpecies('Springbok, Copper')?.name, 'Springbok');
-  assert.equal(sciName('Springbok, Copper'), 'Antidorcas marsupialis');
+  assert.equal(sciName('Springbok, Copper'), 'Antidorcas marsupialis marsupialis');
   assert.equal(sciName('Impala, Saddleback'), 'Aepyceros melampus melampus');
 });
 
@@ -98,4 +99,24 @@ test('every type of an animal is listed together, each with its own scientific n
   for (const f of ['Kudu', 'Eland', 'Bushbuck', 'Sable', 'Roan', 'Hartebeest', 'Waterbuck', 'Giraffe', 'Duiker']) assert.ok(typesOfFamily(f).length >= 2, f);
   const g = groupFamilies(SPECIES.filter(s => s.name.startsWith('Zebra') || s.name === 'Kudu'));
   assert.equal(g.filter(x => x.family === 'Zebra').length, 1);
+});
+
+test('every official SCI category is in the list, written exactly as SCI names it', () => {
+  const all = new Set(SPECIES.flatMap(s => s.sciCategory ?? []));
+  for (const c of SCI_CATEGORIES) assert.ok(all.has(c.category), `missing SCI category: ${c.category}`);
+  assert.ok(SCI_CATEGORIES.length >= 180);
+  for (const name of ['Southern greater kudu', 'Eastern Cape greater kudu', 'Abyssinian greater kudu', 'Western greater kudu', 'Mountain nyala', 'Zambezi sitatunga',
+    'Kalahari springbok', 'Angolan springbok', 'South African springbok', 'Cookson wildebeest', 'Nyasa wildebeest', 'White-bearded wildebeest', 'Hirola or Hunter antelope',
+    'Southern impala', 'East African impala', 'Black faced impala', 'Kalahari gemsbok', 'Fringe-eared oryx', 'Livingstone eland', 'Cape bushbuck']) assert.ok(all.has(name), name);
+});
+
+test('SCI recognises springbok black, white and copper and the white blesbok as categories, but not golden, king or royal colours', () => {
+  assert.deepEqual(findSpecies('Springbok')?.sciColours, ['Black', 'White', 'Copper']);
+  assert.deepEqual(findSpecies('Blesbok')?.sciColours, ['White']);
+  assert.equal(findSpecies('Wildebeest (Blue)')?.sciColours, undefined);
+  assert.equal(isSci(findSpecies('Wildebeest (Blue)')), true);
+});
+
+test('animals SCI does not list (zebra, giraffe, ostrich, baboon ...) stay available but are not marked as SCI', () => {
+  for (const n of ["Zebra (Burchell's)", 'Giraffe', 'Ostrich', 'Baboon (Chacma)']) { assert.ok(findSpecies(n), n); assert.equal(isSci(findSpecies(n)), false, n); }
 });
