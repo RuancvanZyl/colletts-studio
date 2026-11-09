@@ -24,6 +24,7 @@ import { HuntTimeline } from './HuntTimeline';
 import { ClientAttention } from './ClientAttention';
 import { ClientJobCards } from './ClientJobCards';
 import { ClientEntries } from './ClientEntries';
+import { SectionGuard } from '../shared/SectionGuard';
 import { CommunicationPanel } from './CommunicationPanel';
 import { ClientRegistrationForm } from '../shared/ClientRegistrationForm';
 import type { Database } from '../../../../lib/database.types';
@@ -442,18 +443,20 @@ function ClientDetailPanel({ client, onEdit, onBack, onOpenQuote }: { client: Cl
           </>
         )}
 
-        {tab === 'jobcards' && <ClientJobCards clientId={client.id} />}
-        {tab === 'entries' && <ClientEntries clientId={client.id} />}
-        {tab === 'money' && <ClientMoney clientId={client.id} onOpenQuote={onOpenQuote ?? (() => {})} />}
-        {tab === 'hunts' && <HuntTimeline clientId={client.id} />}
+        {tab === 'jobcards' && <SectionGuard key="jobcards" what="The job cards"><ClientJobCards clientId={client.id} /></SectionGuard>}
+        {tab === 'entries' && <SectionGuard key="entries" what="What the client entered"><ClientEntries clientId={client.id} /></SectionGuard>}
+        {tab === 'money' && <SectionGuard key="money" what="The money tab"><ClientMoney clientId={client.id} onOpenQuote={onOpenQuote ?? (() => {})} /></SectionGuard>}
+        {tab === 'hunts' && <SectionGuard key="hunts" what="Hunts and documents"><HuntTimeline clientId={client.id} /></SectionGuard>}
 
-        {tab === 'messages' && <ClientOutfitterChats clientId={client.id} />}
         {tab === 'messages' && (
-          <CommunicationPanel
-            clientId={client.id}
-            clientName={client.full_name}
-            clientEmail={client.email ?? null}
-          />
+          <SectionGuard key="messages" what="The messages">
+            <ClientOutfitterChats clientId={client.id} />
+            <CommunicationPanel
+              clientId={client.id}
+              clientName={client.full_name}
+              clientEmail={client.email ?? null}
+            />
+          </SectionGuard>
         )}
 
         {tab === 'photos' && (

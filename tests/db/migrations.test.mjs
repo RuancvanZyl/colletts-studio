@@ -27,7 +27,7 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql', '063_mount_change_rules.sql', '064_conversation_topics.sql', '065_mark_done_permission_fix.sql', '066_live_team_messages.sql', '067_push_notifications.sql', '069_hunt_receivings.sql', '070_arrival_alerts.sql', '071_missing_parts_followup.sql', '072_client_drafts.sql']) {
+for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql', '063_mount_change_rules.sql', '064_conversation_topics.sql', '065_mark_done_permission_fix.sql', '066_live_team_messages.sql', '067_push_notifications.sql', '069_hunt_receivings.sql', '070_arrival_alerts.sql', '071_missing_parts_followup.sql', '072_client_drafts.sql', '073_local_clients_no_documents.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
@@ -183,6 +183,22 @@ ok((await q(`SELECT count(*)::int n FROM client_drafts`))[0].n === 1, 'the works
 ok((await fails(`INSERT INTO client_drafts (client_id, name, data) VALUES ($1, 'y', '{}'::jsonb)`, [hc.id])) !== null, 'but staff cannot write into a hunter\'s drafts');
 await as(null);
 await db.exec(`DELETE FROM client_drafts`);
+
+console.log('\nLocal clients need no permits or documents');
+await as(null);
+const lc = (await q(`SELECT id FROM clients LIMIT 1`))[0].id;
+const lh = (await q(`INSERT INTO client_hunts (client_id, year, client_type) VALUES ($1, '2026', 'local') RETURNING id`, [lc]))[0].id;
+const eh = (await q(`INSERT INTO client_hunts (client_id, year, client_type) VALUES ($1, '2026', 'export') RETURNING id`, [lc]))[0].id;
+await db.exec(`UPDATE document_types SET is_active = false; INSERT INTO document_types (name, responsible, applies_to, sort_order) VALUES ('LC PH Register','outfitter','all',1), ('LC Hunting permit','outfitter','export',2), ('LC Proof of address','hunter','local',3)`);
+await db.query(`SELECT generate_hunt_requirements($1)`, [lh]);
+await db.query(`SELECT generate_hunt_requirements($1)`, [eh]);
+const names = async h => (await q(`SELECT name FROM hunt_requirements WHERE hunt_id=$1 AND name LIKE 'LC %' ORDER BY name`, [h])).map(r => r.name).join(', ');
+ok(await names(lh) === 'LC Proof of address', 'a local hunt only gets the documents made for local hunters (even when a type is set to "all")');
+const exportDocs = (await q(`SELECT name FROM hunt_requirements WHERE hunt_id=$1 ORDER BY name`, [eh])).map(r => r.name).join(', ');
+ok(exportDocs.includes('LC PH Register') && exportDocs.includes('LC Hunting permit') && !exportDocs.includes('LC Proof of address'), 'an export hunt still gets the permit and document lists (the "all" and the "export" types), not the local-only one: ' + exportDocs);
+await db.query(`INSERT INTO hunt_requirements (hunt_id, name, responsible) VALUES ($1, 'LC Special letter', 'workshop')`, [lh]);
+ok((await q(`SELECT count(*)::int n FROM hunt_requirements WHERE hunt_id=$1 AND name='LC Special letter'`, [lh]))[0].n === 1, 'a document added by hand on one local hunt is still allowed');
+await db.exec(`DELETE FROM hunt_requirements WHERE hunt_id IN ('${lh}','${eh}'); DELETE FROM client_hunts WHERE id IN ('${lh}','${eh}'); DELETE FROM document_types WHERE name LIKE 'LC %'; UPDATE document_types SET is_active = true`);
 
 console.log('\nClient messages');
 await as(ids.worker);
@@ -603,7 +619,7 @@ await as(ids.admin);
 await db.query(`DELETE FROM document_types`);
 await db.query(`INSERT INTO document_types (name, responsible, applies_to, provinces) VALUES ('Everywhere doc','outfitter','all','{}'),('Limpopo doc','outfitter','all',ARRAY['Limpopo']),('Free State doc','outfitter','all',ARRAY['Free State'])`);
 await asW(OUT1);
-const ph = (await q(`SELECT public.outfitter_register_hunt('{"name":"Prov Hunter","email":"prov@example.com","client_type":"local"}'::jsonb, NULL, '2026-10-01', '', '[{"species":"Impala"}]'::jsonb) id`))[0].id;
+const ph = (await q(`SELECT public.outfitter_register_hunt('{"name":"Prov Hunter","email":"prov@example.com","client_type":"export"}'::jsonb, NULL, '2026-10-01', '', '[{"species":"Impala"}]'::jsonb) id`))[0].id;
 ok((await q(`SELECT count(*)::int n FROM hunt_requirements WHERE hunt_id=$1`, [ph]))[0].n === 1, 'with no province yet a hunt gets only the paperwork that applies everywhere');
 ok((await fails(`SELECT public.set_hunt_province($1, 'Narnia')`, [ph]))?.includes('nine provinces'), 'only the nine provinces are accepted');
 await db.query(`SELECT public.set_hunt_province($1, 'Limpopo')`, [ph]);
