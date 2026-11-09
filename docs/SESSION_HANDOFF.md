@@ -298,3 +298,9 @@
 - Animals SCI does not list in these awards (zebra, giraffe, ostrich, baboon, small game, birds) stay in the app, marked as not an SCI category.
 - SCI defines categories (many are regions of a subspecies) but publishes no scientific names. The scientific names of the types are the standard ones; those I am less sure of are flagged ("scientific name to be confirmed", 40ish) and listed in `docs/ANIMAL_LIST.csv` (new columns: SCI recognised, SCI category name, to confirm, colours SCI counts).
 - Owner chose (2026-11-09): the hunter's and outfitter's animal picker shows **only the SCI-recognised animals first** (tab "SCI list"); a button "Not finding it? Tap here to also show animals SCI does not list (zebra, giraffe, birds and more)" shows everything (and the groups with no SCI animals: primates, small game, birds). Search is limited the same way until the button is tapped. The workshop's own species field (check-in, quick entry) still searches every animal.
+
+## 2026-11-09 — Checked the live database after the owner ran the SQL files
+- Present on the live database: `push_subscriptions` + `save_push_subscription` (067), `hunt_receivings` (069), `part_followups` + its functions (071), `client_drafts` (072).
+- **Missing: migration 070** (`hunt_documents.arrived_at` and `mark_arrived`): the "Trophies have arrived" button and the arrival alert do not work until `supabase/launch/release_070_arrival_alerts.sql` is run (the owner thought all were run). The Receiving list, the sheet and the Needs you counts now retry without the column, so they keep working in the meantime.
+- Migration 068 (team message replies) is still on the branch `team-message-replies` and not released.
+- To harden before outsiders: some older functions (for example `send_staff_message`) can be executed by the anonymous role (they refuse inside because nobody is signed in). Newer ones revoke `anon`. Audit `grant execute ... to anon` and revoke it everywhere it is not needed.

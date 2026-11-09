@@ -24,8 +24,9 @@ export function useAttentionCounts(): AttentionCounts {
       const { data: qc } = await db.from('quality_cases').select('status, outfitter_id, outfitter_ack_at, outcome, outcome_at, client_informed_at, order_override_at').neq('status', 'resolved');
       const cases: any[] = qc ?? [];
       // trophies at the receiving stage: arrived but not checked yet, and animals with parts missing
-      const { data: rc } = await db.from('hunt_documents').select('hunt_id, status, arrived_at, received:form_data->received_parts, tf:form_data->>to_follow, mp:form_data->missing_parts')
-        .eq('doc_type', 'job_card').eq('current_department', 'receiving').in('status', ['awaiting_arrival', 'in_progress', 'flagged']);
+      const recvQuery = (cols: string) => db.from('hunt_documents').select(cols).eq('doc_type', 'job_card').eq('current_department', 'receiving').in('status', ['awaiting_arrival', 'in_progress', 'flagged']);
+      const first = await recvQuery('hunt_id, status, arrived_at, received:form_data->received_parts, tf:form_data->>to_follow, mp:form_data->missing_parts');
+      const rc = first.error ? (await recvQuery('hunt_id, status, received:form_data->received_parts, tf:form_data->>to_follow, mp:form_data->missing_parts')).data : first.data;   // without migration 070 there is no arrival column
       const atReceiving: any[] = rc ?? [];
       const arrivedHunts = new Set(atReceiving.filter(x => x.arrived_at && !(Array.isArray(x.received) && x.received.length > 0)).map(x => x.hunt_id));
       const oldMissing = atReceiving.filter(x => x.tf === 'true' || (x.status === 'flagged' && Array.isArray(x.mp) && x.mp.length > 0)).length;

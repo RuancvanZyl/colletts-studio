@@ -83,15 +83,17 @@ export function ReceivingSheet({ onNavigate }: { onNavigate: (v: string) => void
       // One joined query: job cards in/after Receiving with their hunt + client attached.
       // Paged (1000/page), no id lists in the URL, and always clears the spinner.
       const rows: any[] = [];
+      let withArrived = true;   // until migration 070 is run the database has no arrival column: the list still works without it
       for (let from = 0; from < 5000; from += 1000) {
         let q = (supabase as any)
           .from('hunt_documents')
-          .select('hunt_id, arrived_at, client_hunts(id, year, client_type, operator, created_at, status, clients(full_name, client_number, email))')
+          .select(`hunt_id, ${withArrived ? 'arrived_at, ' : ''}client_hunts(id, year, client_type, operator, created_at, status, clients(full_name, client_number, email))`)
           .eq('doc_type', 'job_card');
         q = tab === 'pending'
           ? q.in('status', ['awaiting_arrival', 'in_progress']).eq('current_department', 'receiving')
           : q.eq('status', 'in_progress').neq('current_department', 'receiving');
         const { data, error } = await q.order('hunt_id', { ascending: true }).range(from, from + 999);
+        if (error && withArrived && /arrived/i.test(error.message ?? '')) { withArrived = false; from -= 1000; continue; }
         if (error) throw error;
         rows.push(...(data ?? []));
         if (!data || data.length < 1000) break;
@@ -244,12 +246,9 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
     if (hunt) setHuntInfo({ client_id: hunt.client_id, client_name: hunt.clients?.full_name, client_number: hunt.clients?.client_number, ref: hunt.ref_number ?? '', year: hunt.year ?? null, operator: hunt.operator ?? null });
 
     // Job cards: awaiting_arrival (pre-registered export) + in_progress at receiving
-    const { data: docs } = await (supabase as any)
-      .from('hunt_documents')
-      .select('id, title, form_data, current_department, status, arrived_at, arrived_via')
-      .eq('hunt_id', huntId)
-      .eq('doc_type', 'job_card')
-      .in('status', ['awaiting_arrival', 'in_progress']);
+    const docQuery = (cols: string) => (supabase as any).from('hunt_documents').select(cols).eq('hunt_id', huntId).eq('doc_type', 'job_card').in('status', ['awaiting_arrival', 'in_progress']);
+    let { data: docs, error: docsErr } = await docQuery('id, title, form_data, current_department, status, arrived_at, arrived_via');
+    if (docsErr && /arrived/i.test(docsErr.message ?? '')) ({ data: docs } = await docQuery('id, title, form_data, current_department, status'));   // migration 070 not run yet
 
     const mapped: TrophyLine[] = (docs ?? []).map((d: any) => {
       const fd = d.form_data ?? {};
