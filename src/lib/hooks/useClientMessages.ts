@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../supabase';
 import { useAuth } from '../auth';
 
@@ -59,20 +59,26 @@ export function useClientMessages(clientId: string | null) {
   useEffect(() => { load(); }, [load]);
   useEffect(() => { loadTemplates(); }, [loadTemplates]);
 
-  // Subscribe to real-time new messages
+  // Subscribe to real-time new messages. The channel name is unique each time: a reused name hands back the old,
+  // already-live channel and adding a listener to it throws. Live updates are a bonus, so a failure here is silent.
+  const loadRef = useRef(load);
+  loadRef.current = load;
   useEffect(() => {
     if (!clientId) return;
-    const channel = supabase
-      .channel(`messages-${clientId}`)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'client_messages',
-        filter: `client_id=eq.${clientId}`,
-      }, () => load())
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [clientId, load]);
+    let channel: any = null;
+    try {
+      channel = (supabase as any)
+        .channel(`messages-${clientId}-${Math.random().toString(36).slice(2, 8)}`)
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'client_messages',
+          filter: `client_id=eq.${clientId}`,
+        }, () => loadRef.current())
+        .subscribe();
+    } catch { /* live updates unavailable: messages still load normally */ }
+    return () => { try { if (channel) (supabase as any).removeChannel(channel); } catch { /* already gone */ } };
+  }, [clientId]);
 
   async function sendMessage(payload: {
     subject?: string;
