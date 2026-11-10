@@ -27,7 +27,7 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql', '063_mount_change_rules.sql', '064_conversation_topics.sql', '065_mark_done_permission_fix.sql', '066_live_team_messages.sql', '067_push_notifications.sql', '069_hunt_receivings.sql', '070_arrival_alerts.sql', '071_missing_parts_followup.sql', '072_client_drafts.sql', '073_local_clients_no_documents.sql', '074_receiving_issues.sql', '075_proforma_cart.sql', '076_change_after_deposit_credit.sql']) {
+for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql', '063_mount_change_rules.sql', '064_conversation_topics.sql', '065_mark_done_permission_fix.sql', '066_live_team_messages.sql', '067_push_notifications.sql', '069_hunt_receivings.sql', '070_arrival_alerts.sql', '071_missing_parts_followup.sql', '072_client_drafts.sql', '073_local_clients_no_documents.sql', '074_receiving_issues.sql', '075_proforma_cart.sql', '076_change_after_deposit_credit.sql', '077_tanning_already_done.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
@@ -1345,6 +1345,34 @@ await as(null);
 await db.query(`UPDATE hunt_documents SET current_department='mounting' WHERE id=$1`, [c4.id('Eland')]);
 await as(HUN2);
 ok((await fails(`SELECT public.hunter_choose_mount($1, 'Shoulder Mount')`, [c4.id('Eland')]))?.includes('already being mounted'), 'once the animal is being mounted nothing can be changed');
+await as(null);
+
+
+// changing to a skull only mount after the skin reached the tannery: the tanning is still paid for
+const c5 = await newHunt(['Gemsbok']);
+await as(HUN2);
+await db.query(`SELECT public.hunter_choose_mount($1, 'Full Mount')`, [c5.id('Gemsbok')]);
+await as(null);
+await db.query(`UPDATE client_hunts SET work_authorised_at = now() WHERE id=$1`, [c5.h]);
+await db.query(`UPDATE hunt_documents SET current_department='tannery' WHERE id=$1`, [c5.id('Gemsbok')]);
+await as(HUN2);
+await db.query(`SELECT public.hunter_choose_mount($1, 'Euro Skull')`, [c5.id('Gemsbok')]);
+ok((await q(`SELECT public.hunter_finish_choices($1) j`, [c5.h]))[0].j.result === 'staff', 'the quote waits for staff to price the tanning');
+await as(null);
+const tanLines = await q(`SELECT description, amount FROM quote_lines WHERE quote_id=(SELECT id FROM quotes WHERE hunt_id=$1 ORDER BY created_at DESC LIMIT 1) ORDER BY sort_order`, [c5.h]);
+ok(tanLines.some(l => l.description === 'Gemsbok: tanning already done' && l.amount === null) && tanLines.some(l => l.description.startsWith('Gemsbok: Euro Skull')), 'the quote has the Euro skull and a "tanning already done" line without a price');
+await db.query(`UPDATE quote_lines SET amount = 450 WHERE description = 'Gemsbok: tanning already done'`);
+await as(HUN2);
+ok((await q(`SELECT public.hunter_finish_choices($1) j`, [c5.h]))[0].j.result === 'sent', 'once the tanning is priced the quote can go out');
+await as(null);
+ok((await q(`SELECT amount::float a FROM quote_lines WHERE description='Gemsbok: tanning already done'`))[0].a === 450, 'and the price the workshop set stays');
+await as(HUN2);
+// an animal that was a skull mount from the start has no tanning charge
+const c6 = await newHunt(['Duiker']);
+await as(HUN2);
+await db.query(`SELECT public.hunter_choose_mount($1, 'Euro Skull')`, [c6.id('Duiker')]);
+await q(`SELECT public.hunter_finish_choices($1)`, [c6.h]);
+ok((await q(`SELECT count(*)::int n FROM quote_lines l JOIN quotes qq ON qq.id=l.quote_id WHERE qq.hunt_id=$1 AND l.description LIKE '%tanning already done'`, [c6.h]))[0].n === 0, 'a skull mount chosen from the start has no tanning charge');
 await as(null);
 
 console.log(`\n${pass} passed, ${fail} failed`);

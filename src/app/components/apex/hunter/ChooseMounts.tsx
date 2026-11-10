@@ -19,7 +19,7 @@ import { finishChoices } from '../../../../lib/hooks/useQuotes';
 import { LeatherPicker } from '../shared/LeatherPicker';
 import { mayLeaveSkin, type Leather } from '../../../../lib/leather';
 
-export interface MountAnimal { docId: string; huntId?: string; species: string; parts: { code: string; label: string }[]; other: string; mount: string; instructions: string; expected?: boolean; leather?: Leather | null }
+export interface MountAnimal { docId: string; huntId?: string; dept?: string; species: string; parts: { code: string; label: string }[]; other: string; mount: string; instructions: string; expected?: boolean; leather?: Leather | null }
 export interface MountPick {
   mount: string; notes: string; head: string; neck: string;
   custom: { description: string; files: File[]; combine: string[] };
@@ -228,6 +228,13 @@ export function ChooseMounts({ animals, clientType, clientId, combinable = [], o
               );
             })}
           </div>
+
+          {['Euro Skull', 'Euro Mount', 'Bleach Only', 'Artistic Skull'].includes(p?.mount ?? '') && (a.dept === 'tannery' || a.dept === 'dip_pack') && (
+            <div className="rounded-xl border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/30 p-3 text-sm text-slate-900 dark:text-slate-100">
+              <p className="font-bold">The skin of this animal is already being tanned.</p>
+              <p>If you only keep the skull, the tanning that is done still has to be paid for. We will add it to your quote and agree the price with you first.</p>
+            </div>
+          )}
 
           {p?.mount === 'Custom mount' && (
             <div className={box}>
