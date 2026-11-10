@@ -8,6 +8,8 @@ import { CaseTag, type OpenCase } from './CaseTag';
 import { SoakReportButton } from './SoakReportButton';
 import { EditJobCardButton } from './EditJobCard';
 import { ReceivingIssueBox, type ReceivingIssue } from './ReceivingIssueBox';
+import { LeatherBox } from './LeatherBox';
+import { leftoverSkin, type Leather } from '../../../../lib/leather';
 import { MessageOutfitterButton } from '../shared/MessageOutfitterButton';
 import { useLiveRefresh } from '../../../../lib/liveRefresh';
 import { Button } from '../../ui/button';
@@ -38,6 +40,8 @@ interface JobCard {
   mountType: string;
   instructions: string;
   receivingIssue: ReceivingIssue | null;
+  leather: Leather | null;
+  leftover: boolean;   // skin is left over (back skin, or a whole skin with a skull-only mount)
   received: string;
   condition: string;
   specialRequests: string[];
@@ -133,6 +137,8 @@ export function WorkshopInstructions() {
         mountType:       fd.mount_type    ?? '—',
         instructions:    fd.instructions  ?? '',
         receivingIssue:  fd.receiving_issue ?? null,
+        leather:         fd.leather ? { choice: fd.leather.choice ?? '', items: fd.leather.items ?? [], note: fd.leather.note ?? null, by: fd.leather.by, by_name: fd.leather.by_name, confirmed_at: fd.leather.confirmed_at } : null,
+        leftover:        leftoverSkin(fd.mount_type, (fd.received_parts ?? []).map((p: any) => p.code)),
         received:        (fd.received_parts ?? []).length ? (fd.received_parts as any[]).map(p => p.label ?? p.code).join(', ') + (fd.received_other ? ` (${fd.received_other})` : '') : '',
         condition:       conditionSummary(fd.condition_report, fd.condition),
         specialRequests: custByHunt[doc.hunt_id] ?? [],
@@ -421,6 +427,7 @@ function AnimalBlock({ card, expanded, toggle, completing, markDone, photos, add
           </div>
         )}
         {card.receivingIssue?.open && <ReceivingIssueBox card={card} isAdmin={isAdmin} reload={reload} />}
+        {(card.leftover || card.leather?.choice) && <LeatherBox card={card} reload={reload} />}
         <div className="flex flex-wrap items-center gap-2 pt-0.5">
           <JobPhotosButton docId={card.docId} dept={card.department} huntId={card.huntId} title={`${card.species} — ${card.clientName}`} />
           <PrintButton compact label="Print this card" onPrint={() => printJobCards({ docIds: [card.docId] })} />

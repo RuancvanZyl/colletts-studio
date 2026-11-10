@@ -3,7 +3,7 @@
  * Export prices are USD, local prices are ZAR (VAT exclusive). 0 / missing = not offered for that animal.
  */
 
-import { SPECIES_NAMES, findSpecies } from './species';
+import { SPECIES_NAMES, findSpecies } from './species.ts';
 export const SPECIES_LIST = SPECIES_NAMES;
 
 // 2026 Export USD prices — from SA Price List 2026.xlsx (Export Prices folder)

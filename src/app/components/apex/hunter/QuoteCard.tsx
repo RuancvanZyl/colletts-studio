@@ -2,15 +2,16 @@
  * QuoteCard — the hunter sees the quote, accepts it (paying a deposit or the full amount) or asks for changes,
  * and then sees where their payment stands.
  */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { CheckCircle2, FileText, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../../../lib/supabase';
 import { money, type Quote } from '../../../../lib/hooks/useQuotes';
 import { PAYMENT_DETAILS } from '../../../../lib/workshop';
 import { useBack } from '../../../../lib/back';
+import { uploadHuntFiles } from '../../../../lib/docs';
 
-export function QuoteCard({ quote, ref_, onChanged }: { quote: Quote; ref_?: string; onChanged: () => void }) {
+export function QuoteCard({ quote, ref_, onChanged, onChangeChoices }: { quote: Quote; ref_?: string; onChanged: () => void; onChangeChoices?: (huntId: string) => void }) {
   const [open, setOpen] = useState(false);
   useBack(open, () => setOpen(false));
   const total = quote.lines.reduce((s, l) => s + (l.amount ?? 0), 0);
@@ -54,6 +55,8 @@ export function QuoteCard({ quote, ref_, onChanged }: { quote: Quote; ref_?: str
           </div>
         )}
 
+        {(s === 'accepted' || (s === 'deposit_paid' && paid < total - 0.005)) && <PaymentProof quote={quote} onChanged={onChanged} />}
+
         {['accepted', 'deposit_paid', 'paid'].includes(s) && (
           <div className="grid grid-cols-3 gap-2 text-center">
             {[{ l: 'Total', v: total }, { l: 'Paid', v: paid }, { l: creditDue > 0.005 ? 'Credit due to you' : 'Outstanding', v: creditDue > 0.005 ? creditDue : Math.max(0, total - paid) }].map(x => (
@@ -66,12 +69,12 @@ export function QuoteCard({ quote, ref_, onChanged }: { quote: Quote; ref_?: str
 
         <button onClick={() => setOpen(true)} className="w-full min-h-12 rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-bold">{s === 'sent' ? 'Review and accept' : 'View the quote'}</button>
       </div>
-      {open && <QuoteSheet quote={quote} total={total} paid={paid} onClose={() => setOpen(false)} onChanged={() => { setOpen(false); onChanged(); }} />}
+      {open && <QuoteSheet quote={quote} total={total} paid={paid} onClose={() => setOpen(false)} onChanged={() => { setOpen(false); onChanged(); }} onChangeChoices={onChangeChoices ? () => { setOpen(false); onChangeChoices(quote.hunt_id); } : undefined} />}
     </>
   );
 }
 
-function QuoteSheet({ quote, total, paid, onClose, onChanged }: { quote: Quote; total: number; paid: number; onClose: () => void; onChanged: () => void }) {
+function QuoteSheet({ quote, total, paid, onClose, onChanged, onChangeChoices }: { quote: Quote; total: number; paid: number; onClose: () => void; onChanged: () => void; onChangeChoices?: () => void }) {
   const [option, setOption] = useState<'deposit' | 'full'>('deposit');
   const [asking, setAsking] = useState(false);
   const [comment, setComment] = useState('');
@@ -113,7 +116,13 @@ function QuoteSheet({ quote, total, paid, onClose, onChanged }: { quote: Quote; 
               </button>
             ))}
             <button disabled={busy} onClick={() => respond(true)} className="w-full min-h-14 rounded-xl bg-green-700 hover:bg-green-800 text-white text-lg font-bold flex items-center justify-center gap-2 disabled:opacity-60">{busy && <Loader2 className="w-5 h-5 animate-spin" />}Accept the quote</button>
-            <button onClick={() => setAsking(true)} className="w-full min-h-12 text-[#0073ea] font-semibold">I would like something changed</button>
+            {onChangeChoices && (
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 space-y-2">
+                <p className="text-sm text-slate-700 dark:text-slate-300">Want a different mount, or to change the details? You can change your choices until you accept. Your quote updates by itself.</p>
+                <button onClick={onChangeChoices} className="w-full min-h-12 rounded-xl border-2 border-slate-900 dark:border-slate-100 font-bold">Change my choices</button>
+              </div>
+            )}
+            <button onClick={() => setAsking(true)} className="w-full min-h-12 text-[#0073ea] font-semibold">I would like something else changed</button>
           </>
         )}
         {quote.status === 'sent' && asking && (
@@ -126,6 +135,41 @@ function QuoteSheet({ quote, total, paid, onClose, onChanged }: { quote: Quote; 
         )}
         {quote.status !== 'sent' && paid > 0 && <p className="text-sm text-slate-600 dark:text-slate-300">Received so far: <strong>{money(paid, quote.currency)}</strong>. {paid > total + 0.005 ? <>You are in credit by <strong>{money(paid - total, quote.currency)}</strong>. The workshop will refund it or use it on another order.</> : <>Outstanding: <strong>{money(Math.max(0, total - paid), quote.currency)}</strong>.</>}</p>}
       </div>
+    </div>
+  );
+}
+
+/** After a bank transfer the client adds a photo or PDF of the payment; the workshop checks the bank and records it. */
+function PaymentProof({ quote, onChanged }: { quote: Quote; onChanged: () => void }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  const waiting = !!quote.proof_at && !quote.proof_checked_at;
+
+  async function send(files: File[]) {
+    if (files.length === 0) return;
+    setBusy(true);
+    try {
+      const paths = await uploadHuntFiles(quote.hunt_id, files);
+      const { error } = await (supabase as any).rpc('hunter_submit_payment_proof', { p_quote: quote.id, p_files: paths, p_note: note || null });
+      if (error) throw new Error(error.message);
+      toast.success('Thank you. We will confirm your payment as soon as we see it in the bank.');
+      setNote('');
+      onChanged();
+    } catch (e: any) { toast.error(e?.message ?? 'Could not send your proof. Please try again.'); }
+    setBusy(false);
+  }
+
+  return (
+    <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-3 space-y-2 text-sm text-slate-800 dark:text-slate-200">
+      {waiting
+        ? <p className="font-semibold">We have your proof of payment. We will confirm it as soon as we see the money in the bank.</p>
+        : <p className="font-semibold">Paid by bank transfer? Add a photo or PDF of your payment so we can find it quickly.</p>}
+      <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="A note, for example the name on the bank account (optional)" className="w-full min-h-11 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 text-sm" />
+      <input ref={fileRef} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={e => { send([...(e.target.files ?? [])]); e.target.value = ''; }} />
+      <button disabled={busy} onClick={() => fileRef.current?.click()} className="w-full min-h-12 rounded-xl border-2 border-green-700 text-green-800 dark:text-green-300 font-bold flex items-center justify-center gap-2 disabled:opacity-60">
+        {busy && <Loader2 className="w-4 h-4 animate-spin" />}{waiting ? 'Add another proof' : 'I have paid: add my proof'}
+      </button>
     </div>
   );
 }

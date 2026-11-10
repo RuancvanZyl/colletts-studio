@@ -27,7 +27,7 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql', '063_mount_change_rules.sql', '064_conversation_topics.sql', '065_mark_done_permission_fix.sql', '066_live_team_messages.sql', '067_push_notifications.sql', '069_hunt_receivings.sql', '070_arrival_alerts.sql', '071_missing_parts_followup.sql', '072_client_drafts.sql', '073_local_clients_no_documents.sql', '074_receiving_issues.sql']) {
+for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql', '063_mount_change_rules.sql', '064_conversation_topics.sql', '065_mark_done_permission_fix.sql', '066_live_team_messages.sql', '067_push_notifications.sql', '069_hunt_receivings.sql', '070_arrival_alerts.sql', '071_missing_parts_followup.sql', '072_client_drafts.sql', '073_local_clients_no_documents.sql', '074_receiving_issues.sql', '075_proforma_cart.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
@@ -1131,6 +1131,92 @@ ok((await fails(`SELECT public.log_outfitter_conversation($1, 'outfitter', 'carr
 await asW(ids.worker);
 ok((await fails(`SELECT public.log_outfitter_conversation($1, 'workshop', 'phone', 'x')`, [TH]))?.includes('Only managers'), 'a worker cannot write down a conversation');
 await as(ids.admin);
+
+
+console.log('\nPro-forma quote built from the price list');
+await as(HUN2);
+const pfHunt = (await q(`SELECT public.hunter_register_animals($1::date, $1::date, 'Steve Safaris', '[{"key":"a","species":"Kudu"},{"key":"b","species":"Impala"}]'::jsonb) j`, [yesterday]))[0].j.hunt_id;
+await as(null);
+const pfDocs = await q(`SELECT id, form_data->>'species' sp FROM hunt_documents WHERE hunt_id=$1`, [pfHunt]);
+const pfId = n => pfDocs.find(r => r.sp === n).id;
+const price = async (sp, mount) => Number((await q(`SELECT price FROM mount_prices WHERE species=$1 AND mount=$2 AND client_type='export'`, [sp, mount]))[0].price);
+const pfQuote = async () => (await q(`SELECT id, status, auto_made, currency, deposit_percent::float dp, (SELECT count(*)::int FROM quote_lines l WHERE l.quote_id=quotes.id) n, (SELECT coalesce(sum(amount),0)::float FROM quote_lines l WHERE l.quote_id=quotes.id) total FROM quotes WHERE hunt_id=$1 ORDER BY created_at DESC LIMIT 1`, [pfHunt]))[0];
+ok((await q(`SELECT count(*)::int n FROM mount_prices`))[0].n > 800, 'the price list is in the database');
+await as(HUN2);
+ok((await q(`SELECT public.hunter_finish_choices($1) j`, [pfHunt]))[0].j.result === 'nothing', 'nothing is sent while no mount is chosen');
+await db.query(`SELECT public.hunter_choose_mount($1, 'Full Mount')`, [pfId('Kudu')]);
+await db.query(`SELECT public.hunter_choose_mount($1, 'Full Mount')`, [pfId('Impala')]);
+ok((await q(`SELECT public.hunter_finish_choices($1) j`, [pfHunt]))[0].j.result === 'sent', 'when every animal has a price the pro-forma quote is sent straight away');
+let pq = await pfQuote();
+const wantTotal = (await price('Kudu', 'Full Mount')) + (await price('Impala', 'Full Mount'));
+ok(pq.status === 'sent' && pq.n === 2 && pq.total === wantTotal && pq.currency === 'USD' && pq.dp === 50 && pq.auto_made === true, 'it has one line per animal, priced from the list, in dollars, with a 50% deposit');
+ok((await q(`SELECT count(*)::int n FROM quotes WHERE hunt_id=$1 AND status='sent'`, [pfHunt]))[0].n === 1, 'and the hunter can see it');
+ok((await q(`SELECT count(*)::int n FROM client_notifications WHERE hunt_id=$1 AND title='Your quote is ready'`, [pfHunt]))[0].n === 1, 'the hunter is told it is ready');
+await db.query(`SELECT public.hunter_choose_mount($1, 'Shoulder Mount')`, [pfId('Kudu')]);
+await q(`SELECT public.hunter_finish_choices($1)`, [pfHunt]);
+pq = await pfQuote();
+ok(pq.status === 'sent' && pq.total === (await price('Kudu', 'Shoulder Mount')) + (await price('Impala', 'Full Mount')) && (await q(`SELECT count(*)::int n FROM quotes WHERE hunt_id=$1`, [pfHunt]))[0].n === 1, 'changing a choice updates the same quote');
+await db.query(`SELECT public.hunter_choose_mount($1, 'Custom mount', NULL, NULL, '{"custom":{"description":"Impala at a waterhole","combine":[]}}'::jsonb)`, [pfId('Impala')]);
+ok((await q(`SELECT public.hunter_finish_choices($1) j`, [pfHunt]))[0].j.result === 'staff', 'something that needs our own price waits for staff');
+ok((await q(`SELECT count(*)::int n FROM quotes WHERE hunt_id=$1 AND status<>'draft'`, [pfHunt]))[0].n === 0, 'and the hunter sees no half-priced quote');
+await db.query(`SELECT public.hunter_choose_mount($1, 'Shoulder Mount')`, [pfId('Impala')]);
+ok((await q(`SELECT public.hunter_finish_choices($1) j`, [pfHunt]))[0].j.result === 'sent', 'once everything has a price again it goes out');
+await as(HUN3);
+ok((await fails(`SELECT public.hunter_finish_choices($1)`, [pfHunt]))?.includes('not on your profile'), 'another hunter cannot build quotes on this hunt');
+await as(HUN2);
+ok((await fails(`SELECT public._save_quote($1, 'USD', '[{"description":"x","amount":1}]'::jsonb, 50, NULL, true, NULL)`, [pfHunt])) !== null, 'a hunter cannot write their own quote or prices');
+ok((await fails(`SELECT public.hunter_submit_payment_proof($1, ARRAY['a/b.jpg'])`, [pq.id]))?.includes('not waiting for a payment'), 'proof of payment is only for an accepted quote');
+await as(ids.admin);
+const staffQ = (await q(`SELECT public.staff_save_quote($1, 'USD', '[{"description":"Kudu: Full Mount","amount":2000},{"description":"Extra crate","amount":150}]'::jsonb, 30, 'Special price', true) id`, [pfHunt]))[0].id;
+ok((await q(`SELECT auto_made FROM quotes WHERE id=$1`, [staffQ]))[0].auto_made === false, 'a quote staff have touched is marked as theirs');
+await as(HUN2);
+await db.query(`SELECT public.hunter_choose_mount($1, 'Euro Skull')`, [pfId('Impala')]);
+ok((await q(`SELECT public.hunter_finish_choices($1) j`, [pfHunt]))[0].j.result === 'staff', 'the app never overwrites a quote staff have edited');
+ok((await pfQuote()).total === 2150, 'it stays exactly as staff left it');
+await db.query(`SELECT public.hunter_respond_quote($1, true, NULL, 'deposit')`, [staffQ]);
+ok((await q(`SELECT public.hunter_finish_choices($1) j`, [pfHunt]))[0].j.result === 'accepted', 'after the hunter accepts, choices no longer change the quote');
+ok((await fails(`SELECT public.hunter_submit_payment_proof($1, ARRAY[]::text[])`, [staffQ]))?.includes('photo or a PDF'), 'proof needs a file');
+await db.query(`SELECT public.hunter_submit_payment_proof($1, ARRAY['${pfHunt}/proof.jpg'], 'Paid from my Chase account')`, [staffQ]);
+ok((await q(`SELECT proof_at IS NOT NULL p, proof_checked_at IS NULL c, cardinality(proof_paths)::int n FROM quotes WHERE id=$1`, [staffQ]))[0].p === true, 'the hunter hands in proof of the bank transfer');
+await as(HUN3);
+ok((await fails(`SELECT public.hunter_submit_payment_proof($1, ARRAY['x/y.jpg'])`, [staffQ]))?.includes('not on your profile'), 'another hunter cannot hand in proof for this quote');
+await as(ids.admin);
+await db.query(`SELECT public.staff_record_payment($1, 645, 'EFT', 'Proof checked')`, [staffQ]);
+ok((await q(`SELECT proof_checked_at IS NOT NULL c FROM quotes WHERE id=$1`, [staffQ]))[0].c === true, 'recording the payment counts as checking the proof');
+await as(null);
+
+
+console.log('\nLeftover skin and leather work');
+await as(HUN2);
+const lHunt = (await q(`SELECT public.hunter_register_animals($1::date, $1::date, 'Steve Safaris', '[{"key":"a","species":"Kudu"}]'::jsonb) j`, [yesterday]))[0].j.hunt_id;
+await as(null);
+const lDoc = (await q(`SELECT id FROM hunt_documents WHERE hunt_id=$1`, [lHunt]))[0].id;
+const leather = async () => (await q(`SELECT form_data->'leather' l FROM hunt_documents WHERE id=$1`, [lDoc]))[0].l;
+await as(HUN2);
+await db.query(`SELECT public.hunter_choose_mount($1, 'Shoulder Mount')`, [lDoc]);
+ok((await q(`SELECT public.hunter_finish_choices($1) j`, [lHunt]))[0].j.result === 'sent', 'a plain shoulder mount goes straight to a quote');
+ok((await fails(`SELECT public.hunter_set_leather($1, 'maybe')`, [lDoc]))?.includes('Choose leather work'), 'only the listed answers are accepted');
+ok((await fails(`SELECT public.hunter_set_leather($1, 'leather', ARRAY[]::text[])`, [lDoc]))?.includes('what you would like made'), 'leather work needs something chosen');
+await db.query(`SELECT public.hunter_set_leather($1, 'none', NULL, 'No thanks, keep nothing')`, [lDoc]);
+let lv = await leather();
+ok(lv.choice === 'none' && lv.by === 'client' && lv.note === 'No thanks, keep nothing', 'a client who does not want anything is written down');
+ok((await q(`SELECT public.hunter_finish_choices($1) j`, [lHunt]))[0].j.result === 'sent', 'and the quote can still go ahead');
+await db.query(`SELECT public.hunter_set_leather($1, 'leather', ARRAY['Handbag', 'Cushion covers'])`, [lDoc]);
+lv = await leather();
+ok(lv.choice === 'leather' && lv.items.length === 2, 'leather work records what the client would like made');
+ok((await q(`SELECT public.hunter_finish_choices($1) j`, [lHunt]))[0].j.result === 'staff', 'leather work is priced by us, so the quote waits until we have agreed it');
+await as(null);
+ok((await q(`SELECT count(*)::int n FROM quote_lines l JOIN quotes qq ON qq.id = l.quote_id WHERE qq.hunt_id=$1 AND l.description LIKE 'Kudu: leather work (Handbag, Cushion covers)' AND l.amount IS NULL`, [lHunt]))[0].n === 1, 'with a line that names the items and has no price yet');
+await as(HUN3);
+ok((await fails(`SELECT public.hunter_set_leather($1, 'none')`, [lDoc]))?.includes('not on your profile'), 'another hunter cannot answer for this client');
+await as(ids.worker);
+await db.query(`SELECT public.staff_set_leather($1, 'later', NULL, 'Client will tell us on Friday')`, [lDoc]);
+ok((await leather()).by === 'workshop', 'staff can write down what the client said on the phone');
+ok((await fails(`SELECT public.staff_confirm_leather($1)`, [lDoc]))?.includes('no leather work'), 'only leather work can be confirmed');
+await db.query(`SELECT public.staff_set_leather($1, 'leather', ARRAY['Handbag'], 'Agreed R2500 by phone')`, [lDoc]);
+await db.query(`SELECT public.staff_confirm_leather($1, 'Price agreed')`, [lDoc]);
+ok((await leather()).confirmed_at !== undefined, 'the workshop marks the leather work as agreed with the client');
+await as(null);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

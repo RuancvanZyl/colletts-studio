@@ -8,6 +8,7 @@ import { ArrowLeft, ArrowRight, CalendarCheck } from 'lucide-react';
 import { supabase } from '../../../../lib/supabase';
 import { AnimalPicker, pickedName, type PickedAnimal } from '../shared/AnimalPicker';
 import { ChooseMounts, type MountPick } from './ChooseMounts';
+import { mayLeaveSkin } from '../../../../lib/leather';
 import { savePhotos, shrinkPhoto } from '../../../../lib/offline/photos';
 import { mountHasHead } from '../../../../lib/pricing';
 import { useHunterAnimals } from '../../../../lib/hooks/useHunterAnimals';
@@ -74,7 +75,14 @@ export function AddAnimalsFlow({ clientId, clientType, onClose, onSaved }: { cli
               await savePhotos({ clientId, huntId: data.hunt_id, docId: ids[d.docId], kind: 'reference', shared: true, files: blobs, staffId: null, staffName: null });
             }
           }
-          return null;
+          // what to do with leftover skin, now that the job cards exist
+          for (const d of drafts) {
+            const p = picks[d.docId];
+            if (p?.mount && mayLeaveSkin(p.mount) && p.leather?.choice && ids[d.docId]) {
+              await (supabase as any).rpc('hunter_set_leather', { p_doc: ids[d.docId], p_choice: p.leather.choice, p_items: p.leather.choice === 'leather' ? p.leather.items : null, p_note: p.leather.note || null });
+            }
+          }
+          return { huntIds: [data.hunt_id] };
         }}
       />
     );

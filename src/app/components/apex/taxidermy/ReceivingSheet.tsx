@@ -25,6 +25,7 @@ import {
   X, Upload, Plus,
 } from 'lucide-react';
 import { useBack } from '../../../../lib/back';
+import { leftoverSkin } from '../../../../lib/leather';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -63,6 +64,7 @@ interface TrophyLine {
   hold?: boolean;            // an animal with an issue is normally allowed to carry on into production; tick to keep it in Receiving until the issue is solved
   moved?: boolean;           // already past Receiving (received earlier): no missing-parts alerts
   isNew?: boolean;           // arrived but not on the client's list: a job card is made for it when the receiving is saved
+  leather?: string;          // what the client said about leftover skin ('leather', 'none', 'later' or empty)
 }
 
 // ── Hunt selection list ───────────────────────────────────────────────────────
@@ -267,6 +269,7 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
         docId:             d.id,
         species:           fd.species ?? 'Unknown',
         mountType:         fd.mount_type ?? '',
+        leather:           fd.leather?.choice ?? '',
         quantity:          fd.quantity ?? 1,
         tagNumber:         fd.tag_number ?? '',
         expectedCondition: fd.condition ?? 'unknown',
@@ -497,6 +500,16 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
           title: 'Your trophies have arrived at the workshop',
           body: `We have received: ${[...new Set(arrivedNames)].join(', ')}. We will keep you updated as the work goes on.`,
         }).then(() => undefined, () => undefined);
+      }
+      // skin left over (a back skin after a shoulder mount, a whole skin with a Euro skull) and the client has not said what to do with it: ask them
+      const leftover = lines.filter(l => leftoverSkin(l.mountType, l.rec.parts) && (!l.leather || l.leather === 'later'));
+      if (leftover.length && huntInfo?.client_id) {
+        await (supabase as any).from('client_notifications').insert({
+          client_id: huntInfo.client_id, hunt_id: huntId, type: 'alert', stage: 'leather',
+          title: 'You have skin left over',
+          body: `There is skin left over from your ${[...new Set(leftover.map(l => l.species))].join(', ')}. Open My trophies to choose leather work, or tell us you do not want anything made from it.`,
+        }).then(() => undefined, () => undefined);
+        toast.info(`${leftover.length} animal${leftover.length > 1 ? 's have' : ' has'} skin left over. The client has been asked what they would like done with it.`, { duration: 9000 });
       }
       // the delivery details (who brought it, collected or delivered, mileage, note); skipped quietly until migration 069 is run
       await (supabase as any).from('hunt_receivings').insert({

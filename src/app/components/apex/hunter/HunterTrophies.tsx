@@ -14,6 +14,12 @@ import { PhotoGallery } from '../shared/TrophyPhotos';
 import { ChooseMounts } from './ChooseMounts';
 import { AddAnimalsFlow } from './AddAnimalsFlow';
 import { QuoteCard } from './QuoteCard';
+import { toast } from 'sonner';
+import { supabase } from '../../../../lib/supabase';
+import { LeatherCard } from '../shared/LeatherPicker';
+import { leftoverSkin, leatherText } from '../../../../lib/leather';
+import { mountsFor } from '../../../../lib/pricing';
+import { finishChoices } from '../../../../lib/hooks/useQuotes';
 import { HunterDocuments } from './HunterDocuments';
 import { useHunterQuotes } from '../../../../lib/hooks/useQuotes';
 import { useBack } from '../../../../lib/back';
@@ -55,6 +61,17 @@ export function HunterTrophies({ onRegisterHunt, onChanged, startAdding = false 
     return <ChooseMounts animals={subset.map(x => ({ ...x }))} clientType={client.type} clientId={client.id} combinable={animals.filter(x => !x.finished && !x.started && x.dept === 'receiving').map(x => ({ docId: x.docId, species: x.species }))} onClose={() => setChoosing(null)} onSaved={() => { refresh(); onChanged?.(); }} />;
   }
 
+  // the client changes their choices (before they accept): the animals of that hunt that have a plain mount and have not been started
+  const changeChoices = (huntId: string) => {
+    const ids = animals.filter(a => a.huntId === huntId && !a.started && !a.finished && a.dept === 'receiving' && a.mountChosen && !/^custom mount/i.test(a.mount ?? '')).map(a => a.docId);
+    if (ids.length === 0) {
+      const hasCustom = animals.some(a => a.huntId === huntId && !a.started && /^custom mount/i.test(a.mount ?? ''));
+      toast.info(hasCustom ? 'To change a custom mount, please message us. We will update your quote.' : 'Work has already started on these animals, so the mount cannot be changed here. Please message us if you need a change.');
+      return;
+    }
+    setChoosing(ids);
+  };
+
   const hunts = [...new Set(animals.map(a => a.huntId))].map(id => ({ id, rows: animals.filter(a => a.huntId === id) }));
 
   return (
@@ -69,7 +86,18 @@ export function HunterTrophies({ onRegisterHunt, onChanged, startAdding = false 
       </button>
 
       {quotes.filter(q => q.status !== 'draft' && q.status !== 'paid' || q.payments.length).map(q => (
-        <QuoteCard key={q.id} quote={q} ref_={animals.find(a => a.huntId === q.hunt_id)?.huntRef} onChanged={() => { refreshQuotes(); onChanged?.(); }} />
+        <QuoteCard key={q.id} quote={q} ref_={animals.find(a => a.huntId === q.hunt_id)?.huntRef} onChanged={() => { refreshQuotes(); onChanged?.(); }} onChangeChoices={changeChoices} />
+      ))}
+
+      {hunts.filter(h => {
+        const chosen = h.rows.filter(r => r.mountChosen && !r.finished && !/^custom mount \(combined\)$/i.test(r.mount));
+        const needsAgreeing = chosen.some(r => mountsFor(r.species, client.type).find(o => o.name === r.mount)?.price == null || (r.leather?.choice === 'leather' && !r.leather.confirmed_at));
+        return needsAgreeing && !quotes.some(q => q.hunt_id === h.id && q.status !== 'draft');
+      }).map(h => (
+        <div key={h.id} className="rounded-2xl border-2 border-sky-400 bg-sky-50 dark:bg-sky-950/30 p-4 space-y-1">
+          <p className="font-bold text-slate-900 dark:text-slate-100">We are confirming your custom order with you</p>
+          <p className="text-sm text-slate-700 dark:text-slate-300">Some of your choices (a custom mount, a replica, leather work or other items we price ourselves) are agreed with you first. When we have agreed them, your quote and payment details appear here. You only pay after that.</p>
+        </div>
       ))}
 
       <HunterDocuments />
@@ -132,9 +160,23 @@ export function HunterTrophies({ onRegisterHunt, onChanged, startAdding = false 
                 {!a.mountChosen && !a.finished && (
                   <div className="px-4 pb-4"><button className="w-full rounded-xl bg-green-700 text-white font-bold min-h-12" onClick={() => setChoosing([a.docId])}>Choose the mount</button></div>
                 )}
+                {a.mountChosen && !a.finished && !a.expected && leftoverSkin(a.mount, a.parts.map(p => p.code)) && (!a.leather?.choice || a.leather.choice === 'later') && (
+                  <div className="mx-4 mb-4 rounded-xl border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-3">
+                    <p className="font-bold text-slate-900 dark:text-slate-100">You have skin left over from this {a.species}</p>
+                    <p className="text-sm text-slate-700 dark:text-slate-300">It can be made into leather items, for example a handbag or cushion covers. Tell us what you would like, or that you do not want anything.</p>
+                    <LeatherCard initial={a.leather} onSave={async v => {
+                      const { error } = await (supabase as any).rpc('hunter_set_leather', { p_doc: a.docId, p_choice: v.choice, p_items: v.choice === 'leather' ? v.items : null, p_note: v.note || null });
+                      if (error) { toast.error(error.message); return; }
+                      await finishChoices([a.huntId]);
+                      toast.success(v.choice === 'leather' ? 'Thank you. We will agree the details and price with you.' : 'Thank you. We have noted your answer.');
+                      refresh(); refreshQuotes(); onChanged?.();
+                    }} />
+                  </div>
+                )}
                 {isOpen && (
                   <div className="px-4 pb-4 pt-1 space-y-3 border-t border-slate-100 dark:border-slate-800">
                     {a.instructions && <p className="text-sm text-slate-700 dark:text-slate-200"><span className="font-semibold">Your notes:</span> {a.instructions}</p>}
+                    {a.leather?.choice && a.leather.choice !== 'later' && <p className="text-sm text-slate-700 dark:text-slate-200"><span className="font-semibold">Leftover skin:</span> {a.leather.choice === 'leather' ? a.leather.items.join(', ') : 'You do not want anything made from it.'}</p>}
                     {a.mountChosen && !a.started && !a.finished && a.dept === 'receiving' && (
                       <button className="text-sm font-semibold text-[#0073ea] min-h-11" onClick={() => setChoosing([a.docId])}>Change my choice</button>
                     )}

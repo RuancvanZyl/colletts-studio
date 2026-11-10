@@ -36,7 +36,8 @@ export interface QuotePayment { id: string; amount: number; method: string | nul
 export interface Quote {
   id: string; hunt_id: string; status: string; currency: string; deposit_percent: number; note: string | null; hunter_comment: string | null;
   payment_option: string | null; amount_due_now: number | null; sent_at: string | null; accepted_at: string | null;
-  xero_invoice_number: string | null; xero_invoice_url: string | null; lines: QuoteLine[]; payments: QuotePayment[]; amendments: Amendment[];
+  xero_invoice_number: string | null; xero_invoice_url: string | null;
+  proof_paths?: string[] | null; proof_at?: string | null; proof_note?: string | null; proof_checked_at?: string | null; lines: QuoteLine[]; payments: QuotePayment[]; amendments: Amendment[];
 }
 
 export async function loadQuotes(filter: { huntId?: string; clientId?: string }): Promise<Quote[]> {
@@ -64,4 +65,17 @@ export function useHunterQuotes(clientId: string | undefined) {
   const load = useCallback(async () => { if (clientId) setQuotes(await loadQuotes({ clientId })); }, [clientId]);
   useEffect(() => { load(); }, [load]);
   return { quotes, refresh: load };
+}
+
+/** The hunter finished choosing: the pro-forma quote is built from the price list. 'sent' = ready to read, 'staff' = we check a few items first. */
+export async function finishChoices(huntIds: string[]): Promise<'sent' | 'staff' | 'accepted' | 'nothing'> {
+  const rank = { nothing: 0, accepted: 1, sent: 2, staff: 3 } as const;
+  let out: keyof typeof rank = 'nothing';
+  for (const id of [...new Set(huntIds.filter(Boolean))]) {
+    const { data, error } = await (supabase as any).rpc('hunter_finish_choices', { p_hunt: id });
+    if (error) continue;   // before the quote update is switched on the choices are still saved; staff make the quote as before
+    const r = (data?.result ?? 'nothing') as keyof typeof rank;
+    if (r in rank && rank[r] > rank[out]) out = r;
+  }
+  return out;
 }

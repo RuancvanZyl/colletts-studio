@@ -15,24 +15,28 @@ import { listParts } from '../../../../lib/received';
 import { savePhotos, shrinkPhoto } from '../../../../lib/offline/photos';
 import { SpeciesGuide } from './SpeciesGuide';
 import { useBack } from '../../../../lib/back';
+import { finishChoices } from '../../../../lib/hooks/useQuotes';
+import { LeatherPicker } from '../shared/LeatherPicker';
+import { mayLeaveSkin, type Leather } from '../../../../lib/leather';
 
-export interface MountAnimal { docId: string; huntId?: string; species: string; parts: { code: string; label: string }[]; other: string; mount: string; instructions: string; expected?: boolean }
+export interface MountAnimal { docId: string; huntId?: string; species: string; parts: { code: string; label: string }[]; other: string; mount: string; instructions: string; expected?: boolean; leather?: Leather | null }
 export interface MountPick {
   mount: string; notes: string; head: string; neck: string;
   custom: { description: string; files: File[]; combine: string[] };
   replica: { type: string; reasons: string[] };
+  leather: Leather;
 }
 /** An animal of the hunter's that could be folded into someone's custom mount. */
 export interface Combinable { docId: string; species: string }
 
 const stripLead = (t: string) => t.replace(/^(Pose: [^.]*\.|CUSTOM MOUNT:[^]*|REPLICA[^.]*\.)\s*/, '');
-const blank = (a: MountAnimal): MountPick => ({ mount: a.mount, notes: stripLead(a.instructions), head: '', neck: '', custom: { description: '', files: [], combine: [] }, replica: { type: '', reasons: [] } });
+const blank = (a: MountAnimal): MountPick => ({ mount: a.mount, notes: stripLead(a.instructions), head: '', neck: '', custom: { description: '', files: [], combine: [] }, replica: { type: '', reasons: [] }, leather: a.leather?.choice ? { choice: a.leather.choice, items: a.leather.items ?? [], note: a.leather.note ?? null } : { choice: '', items: [] } });
 
 export function ChooseMounts({ animals, clientType, clientId, combinable = [], onClose, onSaved, onConfirmPicks, doneText, doneExtra }: {
   animals: MountAnimal[]; clientType: string; clientId?: string; combinable?: Combinable[];
   onClose: () => void; onSaved: () => void;
   /** Replace the default "save each animal" (used when the animals are not saved yet). Return an error text, or null when done. */
-  onConfirmPicks?: (picks: Record<string, MountPick>) => Promise<string | null>;
+  onConfirmPicks?: (picks: Record<string, MountPick>) => Promise<string | null | { huntIds: string[] }>;
   doneText?: string; doneExtra?: React.ReactNode;
 }) {
   // the choices are kept on this device while the person works, so a refresh or an update never loses them
@@ -50,6 +54,7 @@ export function ChooseMounts({ animals, clientType, clientId, combinable = [], o
   useBack(!review && i > 0, () => setI(n => Math.max(0, n - 1)));
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
+  const [quoteState, setQuoteState] = useState<'sent' | 'staff' | 'accepted' | 'nothing'>('nothing');
   const fileRef = useRef<HTMLInputElement>(null);
   const [guide, setGuide] = useState<string | null>(null);
 
@@ -71,8 +76,9 @@ export function ChooseMounts({ animals, clientType, clientId, combinable = [], o
     setSaving(true);
     let failed = 0;
     if (onConfirmPicks) {
-      const err = await onConfirmPicks(picks);
-      if (err) { failed = 1; toast.error(err); }
+      const res = await onConfirmPicks(picks);
+      if (typeof res === 'string') { failed = 1; toast.error(res); }
+      else if (res && typeof res === 'object') setQuoteState(await finishChoices(res.huntIds));
     } else {
       for (const x of animals) {
         const p = picks[x.docId];
@@ -82,12 +88,17 @@ export function ChooseMounts({ animals, clientType, clientId, combinable = [], o
           : p.mount === 'Replica' ? { replica: { type: p.replica.type, reasons: p.replica.reasons } } : null;
         const { error } = await (supabase as any).rpc('hunter_choose_mount', { p_doc: x.docId, p_mount: p.mount, p_notes: p.notes || null, p_pose: pose, p_extra: extra });
         if (error) { failed++; toast.error(`${x.species}: ${error.message}`); continue; }
+        if (mayLeaveSkin(p.mount) && p.leather?.choice) {
+          const { error: lErr } = await (supabase as any).rpc('hunter_set_leather', { p_doc: x.docId, p_choice: p.leather.choice, p_items: p.leather.choice === 'leather' ? p.leather.items : null, p_note: p.leather.note || null });
+          if (lErr) { failed++; toast.error(`${x.species}: ${lErr.message}`); continue; }
+        }
         if (p.mount === 'Custom mount' && p.custom.files.length && clientId) {
           const blobs = await Promise.all(p.custom.files.map(f => shrinkPhoto(f)));
           await savePhotos({ clientId, huntId: x.huntId ?? null, docId: x.docId, kind: 'reference', shared: true, files: blobs, staffId: null, staffName: null });
         }
       }
     }
+    if (failed === 0 && !onConfirmPicks) setQuoteState(await finishChoices(animals.map(x => x.huntId ?? '')));
     setSaving(false);
     if (failed === 0) { clearWork(); setDone(true); onSaved(); }
   }
@@ -110,9 +121,11 @@ export function ChooseMounts({ animals, clientType, clientId, combinable = [], o
       <div className="max-w-xl mx-auto text-center py-16 space-y-4">
         <CheckCircle2 className="w-16 h-16 text-green-600 mx-auto" />
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Thank you!</h1>
-        <p className="text-slate-600 dark:text-slate-300">{doneText ?? 'We have your choices. The workshop will confirm the quote with you and start work. You can follow every stage — with photos — right here.'}</p>
+        <p className="text-slate-600 dark:text-slate-300">{doneText ?? 'We have your choices. You can follow every stage, with photos, right here.'}</p>
+        {quoteState === 'sent' && <p className="rounded-xl border-2 border-green-600 bg-green-50 dark:bg-green-950/30 p-3 text-slate-900 dark:text-slate-100 font-semibold">Your pro-forma quote is ready. Open it on the next screen to check it. You can change your choices, or accept it and pay a deposit or the full amount.</p>}
+        {quoteState === 'staff' && <p className="rounded-xl border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/30 p-3 text-slate-900 dark:text-slate-100">A few of your choices need a price from us. We will send your pro-forma quote as soon as it is ready.</p>}
         {doneExtra}
-        <button className={`${btn} bg-green-700 text-white`} onClick={onClose}>Back to my trophies</button>
+        <button className={`${btn} bg-green-700 text-white`} onClick={onClose}>{quoteState === 'sent' ? 'See my quote' : 'Back to my trophies'}</button>
       </div>
     );
   }
@@ -137,6 +150,7 @@ export function ChooseMounts({ animals, clientType, clientId, combinable = [], o
                     {inc ? `Part of the custom mount with the ${nameOf(inc)}` : p?.mount ? `${p.mount}${p.mount === 'Replica' && p.replica.type ? ` (${p.replica.type})` : ''}` : 'Not chosen yet — tap to choose'}{pose ? ` · ${pose}` : ''}
                   </span>
                   {p?.mount === 'Custom mount' && p.custom.combine.length > 0 && <span className="block text-xs text-slate-500">Combines with: {p.custom.combine.map(nameOf).join(', ')}</span>}
+                  {p?.mount && mayLeaveSkin(p.mount) && p.leather?.choice && <span className="block text-xs text-slate-500">Leftover skin: {p.leather.choice === 'leather' ? p.leather.items.join(', ') : p.leather.choice === 'none' ? 'no thank you' : 'not sure yet'}</span>}
                   {p?.mount === 'Custom mount' && p.custom.files.length > 0 && <span className="block text-xs text-slate-500">{p.custom.files.length} reference photo{p.custom.files.length > 1 ? 's' : ''}</span>}
                 </span>
                 <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{inc ? '' : price ? formatPrice(price, clientType) : p?.mount ? 'We quote' : ''}</span>
@@ -161,6 +175,7 @@ export function ChooseMounts({ animals, clientType, clientId, combinable = [], o
     );
   }
 
+  const needsMore = (x?: MountPick) => (x?.mount === 'Custom mount' && x.custom.description.trim().length < 5) || (!!x?.mount && mayLeaveSkin(x.mount) && (!x.leather?.choice || (x.leather.choice === 'leather' && x.leather.items.length === 0)));
   const options = mountsFor(a.species, clientType);
   const p = picks[a.docId];
   const inc = includedBy[a.docId];
@@ -287,6 +302,16 @@ export function ChooseMounts({ animals, clientType, clientId, combinable = [], o
             </div>
           )}
 
+          {p?.mount && mayLeaveSkin(p.mount) && (
+            <div className={box}>
+              <div>
+                <p className="font-semibold text-slate-800 dark:text-slate-100">What should we do with the leftover skin? *</p>
+                <p className="text-sm text-slate-500">With this mount there is usually skin left over, such as the back skin. It can be made into leather items.</p>
+              </div>
+              <LeatherPicker value={p.leather} onChange={v => set(a.docId, { leather: v })} />
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1">Anything we should know? <span className="font-normal text-slate-400">(optional)</span></label>
             <textarea rows={3} value={p?.notes ?? ''} onChange={e => set(a.docId, { notes: e.target.value })} placeholder="What to do with the feet or tail, ear position, anything else…"
@@ -299,8 +324,8 @@ export function ChooseMounts({ animals, clientType, clientId, combinable = [], o
         <div className="max-w-xl mx-auto flex gap-2">
           {i > 0 && <button className={`${btn} border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100`} onClick={() => setI(i - 1)}><ArrowLeft className="w-5 h-5" />Back</button>}
           {i < animals.length - 1
-            ? <button className={`${btn} flex-1 bg-green-700 text-white`} disabled={p?.mount === 'Custom mount' && p.custom.description.trim().length < 5} onClick={() => setI(i + 1)}>{p?.mount || inc ? 'Next animal' : 'Skip for now'}<ArrowRight className="w-5 h-5" /></button>
-            : <button className={`${btn} flex-1 bg-green-700 text-white`} disabled={p?.mount === 'Custom mount' && p.custom.description.trim().length < 5} onClick={() => setReview(true)}>Review my choices<ArrowRight className="w-5 h-5" /></button>}
+            ? <button className={`${btn} flex-1 bg-green-700 text-white`} disabled={needsMore(p)} onClick={() => setI(i + 1)}>{p?.mount || inc ? 'Next animal' : 'Skip for now'}<ArrowRight className="w-5 h-5" /></button>
+            : <button className={`${btn} flex-1 bg-green-700 text-white`} disabled={needsMore(p)} onClick={() => setReview(true)}>Review my choices<ArrowRight className="w-5 h-5" /></button>}
         </div>
       </div>
     </div>

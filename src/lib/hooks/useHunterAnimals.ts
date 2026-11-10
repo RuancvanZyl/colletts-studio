@@ -8,6 +8,7 @@ import { supabase } from '../supabase';
 import { useAuth } from '../auth';
 import { selectIn } from '../supabaseHelpers';
 import { PART_LABEL } from '../received';
+import type { Leather } from '../leather';
 
 export interface HunterAnimal {
   docId: string; huntId: string; huntRef: string; huntYear: string;
@@ -16,6 +17,7 @@ export interface HunterAnimal {
   mount: string; mountChosen: boolean; instructions: string;
   dept: string; status: string; started: boolean; finished: boolean; expected: boolean;
   history: { dept: string; completedAt?: string }[];
+  leather: Leather | null;
 }
 export interface HunterClient { id: string; name: string; email: string | null; type: string }
 
@@ -51,6 +53,7 @@ export function useHunterAnimals() {
           expected: d.status === 'awaiting_arrival',
           finished: d.status === 'completed' || d.status === 'complete' || d.current_department === 'done',
           history: fd.stage_history ?? [],
+          leather: fd.leather ? { choice: fd.leather.choice ?? '', items: fd.leather.items ?? [], note: fd.leather.note ?? null, by: fd.leather.by, confirmed_at: fd.leather.confirmed_at } : null,
         } as HunterAnimal;
       }).sort((a, b) => b.huntYear.localeCompare(a.huntYear) || a.huntRef.localeCompare(b.huntRef) || a.species.localeCompare(b.species)));
     } finally { setLoading(false); loadedOnce.current = true; }

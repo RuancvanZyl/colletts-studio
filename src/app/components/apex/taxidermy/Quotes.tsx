@@ -16,6 +16,7 @@ import { printCreditNote } from '../../../../lib/print';
 import { useQuotePipeline, loadQuotes, money, STAGE_LABEL, type Quote, type QuoteLine, type PipelineRow } from '../../../../lib/hooks/useQuotes';
 import { MessageOutfitterButton } from '../shared/MessageOutfitterButton';
 import { useBack } from '../../../../lib/back';
+import { openHuntFile } from '../../../../lib/docs';
 
 const field = 'w-full rounded-lg border border-slate-600 bg-[#0f1a24] text-slate-100 px-3 min-h-11 text-base placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0073ea]';
 const lab = 'block text-sm font-semibold text-slate-300 mb-1';
@@ -111,12 +112,14 @@ function QuoteEditor({ huntId, onBack }: { huntId: string; onBack: () => void })
       const byId = new Map<string, any>((docs ?? []).map((d: any) => [d.id, d]));
       const cur = type === 'local' ? 'ZAR' : 'USD';
       setCurrency(cur); setPercent(50); setNote('');
-      setLines((docs ?? []).filter((d: any) => !/^custom mount \(combined\)$/i.test(d.form_data?.mount_type ?? '') && !/^pending instructions$/i.test(d.form_data?.mount_type ?? '')).map((d: any) => {
+      const base = (docs ?? []).filter((d: any) => !/^custom mount \(combined\)$/i.test(d.form_data?.mount_type ?? '') && !/^pending instructions$/i.test(d.form_data?.mount_type ?? '')).map((d: any) => {
         const fd = d.form_data ?? {}; const mount = fd.mount_type ?? '';
         const priced = mountsFor(fd.species ?? '', type).find(o => o.name === mount)?.price ?? null;
         const combined = (fd.custom?.combined_with ?? []).map((id: string) => byId.get(id)?.form_data?.species).filter(Boolean);
         return { hunt_doc_id: d.id, amount: priced, description: `${fd.species ?? 'Animal'}: ${mount}${combined.length ? ` (combined with ${combined.join(', ')})` : ''}${mount === 'Replica' && fd.replica?.type ? ` (${fd.replica.type})` : ''}` };
-      }));
+      });
+      const leatherLines = (docs ?? []).filter((d: any) => d.form_data?.leather?.choice === 'leather' && !/^custom mount \(combined\)$/i.test(d.form_data?.mount_type ?? '')).map((d: any) => ({ hunt_doc_id: d.id, amount: null, description: `${d.form_data?.species ?? 'Animal'}: leather work (${(d.form_data.leather.items ?? []).join(', ')})` }));
+      setLines([...base, ...leatherLines]);
     }
     setLoading(false);
   }
@@ -218,6 +221,17 @@ function QuoteEditor({ huntId, onBack }: { huntId: string; onBack: () => void })
       {quote && ['accepted', 'deposit_paid', 'paid'].includes(status) && (
         <section className="space-y-3 rounded-2xl border border-slate-700 bg-[#111c26] p-4">
           <h2 className="text-lg font-bold text-slate-100">Payment</h2>
+          {quote.proof_at && (
+            <div className={`rounded-xl border-2 p-3 space-y-1 ${quote.proof_checked_at ? 'border-slate-700' : 'border-amber-500 bg-amber-950/20'}`}>
+              <p className="font-bold text-slate-100">{quote.proof_checked_at ? 'Proof of payment from the hunter (checked)' : 'The hunter says they have paid. Check your bank, then record the payment below.'}</p>
+              {quote.proof_note && <p className="text-slate-300 text-sm">{quote.proof_note}</p>}
+              <div className="flex flex-wrap gap-2">
+                {(quote.proof_paths ?? []).map((path, i) => (
+                  <button key={path} className="min-h-11 px-4 rounded-lg border border-slate-500 text-slate-100 font-semibold text-sm" onClick={() => openHuntFile(path).catch((e: any) => toast.error(e.message))}>Open proof {i + 1}</button>
+                ))}
+              </div>
+            </div>
+          )}
           <p className="text-slate-300">The hunter accepted on {quote.accepted_at ? new Date(quote.accepted_at).toLocaleDateString('en-ZA') : ''} and chose to <strong>{quote.payment_option === 'full' ? 'pay in full' : 'pay a deposit first'}</strong>.</p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {[

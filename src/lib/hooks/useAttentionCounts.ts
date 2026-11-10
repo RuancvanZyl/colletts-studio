@@ -1,4 +1,5 @@
 /** useAttentionCounts — the numbers behind "Needs you" and the whiteboard: documents, rejected skins, cards waiting to be accepted, permit numbers. Updates live. */
+import { leftoverSkin } from '../leather';
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../supabase';
 import { informDaysLeft } from '../cases';
@@ -10,9 +11,12 @@ export interface AttentionCounts {
   arrivedToCheck: number;   // hunters whose trophies have arrived (tag or button) and still need the condition report
   missingParts: number;     // animals received with parts missing / still to follow
   receivingIssues: number;  // animals received with an issue that nobody has decided about yet
-  receivingFixing: number;  // animals with an issue that has a decision but is not marked solved yet
+  receivingFixing: number;
+  leatherAsk: number;       // animals with skin left over where the client has not said what to do
+  leatherToConfirm: number; // clients who want leather work that the workshop has not agreed with them yet
+  paymentProofs: number;    // hunters who say they have paid by bank transfer and nobody has checked yet  // animals with an issue that has a decision but is not marked solved yet
 }
-const ZERO: AttentionCounts = { toCheck: 0, fromOutfitter: 0, unreadChat: 0, unverified: 0, lateAccept: 0, notAcked: 0, needOutcome: 0, clientOverdue: 0, heldAside: 0, arrivedToCheck: 0, missingParts: 0, receivingIssues: 0, receivingFixing: 0 };
+const ZERO: AttentionCounts = { toCheck: 0, fromOutfitter: 0, unreadChat: 0, unverified: 0, lateAccept: 0, notAcked: 0, needOutcome: 0, clientOverdue: 0, heldAside: 0, arrivedToCheck: 0, missingParts: 0, receivingIssues: 0, receivingFixing: 0, paymentProofs: 0, leatherAsk: 0, leatherToConfirm: 0 };
 
 export function useAttentionCounts(): AttentionCounts {
   const [c, setC] = useState<AttentionCounts>(ZERO);
@@ -34,10 +38,16 @@ export function useAttentionCounts(): AttentionCounts {
       const oldMissing = atReceiving.filter(x => x.tf === 'true' || (x.status === 'flagged' && Array.isArray(x.mp) && x.mp.length > 0)).length;
       const ri = await db.from('hunt_documents').select('dec:form_data->receiving_issue->decision->>option').eq('doc_type', 'job_card').filter('form_data->receiving_issue->>open', 'eq', 'true');
       const issues: any[] = ri.error ? [] : (ri.data ?? []);
+      const pp = await db.from('quotes').select('id', { count: 'exact', head: true }).not('proof_at', 'is', null).is('proof_checked_at', null);
+      const lq = await db.from('hunt_documents').select('mount:form_data->>mount_type, parts:form_data->received_parts, lc:form_data->leather->>choice, lconf:form_data->leather->>confirmed_at')
+        .eq('doc_type', 'job_card').in('status', ['awaiting_arrival', 'pending', 'in_progress', 'flagged']);
+      const leatherRows: any[] = lq.error ? [] : (lq.data ?? []);
+      const leatherAsk = leatherRows.filter(x => leftoverSkin(x.mount, Array.isArray(x.parts) ? x.parts.map((p: any) => p.code) : []) && (!x.lc || x.lc === 'later')).length;
+      const leatherToConfirm = leatherRows.filter(x => x.lc === 'leather' && !x.lconf).length;
       const fu = await db.from('part_followups').select('id', { count: 'exact', head: true }).is('resolved_at', null);
       const missing = fu.error ? oldMissing : (fu.count ?? 0);
       setC({
-        arrivedToCheck: arrivedHunts.size, missingParts: missing, receivingIssues: issues.filter(x => !x.dec).length, receivingFixing: issues.filter(x => x.dec).length,
+        arrivedToCheck: arrivedHunts.size, missingParts: missing, receivingIssues: issues.filter(x => !x.dec).length, receivingFixing: issues.filter(x => x.dec).length, paymentProofs: pp.error ? 0 : (pp.count ?? 0), leatherAsk, leatherToConfirm,
         heldAside: cases.filter(x => x.order_override_at).length,
         clientOverdue: cases.filter(x => { const d = informDaysLeft(x); return d !== null && d < 0; }).length,
         notAcked: cases.filter(x => x.outfitter_id && !x.outfitter_ack_at).length,
