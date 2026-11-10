@@ -14,6 +14,7 @@ export type Message = {
   sent_by: string | null;
   from_email: string | null;
   email_thread_id: string | null;
+  attachments?: string[] | null;
   status: 'draft' | 'sent' | 'delivered' | 'read' | 'failed';
   read_at: string | null;
   sent_at: string;
@@ -87,6 +88,7 @@ export function useClientMessages(clientId: string | null) {
     channel: Message['channel'];
     hunt_id?: string;
     to_email?: string;
+    attachments?: string[];
   }) {
     const row = {
       client_id:  clientId,
@@ -96,6 +98,7 @@ export function useClientMessages(clientId: string | null) {
       subject:    payload.subject ?? null,
       body:       payload.body,
       html_body:  payload.html_body ?? null,
+      ...(payload.attachments?.length ? { attachments: payload.attachments } : {}),   // the column exists once the photo SQL is run
       sent_by:    profile?.id ?? null,
       status:     'sent',
     };

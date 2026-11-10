@@ -6,6 +6,8 @@ import { Badge } from '../../ui/badge';
 import { Send, Loader2, MessageCircle, Sparkles, ChevronDown, ChevronUp, Tag } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBack } from '../../../../lib/back';
+import { MessagePhotos } from '../shared/MessagePhotos';
+import { tellAboutMessage } from '../../../../lib/push';
 
 interface Message {
   id: string;
@@ -15,6 +17,7 @@ interface Message {
   sentAt: string;
   trophyTag: string | null;
   species: string | null;
+  attachments: string[];
 }
 
 interface Trophy {
@@ -84,11 +87,9 @@ export function TrophyMessages() {
     }
 
     // Load messages
-    const { data: msgs } = await (supabase as any)
-      .from('client_messages')
-      .select('id, direction, body, subject, sent_at, form_data')
-      .eq('client_id', client.id)
-      .order('sent_at', { ascending: true });
+    const readMessages = (cols: string) => (supabase as any).from('client_messages').select(cols).eq('client_id', client.id).order('sent_at', { ascending: true });
+    let { data: msgs, error: msgErr } = await readMessages('id, direction, body, subject, sent_at, form_data, attachments');
+    if (msgErr) ({ data: msgs } = await readMessages('id, direction, body, subject, sent_at, form_data'));   // photos in messages are not switched on yet
 
     setMessages((msgs ?? []).map((m: any) => ({
       id:        m.id,
@@ -98,6 +99,7 @@ export function TrophyMessages() {
       sentAt:    m.sent_at,
       trophyTag: m.form_data?.trophy_tag ?? null,
       species:   m.form_data?.species ?? null,
+      attachments: m.attachments ?? [],
     })));
 
     setLoading(false);
@@ -135,6 +137,7 @@ export function TrophyMessages() {
     if (error) { toast.error('Could not send message'); return; }
     setBody('');
     setShowStarters(false);
+    tellAboutMessage('client_message');
     await load();
   }
 
@@ -254,6 +257,7 @@ export function TrophyMessages() {
                     <p className="text-xs font-semibold text-slate-500 mb-1">{msg.subject}</p>
                   )}
                   <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.body}</p>
+                  <MessagePhotos paths={msg.attachments} />
                   <p className={`text-[10px] mt-1 ${msg.direction === 'inbound' ? 'text-green-200' : 'text-slate-400'}`}>
                     {new Date(msg.sentAt).toLocaleString()}
                     {msg.direction === 'inbound' && ' · You'}

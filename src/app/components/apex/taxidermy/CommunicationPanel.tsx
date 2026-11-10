@@ -12,6 +12,9 @@ import {
 } from 'lucide-react';
 import { useClientMessages, type Message, type MessageTemplate } from '../../../../lib/hooks/useClientMessages';
 import { toast } from 'sonner';
+import { Camera, X as XIcon } from 'lucide-react';
+import { uploadMessageFiles } from '../../../../lib/messageFiles';
+import { MessagePhotos } from '../shared/MessagePhotos';
 
 // ── Channel meta ─────────────────────────────────────────────────────────────
 const CHANNEL_META = {
@@ -72,6 +75,8 @@ function ComposeModal({
   const [body, setBody] = useState(replyTo ? '' : '');
   const [templateOpen, setTemplateOpen] = useState(false);
   const [sending, setSending] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const defaultVars: Record<string, string> = {
     client_name: clientName,
@@ -89,11 +94,15 @@ function ComposeModal({
     if (!body.trim()) { toast.error('Message body is required'); return; }
     if (channel === 'email' && !subject.trim()) { toast.error('Subject is required for email'); return; }
     setSending(true);
+    let attachments: string[] = [];
+    try { if (files.length) attachments = await uploadMessageFiles(clientId, files); }
+    catch (e: any) { setSending(false); toast.error('The photo could not be added. Please check your connection and try again.'); return; }
     const { error } = await sendMessage({
       subject: subject || undefined,
       body,
-      channel,
-      to_email: channel === 'email' ? (clientEmail ?? undefined) : undefined,
+      channel: files.length && channel === 'email' ? 'in_app' : channel,
+      to_email: channel === 'email' && !files.length ? (clientEmail ?? undefined) : undefined,
+      attachments,
     });
     setSending(false);
     if (error) { toast.error(error); return; }
@@ -191,6 +200,25 @@ function ComposeModal({
             placeholder="Type your message here…"
           />
         </div>
+        {/* Photos */}
+        <div>
+          <input ref={fileRef} type="file" accept="image/*,application/pdf" multiple className="hidden"
+            onChange={e => { const f = Array.from(e.target.files ?? []); if (f.length) setFiles(prev => [...prev, ...f].slice(0, 6)); e.target.value = ''; }} />
+          <div className="flex flex-wrap gap-2">
+            {files.map((f, k) => (
+              <div key={k} className="relative w-20 h-20 rounded-lg overflow-hidden border border-slate-300 bg-slate-100 flex items-center justify-center text-[10px] text-slate-600">
+                {f.type === 'application/pdf' ? 'PDF' : <img src={URL.createObjectURL(f)} alt="" className="w-full h-full object-cover" />}
+                <button type="button" aria-label="Remove" className="absolute top-0.5 right-0.5 w-6 h-6 bg-black/70 rounded-full flex items-center justify-center" onClick={() => setFiles(files.filter((_, j) => j !== k))}><XIcon className="w-3.5 h-3.5 text-white" /></button>
+              </div>
+            ))}
+            {files.length < 6 && (
+              <button type="button" onClick={() => fileRef.current?.click()} className="w-20 h-20 rounded-lg border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-500 text-xs gap-1">
+                <Camera className="w-5 h-5" />Add photo
+              </button>
+            )}
+          </div>
+          {files.length > 0 && channel === 'email' && <p className="text-xs text-amber-600 mt-1">Photos are shown in the client's app, so this message goes to the app instead of email.</p>}
+        </div>
       </div>
 
       <DialogFooter className="gap-2">
@@ -260,6 +288,8 @@ function MessageBubble({ msg, clientName, onReply }: { msg: Message; clientName:
             <p className="text-sm opacity-80">{preview}</p>
           )}
         </div>
+
+        <MessagePhotos paths={msg.attachments} />
 
         {/* Actions */}
         {!isOut && (

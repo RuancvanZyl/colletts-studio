@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2, Send, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { tellAboutMessage } from '../../../../lib/push';
 import { supabase } from '../../../../lib/supabase';
 import { WORKSHOP } from '../../../../lib/workshop';
 import { TOPICS, TOPIC_LABEL, whatsappLink } from '../../../../lib/threadTopics';
@@ -68,7 +69,7 @@ export function OutfitterThread({ huntId, side, canWrite = true, prefill = '', r
     if (error && /could not find the function|schema cache/i.test(error.message)) ({ error } = await (supabase as any).rpc('send_outfitter_message', args));
     setBusy(false);
     if (error) { toast.error(error.message); return; }
-    dText.clear(); setText(''); dText.clear(); load();
+    dText.clear(); setText(''); dText.clear(); tellAboutMessage('outfitter_message'); load();
   }
 
   async function writeDown() {

@@ -308,7 +308,11 @@ function ClientOutfitterChats({ clientId }: { clientId: string }) {
 }
 
 function ClientDetailPanel({ client, onEdit, onBack, onOpenQuote }: { client: Client; onEdit: () => void; onBack: () => void; onOpenQuote?: (huntId: string) => void }) {
-  const [tab, setTab] = useState<DetailTab>('jobcards');
+  const [tab, setTab] = useState<DetailTab>(() => {
+    // a tapped notification about a message opens straight on the Messages tab
+    try { const t = sessionStorage.getItem('apex_client_tab'); if (t) { sessionStorage.removeItem('apex_client_tab'); return t as DetailTab; } } catch { /* first tab */ }
+    return 'jobcards';
+  });
   const { photos, loading: photosLoading, refresh: refreshPhotos } = useClientPhotos(client.id);
   const [inviting, setInviting] = useState(false);
   const hasPortalAccess = !!(client as any).auth_user_id;

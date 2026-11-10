@@ -59,6 +59,17 @@ export async function tellAboutArrival(huntId: string): Promise<void> {
   } catch { /* the arrival itself is saved; the notification is only a nudge */ }
 }
 
+/** A hunter or outfitter wrote to the workshop: ask the server to tell the managers' phones. The tap opens that conversation. Never blocks or fails the send. */
+export async function tellAboutMessage(kind: 'client_message' | 'outfitter_message'): Promise<void> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-push`, {
+      method: 'POST', headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ kind }),
+    });
+  } catch { /* the message itself was saved; the notification is only a nudge */ }
+}
+
 /** After a message is sent: ask the server to tell the other people's devices. Never blocks or fails the send. */
 export async function tellOthersAboutNewMessages(): Promise<void> {
   try {

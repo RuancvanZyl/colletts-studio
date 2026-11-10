@@ -316,7 +316,13 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
   useEffect(() => {
-    const open = (v: string) => { if (v === 'messages' || v === 'receiving') navigateRef.current(v); };
+    const open = (v: string) => {
+      if (v === 'messages' || v === 'receiving') navigateRef.current(v);
+      // a hunter wrote to us: open that client's Messages tab
+      else if (v.startsWith('client:')) { try { sessionStorage.setItem('apex_client_tab', 'messages'); } catch { /* opens on the first tab instead */ } navigateRef.current('clients', v.slice(7)); }
+      // an outfitter wrote to us: open the conversation on that hunt
+      else if (v.startsWith('outfitter:')) navigateRef.current('outfitter-chat', v.slice(10));
+    };
     const first = takeOpenRequest();
     if (first) open(first);
     return onOpenRequest(open);
@@ -486,7 +492,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'client-inbox':           return <ClientInbox />;
       case 'payment-confirmation':   return <PaymentsLedger onOpenQuote={(id) => navigate('quotes', id)} />;
       case 'inventory':              return <JobTracker />;
-      case 'clients':         return <ClientManagement initialClientId={navClientId} onOpenQuote={(id) => navigate('quotes', id)} />;
+      case 'clients':         return <ClientManagement key={navClientId ?? 'all'} initialClientId={navClientId} onOpenQuote={(id) => navigate('quotes', id)} />;
       case 'invoices':        return <InvoiceManagement />;
       case 'admin':             return <AdminConfiguration />;
       case 'staff-overview':    return <StaffOverview />;
