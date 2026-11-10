@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { takeOpenRequest, onOpenRequest } from '../../../lib/push';
 import { Notifications } from './hunter/Notifications';
 import { HunterProfile } from './hunter/HunterProfile';
 import { HunterTrophies } from './hunter/HunterTrophies';
@@ -54,6 +55,13 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
     const { theme, toggleTheme } = useTheme();
   const { theme: portalTheme } = usePortalTheme();
   const go = useViewLevels(currentView, setCurrentView);       // every screen change can be undone with Back
+  // a tapped phone notification about a message opens the conversation
+  useEffect(() => {
+    const open = (v: string) => { if (v === 'messages') go('messages'); };
+    const first = takeOpenRequest();
+    if (first) open(first);
+    return onOpenRequest(open);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useBack(flow === 'create-hunt', () => setFlow('main'));
 
   const { notifications, unreadCount, markRead, markAllRead } = useClientNotifications(client?.id);
@@ -118,6 +126,8 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
             unreadCount={unreadCount}
             onMarkRead={markRead}
             onMarkAllRead={markAllRead}
+            title="Updates"
+            onOpenMessages={() => go('messages')}
           />
         );
       case 'collection':

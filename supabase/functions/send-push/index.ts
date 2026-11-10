@@ -1,4 +1,4 @@
-// send-push: tells the recipients' phones and computers about new team messages, new messages from hunters and outfitters, and arrivals.
+// send-push: tells the recipients' phones and computers about new team messages, new messages from hunters and outfitters, messages to hunters, and arrivals.
 // Called by the app right after a message is sent. Needs the secrets VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import webpush from 'npm:web-push@3.6.7';
@@ -39,6 +39,27 @@ Deno.serve(async (req) => {
         catch (e: any) { if (e?.statusCode === 404 || e?.statusCode === 410) await admin.from('push_subscriptions').delete().eq('id', s.id); }
       }));
       return json({ ok: true, sent: n });
+    }
+    // The workshop wrote to a hunter: tell that hunter's phone. Tapping it opens their messages.
+    if (body?.kind === 'to_client') {
+      const since = new Date(Date.now() - 3600_000).toISOString();
+      const { data: msgs } = await admin.from('client_messages').select('id, client_id, subject, body').eq('direction', 'outbound').eq('sent_by', user.id).eq('push_sent', false).gte('sent_at', since).order('sent_at');
+      if (!msgs?.length) return json({ ok: true, sent: 0 });
+      let sent = 0;
+      const lastByClient = new Map<string, any>();
+      for (const m of msgs as any[]) lastByClient.set(m.client_id, m);
+      for (const [clientId, m] of lastByClient) {
+        const { data: cl } = await admin.from('clients').select('auth_user_id').eq('id', clientId).maybeSingle();
+        const uid = (cl as any)?.auth_user_id;
+        const { data: subs } = uid ? await admin.from('push_subscriptions').select('*').eq('user_id', uid) : { data: [] as any[] };
+        const payload = JSON.stringify({ title: 'New message from Apex Trophy Solutions', body: `${m.subject ? m.subject + ': ' : ''}${String(m.body).slice(0, 120)}`, tag: `msg-${clientId}`, url: '/?open=messages' });
+        await Promise.all((subs ?? []).map(async (sub: any) => {
+          try { await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload); sent++; }
+          catch (e: any) { if (e?.statusCode === 404 || e?.statusCode === 410) await admin.from('push_subscriptions').delete().eq('id', sub.id); }
+        }));
+      }
+      await admin.from('client_messages').update({ push_sent: true }).in('id', (msgs as any[]).map(m => m.id));
+      return json({ ok: true, sent });
     }
     // A hunter or an outfitter wrote to the workshop: tell the managers' phones. Tapping it opens that conversation.
     if (body?.kind === 'client_message' || body?.kind === 'outfitter_message') {

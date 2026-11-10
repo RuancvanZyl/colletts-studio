@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../supabase';
 import { useAuth } from '../auth';
+import { tellAboutMessage } from '../push';
 
 export type Message = {
   id: string;
@@ -122,6 +123,7 @@ export function useClientMessages(clientId: string | null) {
       });
     }
 
+    tellAboutMessage('to_client');   // the hunter's phone, if they turned notifications on
     await load();
     return { error: null, message: data };
   }

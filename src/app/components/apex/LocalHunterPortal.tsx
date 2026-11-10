@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { takeOpenRequest, onOpenRequest } from '../../../lib/push';
 import { InstallBanner } from './shared/InstallApp';
 import { UpdateBanner } from './shared/AppVersion';
 import { LocalTrophyTracking } from './hunter/LocalTrophyTracking';
@@ -26,6 +27,13 @@ export function LocalHunterPortal({ onLogout }: LocalHunterPortalProps) {
   const [currentView, setCurrentView] = useRememberedScreen<LocalView>('local-hunter', 'home', v => ['home','collection','add-animals','notifications','profile','messages'].includes(v as string));   // a refresh brings the person back to the same screen
   const { theme, toggleTheme } = useTheme();
   const go = useViewLevels(currentView, setCurrentView);       // every screen change can be undone with Back
+  // a tapped phone notification about a message opens the conversation
+  useEffect(() => {
+    const open = (v: string) => { if (v === 'messages') go('messages'); };
+    const first = takeOpenRequest();
+    if (first) open(first);
+    return onOpenRequest(open);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const { notifications, unreadCount, markRead, markAllRead } = useClientNotifications(client?.id);
 
   const renderView = () => {
@@ -33,7 +41,7 @@ export function LocalHunterPortal({ onLogout }: LocalHunterPortalProps) {
       case 'home':             return <HunterTrophies onOpenMessages={() => go('messages')} />;
       case 'collection':       return <HunterCollection onAddAnimals={() => go('add-animals')} />;
       case 'add-animals':      return <HunterTrophies startAdding />;
-      case 'notifications':    return <Notifications notifications={notifications} loading={false} unreadCount={unreadCount} onMarkRead={markRead} onMarkAllRead={markAllRead} />;
+      case 'notifications':    return <Notifications notifications={notifications} loading={false} unreadCount={unreadCount} onMarkRead={markRead} onMarkAllRead={markAllRead} title="Alerts" onOpenMessages={() => go('messages')} />;
       case 'messages':         return <TrophyMessages />;
       case 'profile':          return <HunterProfile onLogout={onLogout} />;
       default:                 return <HunterTrophies onOpenMessages={() => go('messages')} />;

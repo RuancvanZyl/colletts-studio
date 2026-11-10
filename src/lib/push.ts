@@ -2,6 +2,9 @@
 import { supabase } from './supabase';
 
 const KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined;
+// The notification function as it is named in Supabase. The dashboard gave it a random name when it was added, and that name cannot be changed.
+const PUSH_FUNCTION = 'super-processor';
+const PUSH_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${PUSH_FUNCTION}`;
 
 export const pushPossible = () =>
   typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
@@ -53,18 +56,18 @@ export async function tellAboutArrival(huntId: string): Promise<void> {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
-    await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-push`, {
+    await fetch(PUSH_URL, {
       method: 'POST', headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'arrival', hunt: huntId }),
     });
   } catch { /* the arrival itself is saved; the notification is only a nudge */ }
 }
 
 /** A hunter or outfitter wrote to the workshop: ask the server to tell the managers' phones. The tap opens that conversation. Never blocks or fails the send. */
-export async function tellAboutMessage(kind: 'client_message' | 'outfitter_message'): Promise<void> {
+export async function tellAboutMessage(kind: 'client_message' | 'outfitter_message' | 'to_client'): Promise<void> {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
-    await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-push`, {
+    await fetch(PUSH_URL, {
       method: 'POST', headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ kind }),
     });
   } catch { /* the message itself was saved; the notification is only a nudge */ }
@@ -75,7 +78,7 @@ export async function tellOthersAboutNewMessages(): Promise<void> {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
-    await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-push`, {
+    await fetch(PUSH_URL, {
       method: 'POST', headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' }, body: '{}',
     });
   } catch { /* the message itself was saved; the notification is only a nudge */ }

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabase';
+import { useLiveRefresh } from '../liveRefresh';
 
 export interface ClientNotification {
   id:         string;
@@ -42,6 +43,7 @@ export function useClientNotifications(clientId: string | null | undefined) {
   }, [clientId]);
 
   useEffect(() => { load(); }, [load]);
+  useLiveRefresh(['client_notifications'], load, 400);   // a new message shows up by itself
 
   async function markRead(id: string) {
     await (supabase as any)

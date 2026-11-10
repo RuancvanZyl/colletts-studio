@@ -1,7 +1,7 @@
-import { useEffect } from 'react';
+import { useState } from 'react';
 import { Badge } from '../../ui/badge';
 import { Button } from '../../ui/button';
-import { Loader2, CheckCircle2, Clock, Package, Trophy, Star, Bell, BellOff } from 'lucide-react';
+import { Loader2, CheckCircle2, Clock, Package, Trophy, Star, Bell, BellOff, MessageCircle } from 'lucide-react';
 import type { ClientNotification } from '../../../../lib/hooks/useClientNotifications';
 
 interface NotificationsProps {
@@ -10,6 +10,10 @@ interface NotificationsProps {
   unreadCount:    number;
   onMarkRead:     (id: string) => void;
   onMarkAllRead:  () => void;
+  /** the screen's name, the same as the button that opens it */
+  title?:         string;
+  /** a message notification opens the conversation */
+  onOpenMessages?: () => void;
 }
 
 function timeAgo(iso: string) {
@@ -22,17 +26,18 @@ function timeAgo(iso: string) {
   return `${days}d ago`;
 }
 
-function NotifIcon({ type }: { type: ClientNotification['type'] }) {
+function NotifIcon({ type, stage }: { type: ClientNotification['type']; stage?: string | null }) {
   const cls = 'w-5 h-5';
+  if (stage === 'message') return <MessageCircle className={`${cls} text-green-600`} />;
   if (type === 'ready')     return <Star     className={`${cls} text-yellow-500`} />;
   if (type === 'milestone') return <Trophy   className={`${cls} text-[#0073ea]`} />;
   if (type === 'alert')     return <Clock    className={`${cls} text-amber-500`} />;
   return                           <Package  className={`${cls} text-slate-400`} />;
 }
 
-function NotifCard({ n, onMarkRead }: { n: ClientNotification; onMarkRead: (id: string) => void }) {
+function NotifCard({ n, onMarkRead, onOpenMessages }: { n: ClientNotification; onMarkRead: (id: string) => void; onOpenMessages?: () => void }) {
   return (
-    <button onClick={() => !n.read && onMarkRead(n.id)}
+    <button onClick={() => { if (!n.read) onMarkRead(n.id); if (n.stage === 'message') onOpenMessages?.(); }}
       className={`w-full flex items-start gap-3 p-4 rounded-xl text-left transition-colors border ${
         n.read
           ? 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800'
@@ -45,7 +50,7 @@ function NotifCard({ n, onMarkRead }: { n: ClientNotification; onMarkRead: (id: 
         n.type === 'alert'     ? 'bg-amber-100 dark:bg-amber-900/30' :
                                   'bg-slate-100 dark:bg-slate-800'
       }`}>
-        <NotifIcon type={n.type} />
+        <NotifIcon type={n.type} stage={n.stage} />
       </div>
 
       <div className="flex-1 min-w-0 space-y-1">
@@ -58,13 +63,16 @@ function NotifCard({ n, onMarkRead }: { n: ClientNotification; onMarkRead: (id: 
         {n.body && (
           <p className="text-xs text-slate-500 leading-relaxed">{n.body}</p>
         )}
+        {n.stage === 'message' && onOpenMessages && <p className="text-xs font-semibold text-green-700 dark:text-green-400">Tap to open the conversation</p>}
         <p className="text-[10px] text-slate-400">{timeAgo(n.createdAt)}</p>
       </div>
     </button>
   );
 }
 
-export function Notifications({ notifications, loading, unreadCount, onMarkRead, onMarkAllRead }: NotificationsProps) {
+export function Notifications({ notifications, loading, unreadCount, onMarkRead, onMarkAllRead, title = 'Updates', onOpenMessages }: NotificationsProps) {
+  const [show, setShow] = useState<'all' | 'messages' | 'progress'>('all');
+  const shown = notifications.filter(n => show === 'all' || (show === 'messages' ? n.stage === 'message' : n.stage !== 'message'));
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -72,12 +80,12 @@ export function Notifications({ notifications, loading, unreadCount, onMarkRead,
         <div>
           <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
             <Bell className="w-5 h-5" />
-            Notifications
+            {title}
             {unreadCount > 0 && (
               <Badge className="bg-[#0073ea] text-white border-0 text-xs">{unreadCount}</Badge>
             )}
           </h2>
-          <p className="text-sm text-slate-500">Trophy progress updates from the workshop</p>
+          <p className="text-sm text-slate-500">Messages from the workshop and how your trophies are getting on</p>
         </div>
         {unreadCount > 0 && (
           <Button variant="outline" size="sm" onClick={onMarkAllRead} className="text-xs gap-1.5">
@@ -87,32 +95,39 @@ export function Notifications({ notifications, loading, unreadCount, onMarkRead,
         )}
       </div>
 
+      <div className="flex gap-2" role="tablist" aria-label="Show">
+        {([['all', 'Everything'], ['messages', 'Messages'], ['progress', 'Trophy progress']] as const).map(([k, l]) => (
+          <button key={k} role="tab" aria-selected={show === k} onClick={() => setShow(k)}
+            className={`min-h-10 px-4 rounded-full text-sm font-semibold border ${show === k ? 'bg-[#0073ea] text-white border-[#0073ea]' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}>{l}</button>
+        ))}
+      </div>
+
       {/* Content */}
       {loading ? (
         <div className="flex items-center justify-center py-16 text-slate-400 gap-2">
           <Loader2 className="w-5 h-5 animate-spin" />
         </div>
-      ) : notifications.length === 0 ? (
+      ) : shown.length === 0 ? (
         <div className="text-center py-16 space-y-3">
           <BellOff className="w-10 h-10 mx-auto text-slate-300" />
           <div>
-            <p className="font-medium text-slate-600 dark:text-slate-300">No notifications yet</p>
-            <p className="text-sm text-slate-400 mt-1">You'll see updates here as your trophies move through the workshop</p>
+            <p className="font-medium text-slate-600 dark:text-slate-300">{show === 'messages' ? 'No messages yet' : 'Nothing here yet'}</p>
+            <p className="text-sm text-slate-400 mt-1">{show === 'messages' ? 'When the workshop writes to you, it shows up here.' : "You'll see messages and updates here as your trophies move through the workshop"}</p>
           </div>
         </div>
       ) : (
         <div className="space-y-2">
-          {unreadCount > 0 && (
+          {shown.some(n => !n.read) && (
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide px-1">New</p>
           )}
-          {notifications.filter(n => !n.read).map(n => (
-            <NotifCard key={n.id} n={n} onMarkRead={onMarkRead} />
+          {shown.filter(n => !n.read).map(n => (
+            <NotifCard key={n.id} n={n} onMarkRead={onMarkRead} onOpenMessages={onOpenMessages} />
           ))}
-          {notifications.some(n => n.read) && (
+          {shown.some(n => n.read) && (
             <>
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide px-1 pt-2">Earlier</p>
-              {notifications.filter(n => n.read).map(n => (
-                <NotifCard key={n.id} n={n} onMarkRead={onMarkRead} />
+              {shown.filter(n => n.read).map(n => (
+                <NotifCard key={n.id} n={n} onMarkRead={onMarkRead} onOpenMessages={onOpenMessages} />
               ))}
             </>
           )}
