@@ -328,4 +328,4 @@ $$;
 revoke all on function public.hunter_choose_mount(uuid, text, text, jsonb, jsonb) from public, anon;
 grant execute on function public.hunter_choose_mount(uuid, text, text, jsonb, jsonb) to authenticated;
 
-select count(*) = 9 as change_after_deposit_ready from pg_proc where proname in ('hunter_reopen_quote', 'hunter_respond_quote', 'hunter_finish_choices', 'hunter_use_credit', 'staff_use_credit', 'staff_keep_as_credit', 'client_credit_balance', '_move_to_credit');
+select count(*) = 9 as change_after_deposit_ready from pg_proc where proname in ('hunter_reopen_quote', 'hunter_respond_quote', 'hunter_finish_choices', 'hunter_use_credit', 'staff_use_credit', 'staff_keep_as_credit', 'client_credit_balance', '_move_to_credit', 'hunter_choose_mount');
