@@ -109,7 +109,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
     switch (currentView) {
       case 'home':
       case 'trophies':
-        return <HunterTrophies onRegisterHunt={() => setFlow('create-hunt')} onChanged={refreshHunts} />;
+        return <HunterTrophies onRegisterHunt={() => setFlow('create-hunt')} onChanged={refreshHunts} onOpenMessages={() => go('messages')} />;
       case 'notifications':
         return (
           <Notifications
@@ -129,7 +129,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
       case 'profile':
         return <HunterProfile onLogout={onLogout} />;
       default:
-        return <HunterTrophies onRegisterHunt={() => setFlow('create-hunt')} onChanged={refreshHunts} />;
+        return <HunterTrophies onRegisterHunt={() => setFlow('create-hunt')} onChanged={refreshHunts} onOpenMessages={() => go('messages')} />;
     }
   };
 

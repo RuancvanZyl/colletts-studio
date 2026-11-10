@@ -30,13 +30,13 @@ export function LocalHunterPortal({ onLogout }: LocalHunterPortalProps) {
 
   const renderView = () => {
     switch (currentView) {
-      case 'home':             return <HunterTrophies />;
+      case 'home':             return <HunterTrophies onOpenMessages={() => go('messages')} />;
       case 'collection':       return <HunterCollection onAddAnimals={() => go('add-animals')} />;
       case 'add-animals':      return <HunterTrophies startAdding />;
       case 'notifications':    return <Notifications notifications={notifications} loading={false} unreadCount={unreadCount} onMarkRead={markRead} onMarkAllRead={markAllRead} />;
       case 'messages':         return <TrophyMessages />;
       case 'profile':          return <HunterProfile onLogout={onLogout} />;
-      default:                 return <HunterTrophies />;
+      default:                 return <HunterTrophies onOpenMessages={() => go('messages')} />;
     }
   };
 

@@ -261,6 +261,7 @@ function QuoteEditor({ huntId, onBack }: { huntId: string; onBack: () => void })
           )}
           {status === 'accepted' && isAdmin && !authorised && <button className="text-sm text-amber-300 underline min-h-11" onClick={startAnyway}>Start work without the payment (admin, needs a reason)</button>}
           <button className="w-full min-h-12 rounded-xl border-2 border-amber-500 text-amber-200 font-bold" onClick={() => setChanging(true)}>Credit or amend this invoice</button>
+          <CreditBox quote={quote} paid={paid} total={total} status={status} onChanged={load} />
           {quote.amendments.length > 0 && (
             <div className="space-y-1"><p className="text-sm font-semibold text-slate-300">Credit notes</p>
               <ul className="text-sm text-slate-300 divide-y divide-slate-800 rounded-lg border border-slate-700">{quote.amendments.map(a => <li key={a.id} className="px-3 py-2 flex items-center gap-3"><span className="flex-1"><strong className="text-slate-100">{a.credit_no}</strong> · {new Date(a.created_at).toLocaleDateString('en-ZA')} · credit {money(a.credit_total, quote.currency)}{a.added_total > 0 ? `, added ${money(a.added_total, quote.currency)}` : ''}<br /><span className="text-slate-400">{a.reason}</span></span><button className="min-h-10 px-3 rounded-lg border border-slate-500 text-slate-100" onClick={() => printCreditNote(a.id).catch(e => toast.error(e.message))}>Print</button></li>)}</ul></div>
@@ -286,6 +287,64 @@ function QuoteEditor({ huntId, onBack }: { huntId: string; onBack: () => void })
             <button className="flex-1 min-h-12 rounded-xl bg-[#0073ea] hover:bg-[#0064cc] text-white text-lg font-bold flex items-center justify-center gap-2 disabled:opacity-60" disabled={busy || lines.length === 0} onClick={() => save(true)}>{busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}{status === 'sent' ? 'Send again' : 'Send to the hunter'}</button>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+
+/** Credit on the client's account: money paid that is not needed on this invoice, kept and tracked until it is used. */
+function CreditBox({ quote, paid, total, status, onChanged }: { quote: Quote; paid: number; total: number; status: string; onChanged: () => void }) {
+  const [rows, setRows] = useState<{ id: string; amount: number; kind: string; note: string | null; created_at: string; created_by_name: string | null; currency: string }[]>([]);
+  const [busy, setBusy] = useState(false);
+  async function load() {
+    const { data } = await (supabase as any).from('client_credits').select('id, amount, kind, note, created_at, created_by_name, currency').eq('client_id', quote.client_id).order('created_at', { ascending: false });
+    setRows(data ?? []);
+  }
+  useEffect(() => { load(); }, [quote.client_id, quote.id, paid]); // eslint-disable-line react-hooks/exhaustive-deps
+  const balance = rows.filter(r => r.currency === quote.currency).reduce((s, r) => s + Number(r.amount), 0);
+  if (rows.length === 0 && paid <= 0.005) return null;
+
+  async function use() {
+    setBusy(true);
+    const { data, error } = await (supabase as any).rpc('staff_use_credit', { p_quote: quote.id, p_amount: null });
+    setBusy(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`${money(Number(data), quote.currency)} of credit used on this invoice`);
+    onChanged();
+  }
+  async function keep() {
+    const extra = Math.max(0, paid - total);
+    const text = window.prompt(`How much of the ${money(paid, quote.currency)} paid should be kept as credit for this client?`, extra > 0.005 ? String(Math.round(extra * 100) / 100) : '');
+    if (text === null) return;
+    const amt = Number(text.replace(',', '.'));
+    if (!amt || amt <= 0) { toast.error('Enter an amount to keep as credit'); return; }
+    const note = window.prompt('Why? (for example: the client dropped this order). This is written in the record.', extra > 0.005 ? 'The order came to less than was paid' : '');
+    if (note === null) return;
+    setBusy(true);
+    const { error } = await (supabase as any).rpc('staff_keep_as_credit', { p_quote: quote.id, p_amount: amt, p_note: note || null });
+    setBusy(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Kept as credit for this client');
+    onChanged();
+  }
+
+  return (
+    <div className="rounded-xl border border-green-700 bg-green-950/20 p-3 space-y-2">
+      <p className="font-bold text-green-200">Credit on this client's account: {money(balance, quote.currency)}</p>
+      <div className="flex flex-wrap gap-2">
+        {balance > 0.005 && ['accepted', 'deposit_paid'].includes(status) && <button disabled={busy} className="min-h-11 px-4 rounded-lg bg-green-700 hover:bg-green-800 text-white font-bold text-sm disabled:opacity-60" onClick={use}>Use the credit on this invoice</button>}
+        {paid > 0.005 && <button disabled={busy} className="min-h-11 px-4 rounded-lg border border-green-600 text-green-100 font-semibold text-sm disabled:opacity-60" onClick={keep}>Keep paid money as credit</button>}
+      </div>
+      {rows.length > 0 && (
+        <ul className="text-sm text-slate-300 divide-y divide-slate-800 rounded-lg border border-slate-700">
+          {rows.map(r => (
+            <li key={r.id} className="px-3 py-2 flex justify-between gap-3">
+              <span>{new Date(r.created_at).toLocaleDateString('en-ZA')} · {r.kind === 'kept' ? 'Kept as credit' : r.kind === 'used' ? 'Used on an invoice' : 'Refunded'}{r.note ? ` · ${r.note}` : ''}{r.created_by_name ? ` · ${r.created_by_name}` : ''}</span>
+              <strong className={Number(r.amount) < 0 ? 'text-amber-300' : 'text-green-300'}>{Number(r.amount) < 0 ? '-' : '+'}{money(Math.abs(Number(r.amount)), r.currency)}</strong>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

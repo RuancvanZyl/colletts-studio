@@ -104,6 +104,14 @@ export function TrophyMessages() {
   }
 
   useEffect(() => { load(); }, [client?.id]);
+  // coming from a custom order: open the chat about that animal
+  useEffect(() => {
+    if (trophies.length === 0) return;
+    let id: string | null = null;
+    try { id = sessionStorage.getItem('apex-message-doc'); if (id) sessionStorage.removeItem('apex-message-doc'); } catch { /* nothing remembered */ }
+    const t = id ? trophies.find(x => x.docId === id) : null;
+    if (t) { setSelected(t); if (/^custom mount$/i.test(t.mountType)) setBody('About my custom order: '); }
+  }, [trophies.length]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages.length]);
 
   async function send() {
@@ -118,7 +126,7 @@ export function TrophyMessages() {
         client_id: client.id,
         direction: 'inbound',
         channel:   'in_app',
-        subject:   selected ? `Question about ${selected.species} (${selected.tagNumber})` : 'General question',
+        subject:   selected ? (/^custom mount$/i.test(selected.mountType) ? `Custom order: ${selected.species} (${selected.tagNumber})` : `Question about ${selected.species} (${selected.tagNumber})`) : 'General question',
         body:      body.trim(),
         status:    'sent',
         form_data: formData,

@@ -34,7 +34,7 @@ export interface QuoteLine { id?: string; hunt_doc_id: string | null; descriptio
 export interface Amendment { id: string; quote_id: string; credit_no: string | null; reason: string; client_agreed: string; credit_total: number; added_total: number; created_by_name: string | null; created_at: string }
 export interface QuotePayment { id: string; amount: number; method: string | null; reference: string | null; source: string; received_at: string }
 export interface Quote {
-  id: string; hunt_id: string; status: string; currency: string; deposit_percent: number; note: string | null; hunter_comment: string | null;
+  id: string; hunt_id: string; client_id: string; status: string; currency: string; deposit_percent: number; note: string | null; hunter_comment: string | null;
   payment_option: string | null; amount_due_now: number | null; sent_at: string | null; accepted_at: string | null;
   xero_invoice_number: string | null; xero_invoice_url: string | null;
   proof_paths?: string[] | null; proof_at?: string | null; proof_note?: string | null; proof_checked_at?: string | null; lines: QuoteLine[]; payments: QuotePayment[]; amendments: Amendment[];

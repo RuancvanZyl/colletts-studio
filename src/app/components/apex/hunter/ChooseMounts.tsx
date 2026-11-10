@@ -84,7 +84,7 @@ export function ChooseMounts({ animals, clientType, clientId, combinable = [], o
         const p = picks[x.docId];
         if (!p?.mount || includedBy[x.docId]) continue;       // combined animals are set by the custom mount they belong to
         const pose = mountHasHead(p.mount) && (p.head || p.neck) ? { head: p.head || null, neck: p.neck || null } : null;
-        const extra = p.mount === 'Custom mount' ? { custom: { description: p.custom.description, combine: p.custom.combine } }
+        const extra = p.mount === 'Custom mount' ? { custom: { description: p.custom.description, combine: p.custom.combine, photos: p.custom.files.length } }
           : p.mount === 'Replica' ? { replica: { type: p.replica.type, reasons: p.replica.reasons } } : null;
         const { error } = await (supabase as any).rpc('hunter_choose_mount', { p_doc: x.docId, p_mount: p.mount, p_notes: p.notes || null, p_pose: pose, p_extra: extra });
         if (error) { failed++; toast.error(`${x.species}: ${error.message}`); continue; }
@@ -175,7 +175,7 @@ export function ChooseMounts({ animals, clientType, clientId, combinable = [], o
     );
   }
 
-  const needsMore = (x?: MountPick) => (x?.mount === 'Custom mount' && x.custom.description.trim().length < 5) || (!!x?.mount && mayLeaveSkin(x.mount) && (!x.leather?.choice || (x.leather.choice === 'leather' && x.leather.items.length === 0)));
+  const needsMore = (x?: MountPick) => (x?.mount === 'Custom mount' && x.custom.description.trim().length < 5 && x.custom.files.length === 0) || (!!x?.mount && mayLeaveSkin(x.mount) && (!x.leather?.choice || (x.leather.choice === 'leather' && x.leather.items.length === 0)));
   const options = mountsFor(a.species, clientType);
   const p = picks[a.docId];
   const inc = includedBy[a.docId];
@@ -232,15 +232,15 @@ export function ChooseMounts({ animals, clientType, clientId, combinable = [], o
           {p?.mount === 'Custom mount' && (
             <div className={box}>
               <div>
-                <p className="font-semibold text-slate-800 dark:text-slate-100">Describe your idea *</p>
-                <p className="text-sm text-slate-500 mb-2">Pose, scene, base, what it should look like. The more detail the better.</p>
+                <p className="font-semibold text-slate-800 dark:text-slate-100">Tell us what you have in mind *</p>
+                <p className="text-sm text-slate-500 mb-2">Write a description, add a photo of what you like, or both. Our head taxidermist will talk to you about it here in the app and then give you a price.</p>
                 <textarea rows={5} value={p.custom.description} onChange={e => setCustom(a.docId, { description: e.target.value })}
                   placeholder="e.g. The kudu with its head turned back, on a rock base, and the impala leaping beside it…"
                   className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-3 py-2 text-base" />
-                {p.custom.description.trim().length < 5 && <p className="text-xs text-amber-600 mt-1">Please describe your idea so we can quote it.</p>}
+                {p.custom.description.trim().length < 5 && p.custom.files.length === 0 && <p className="text-xs text-amber-600 mt-1">Please write a short description or add a photo, so we know what you have in mind.</p>}
               </div>
               <div>
-                <p className="font-semibold text-slate-800 dark:text-slate-100 mb-1">Reference photos <span className="font-normal text-slate-400">(optional)</span></p>
+                <p className="font-semibold text-slate-800 dark:text-slate-100 mb-1">Photos of what you like <span className="font-normal text-slate-400">(a description or a photo is needed)</span></p>
                 <div className="flex flex-wrap gap-2">
                   {p.custom.files.map((f, k) => (
                     <div key={k} className="relative w-20 h-20 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">

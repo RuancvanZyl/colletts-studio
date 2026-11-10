@@ -2,7 +2,7 @@
  * QuoteCard — the hunter sees the quote, accepts it (paying a deposit or the full amount) or asks for changes,
  * and then sees where their payment stands.
  */
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, FileText, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../../../lib/supabase';
@@ -18,6 +18,21 @@ export function QuoteCard({ quote, ref_, onChanged, onChangeChoices }: { quote: 
   const paid = quote.payments.reduce((s, p) => s + p.amount, 0);
   const s = quote.status;
   const creditDue = Math.max(0, paid - total);
+  const [credit, setCredit] = useState(0);
+  const [usingCredit, setUsingCredit] = useState(false);
+  const loadCredit = async () => {
+    const { data } = await (supabase as any).from('client_credits').select('amount, currency').eq('client_id', quote.client_id);
+    setCredit((data ?? []).filter((r: any) => r.currency === quote.currency).reduce((a: number, r: any) => a + Number(r.amount), 0));
+  };
+  useEffect(() => { loadCredit(); }, [quote.id, quote.status, paid]); // eslint-disable-line react-hooks/exhaustive-deps
+  const useMyCredit = async () => {
+    setUsingCredit(true);
+    const { data, error } = await (supabase as any).rpc('hunter_use_credit', { p_quote: quote.id });
+    setUsingCredit(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Thank you. ${money(Number(data), quote.currency)} of your credit was used.`);
+    onChanged();
+  };
 
   if (s === 'draft') return null;
   const tone = s === 'sent' ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/30'
@@ -55,6 +70,12 @@ export function QuoteCard({ quote, ref_, onChanged, onChangeChoices }: { quote: 
           </div>
         )}
 
+        {credit > 0.005 && (s === 'accepted' || (s === 'deposit_paid' && paid < total - 0.005)) && (
+          <div className="rounded-xl bg-white dark:bg-slate-900 border border-green-500 p-3 space-y-2 text-sm text-slate-800 dark:text-slate-200">
+            <p className="font-semibold">You have {money(credit, quote.currency)} credit with us from an earlier order.</p>
+            <button disabled={usingCredit} onClick={useMyCredit} className="w-full min-h-12 rounded-xl bg-green-700 hover:bg-green-800 text-white font-bold flex items-center justify-center gap-2 disabled:opacity-60">{usingCredit && <Loader2 className="w-4 h-4 animate-spin" />}Use my credit for this payment</button>
+          </div>
+        )}
         {(s === 'accepted' || (s === 'deposit_paid' && paid < total - 0.005)) && <PaymentProof quote={quote} onChanged={onChanged} />}
 
         {['accepted', 'deposit_paid', 'paid'].includes(s) && (
@@ -80,6 +101,14 @@ function QuoteSheet({ quote, total, paid, onClose, onChanged, onChangeChoices }:
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
   const deposit = Math.round(total * quote.deposit_percent) / 100;
+
+  async function reopen() {
+    setBusy(true);
+    const { error } = await (supabase as any).rpc('hunter_reopen_quote', { p_quote: quote.id });
+    setBusy(false);
+    if (error) { toast.error(error.message); return; }
+    onChangeChoices?.();
+  }
 
   async function respond(accept: boolean) {
     setBusy(true);
@@ -132,6 +161,12 @@ function QuoteSheet({ quote, total, paid, onClose, onChanged, onChangeChoices }:
             <button disabled={busy || !comment.trim()} onClick={() => respond(false)} className="w-full min-h-12 rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-bold disabled:opacity-50">Send my request</button>
             <button onClick={() => setAsking(false)} className="w-full min-h-11 text-slate-500">Back</button>
           </>
+        )}
+        {['accepted', 'deposit_paid', 'paid'].includes(quote.status) && onChangeChoices && (
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 space-y-2">
+            <p className="text-sm text-slate-700 dark:text-slate-300">Changed your mind? You can change your choices until your animal is being mounted. {paid > 0 ? 'What you have paid stays safe and counts toward the new total. If the new total is lower, the difference is kept as credit for you.' : ''}</p>
+            <button disabled={busy} onClick={reopen} className="w-full min-h-12 rounded-xl border-2 border-slate-900 dark:border-slate-100 font-bold disabled:opacity-60">Change my choices</button>
+          </div>
         )}
         {quote.status !== 'sent' && paid > 0 && <p className="text-sm text-slate-600 dark:text-slate-300">Received so far: <strong>{money(paid, quote.currency)}</strong>. {paid > total + 0.005 ? <>You are in credit by <strong>{money(paid - total, quote.currency)}</strong>. The workshop will refund it or use it on another order.</> : <>Outstanding: <strong>{money(Math.max(0, total - paid), quote.currency)}</strong>.</>}</p>}
       </div>

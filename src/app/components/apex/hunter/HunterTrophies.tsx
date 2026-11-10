@@ -19,6 +19,7 @@ import { supabase } from '../../../../lib/supabase';
 import { LeatherCard } from '../shared/LeatherPicker';
 import { leftoverSkin, leatherText } from '../../../../lib/leather';
 import { mountsFor } from '../../../../lib/pricing';
+import { isMounted } from '../../../../lib/mountRules';
 import { finishChoices } from '../../../../lib/hooks/useQuotes';
 import { HunterDocuments } from './HunterDocuments';
 import { useHunterQuotes } from '../../../../lib/hooks/useQuotes';
@@ -34,7 +35,7 @@ function statusOf(a: HunterAnimal): { text: string; tone: 'todo' | 'wait' | 'wor
   return { text: `${DEPT_LABELS[a.dept] ?? a.dept}${idx >= 0 ? ` · stage ${idx + 1} of ${pipe.length}` : ''}`, tone: 'work', pct: idx >= 0 ? Math.max(5, Math.round((idx / Math.max(1, pipe.length - 1)) * 100)) : 5 };
 }
 
-export function HunterTrophies({ onRegisterHunt, onChanged, startAdding = false }: { onRegisterHunt?: () => void; onChanged?: () => void; startAdding?: boolean }) {
+export function HunterTrophies({ onRegisterHunt, onChanged, onOpenMessages, startAdding = false }: { onRegisterHunt?: () => void; onChanged?: () => void; onOpenMessages?: () => void; startAdding?: boolean }) {
   const { client, animals, loading, refresh } = useHunterAnimals();
   const { quotes, refresh: refreshQuotes } = useHunterQuotes(client?.id);
   // the step the hunter was on is remembered, so a refresh brings them straight back to it
@@ -63,10 +64,10 @@ export function HunterTrophies({ onRegisterHunt, onChanged, startAdding = false 
 
   // the client changes their choices (before they accept): the animals of that hunt that have a plain mount and have not been started
   const changeChoices = (huntId: string) => {
-    const ids = animals.filter(a => a.huntId === huntId && !a.started && !a.finished && a.dept === 'receiving' && a.mountChosen && !/^custom mount/i.test(a.mount ?? '')).map(a => a.docId);
+    // a client can change their mind until the animal is being mounted
+    const ids = animals.filter(a => a.huntId === huntId && !a.finished && a.mountChosen && !isMounted(a.dept, a.status) && !/^custom mount \(combined\)$/i.test(a.mount ?? '')).map(a => a.docId);
     if (ids.length === 0) {
-      const hasCustom = animals.some(a => a.huntId === huntId && !a.started && /^custom mount/i.test(a.mount ?? ''));
-      toast.info(hasCustom ? 'To change a custom mount, please message us. We will update your quote.' : 'Work has already started on these animals, so the mount cannot be changed here. Please message us if you need a change.');
+      toast.info('Your animals are already being mounted, so the mount can no longer be changed here. Please message us if you need something.');
       return;
     }
     setChoosing(ids);
@@ -96,7 +97,14 @@ export function HunterTrophies({ onRegisterHunt, onChanged, startAdding = false 
       }).map(h => (
         <div key={h.id} className="rounded-2xl border-2 border-sky-400 bg-sky-50 dark:bg-sky-950/30 p-4 space-y-1">
           <p className="font-bold text-slate-900 dark:text-slate-100">We are confirming your custom order with you</p>
-          <p className="text-sm text-slate-700 dark:text-slate-300">Some of your choices (a custom mount, a replica, leather work or other items we price ourselves) are agreed with you first. When we have agreed them, your quote and payment details appear here. You only pay after that.</p>
+          <p className="text-sm text-slate-700 dark:text-slate-300">Some of your choices (a custom mount, a replica, leather work or other items we price ourselves) are agreed with you first. Our head taxidermist will talk to you about what you have in mind. When we have agreed it and set the price, your quote and payment details appear here. You only pay after that.</p>
+          {onOpenMessages && (
+            <button className="w-full min-h-12 rounded-xl bg-sky-700 hover:bg-sky-800 text-white font-bold" onClick={() => {
+              const row = h.rows.find(r => r.mountChosen && /^custom mount$/i.test(r.mount)) ?? h.rows.find(r => r.mountChosen);
+              try { if (row) sessionStorage.setItem('apex-message-doc', row.docId); } catch { /* the chat simply opens without the animal chosen */ }
+              onOpenMessages();
+            }}>Message the head taxidermist</button>
+          )}
         </div>
       ))}
 
