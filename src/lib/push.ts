@@ -1,7 +1,10 @@
 /** Notifications on a phone or computer: turn on / off for this device, and tell the server about new team messages. */
 import { supabase } from './supabase';
 
-const KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined;
+// The public half of the notification key pair (made 2026-11-15). It is meant to be public, so it lives here; a Vercel
+// variable VITE_VAPID_PUBLIC_KEY overrides it. The private half is only in Supabase (Edge Function secrets).
+const KEY = (import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined)
+  || 'BFwfFZyzSyIx9dqFeQNHvk4rofhybHrH3YontxCaBbdRdKlrTJbBsJGFjUF6qthkz0QPX3eG6siPIB3mTlTV2Ok';
 // The notification function as it is named in Supabase. The dashboard gave it a random name when it was added, and that name cannot be changed.
 const PUSH_FUNCTION = 'super-processor';
 const PUSH_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${PUSH_FUNCTION}`;
