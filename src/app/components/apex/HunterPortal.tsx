@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { NotificationsPrompt } from './shared/NotificationsPrompt';
 import { takeOpenRequest, onOpenRequest } from '../../../lib/push';
 import { Notifications } from './hunter/Notifications';
 import { HunterProfile } from './hunter/HunterProfile';
@@ -145,6 +146,7 @@ export function HunterPortal({ onLogout }: HunterPortalProps) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-stone-100 via-green-50 to-lime-50 dark:from-stone-950 dark:via-green-950 dark:to-stone-900">
+      <NotificationsPrompt />
       {/* Header */}
       <header className="bg-white/90 dark:bg-stone-900/90 backdrop-blur-lg border-b border-green-200 dark:border-green-900 sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4">

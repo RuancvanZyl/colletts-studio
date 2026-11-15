@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { NotificationsPrompt } from './shared/NotificationsPrompt';
 import { supabase } from '../../../lib/supabase';
 import { getStaffDepartments, STALL_HOURS } from '../../../lib/pipeline';
 import { toast } from 'sonner';
@@ -510,6 +511,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
 
   return (
     <div className="staff-readable min-h-screen bg-[#080C0C] dark:bg-[#080C0C] flex">
+      <NotificationsPrompt what="when a client writes to you or trophies arrive" />
 
       {/* ── Sidebar ─────────────────────────────────────── */}
       <aside className={`

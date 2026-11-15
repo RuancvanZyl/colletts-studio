@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { NotificationsPrompt } from './shared/NotificationsPrompt';
 import { takeOpenRequest, onOpenRequest } from '../../../lib/push';
 import { InstallBanner } from './shared/InstallApp';
 import { UpdateBanner } from './shared/AppVersion';
@@ -50,6 +51,7 @@ export function LocalHunterPortal({ onLogout }: LocalHunterPortalProps) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-stone-100 via-amber-50 to-yellow-50 dark:from-stone-950 dark:via-amber-950 dark:to-stone-900">
+      <NotificationsPrompt />
 
       {/* Header */}
       <header className="bg-white/90 dark:bg-stone-900/90 backdrop-blur-lg border-b border-amber-200 dark:border-amber-900 sticky top-0 z-50">
