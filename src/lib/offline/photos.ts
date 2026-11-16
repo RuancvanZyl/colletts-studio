@@ -66,6 +66,9 @@ export async function stampPhoto(file: Blob, text: string): Promise<Blob> {
 
 export const photoPath = (clientId: string, id: string) => `trophy-photos/${clientId}/${id}.jpg`;
 
+export const alreadyUploaded = (e: { message?: string; statusCode?: string | number; status?: number }) =>
+  String(e?.statusCode) === '409' || /already exists|duplicate/i.test(e?.message ?? '');
+
 export const addPhotosExecutor: Executor = async a => {
   const x = a.args as unknown as PhotoBatch;
   try {
@@ -73,9 +76,11 @@ export const addPhotosExecutor: Executor = async a => {
       const blob = await blobGet(it.blobId);
       const path = photoPath(x.clientId, it.id);
       if (blob) {
+        // No "upsert": replacing a file needs extra rights a hunter does not have, so their uploads were refused.
+        // Every photo has its own fixed file name, so "already there" just means an earlier try got through.
         const { error } = await (supabase as any).storage.from('client-photos')
-          .upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
-        if (error) return classify(error);
+          .upload(path, blob, { upsert: false, contentType: 'image/jpeg' });
+        if (error && !alreadyUploaded(error)) return classify(error);
       }   // no blob = uploaded on an earlier attempt
       const { error: dbErr } = await (supabase as any).from('trophy_photos').upsert({
         id: it.id, client_id: x.clientId, hunt_id: x.huntId, hunt_doc_id: x.docId, kind: x.kind,

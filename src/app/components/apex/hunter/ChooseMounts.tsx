@@ -94,7 +94,8 @@ export function ChooseMounts({ animals, clientType, clientId, combinable = [], o
         }
         if (p.mount === 'Custom mount' && p.custom.files.length && clientId) {
           const blobs = await Promise.all(p.custom.files.map(f => shrinkPhoto(f)));
-          await savePhotos({ clientId, huntId: x.huntId ?? null, docId: x.docId, kind: 'reference', shared: true, files: blobs, staffId: null, staffName: null });
+          const sent = await savePhotos({ clientId, huntId: x.huntId ?? null, docId: x.docId, kind: 'reference', shared: true, files: blobs, staffId: null, staffName: null });
+          if (sent.error) toast.error('Your photos could not be sent to the workshop. Please add them again in a moment.', { duration: 12000 });
         }
       }
     }

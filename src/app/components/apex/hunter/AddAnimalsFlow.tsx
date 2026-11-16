@@ -3,6 +3,7 @@
  * chooses a mount for each (seeing the prices) and the workshop gets an order waiting for the trophies to arrive.
  */
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useDraft } from '../../../../lib/draft';
 import { ArrowLeft, ArrowRight, CalendarCheck } from 'lucide-react';
 import { supabase } from '../../../../lib/supabase';
@@ -72,7 +73,8 @@ export function AddAnimalsFlow({ clientId, clientType, onClose, onSaved }: { cli
             const p = picks[d.docId];
             if (p?.mount === 'Custom mount' && p.custom.files.length && ids[d.docId]) {
               const blobs = await Promise.all(p.custom.files.map(f => shrinkPhoto(f)));
-              await savePhotos({ clientId, huntId: data.hunt_id, docId: ids[d.docId], kind: 'reference', shared: true, files: blobs, staffId: null, staffName: null });
+              const sent = await savePhotos({ clientId, huntId: data.hunt_id, docId: ids[d.docId], kind: 'reference', shared: true, files: blobs, staffId: null, staffName: null });
+              if (sent.error) toast.error('Your photos could not be sent to the workshop. Please add them again in a moment.', { duration: 12000 });
             }
           }
           // what to do with leftover skin, now that the job cards exist

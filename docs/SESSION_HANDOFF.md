@@ -355,3 +355,9 @@ Owner's rules (2026-11-10): a deposit does not lock an order. A client can chang
 - New VAPID key pair made 2026-11-15 and given to the owner. Owner still must: add `VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` in Supabase Edge Function secrets, add `VITE_VAPID_PUBLIC_KEY` in Vercel and redeploy, run 078 + 079, check `super-processor` has Verify JWT off. Until the Vercel key is in, the prompt stays hidden.
 - Vercel would not take `VITE_VAPID_PUBLIC_KEY` (its form refuses public VITE_ keys as "Secret"), so the public key is now written in `src/lib/push.ts` as the fallback. No Vercel step needed for alerts any more. Supabase still needs `VAPID_PUBLIC_KEY` (public) + `VAPID_PRIVATE_KEY` (private) as Edge Function secrets.
 - 2026-11-15: owner ran 078 + 079 (alerts_ready = true) and set Supabase secrets VAPID_PUBLIC_KEY + VAPID_PRIVATE_KEY (new pair; stray old-key secret deleted). Left: `super-processor` Verify JWT off, then test on a phone.
+
+## 2026-11-16 — Hunters' reference photos never reached the workshop (fixed)
+- Cause: photo uploads used `upsert: true`; Supabase Storage then also needs SELECT + UPDATE rights on the file, and a hunter has no SELECT on a file until its `trophy_photos` row exists, so every hunter upload was refused. `performAction` drops a refused action and ChooseMounts / AddAnimalsFlow ignored the result, so the hunter saw "saved" and the photos were lost.
+- Fix (`src/lib/offline/photos.ts`): upload without upsert; "already exists" (409) counts as done, since every photo has a fixed file name. ChooseMounts and AddAnimalsFlow now tell the hunter if photos could not be sent. No SQL needed.
+- Photos sent before this fix are gone: affected hunters must add them again (Change my choices on the custom mount). Staff see them on the client's profile, Photos tab, under "Hunter's reference photos".
+- Open: a hunter could not change one animal's order; waiting for the owner's lookup result (076 run? animal at mounting? skin rule?).
