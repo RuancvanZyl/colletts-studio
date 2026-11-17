@@ -7,7 +7,9 @@
  * in the app") or is written down here afterwards, so the record stays in one place.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Loader2, Send, MessageCircle } from 'lucide-react';
+import { Loader2, Send, MessageCircle, Camera, X } from 'lucide-react';
+import { uploadHuntFiles } from '../../../../lib/docs';
+import { MessagePhotos } from './MessagePhotos';
 import { toast } from 'sonner';
 import { tellAboutMessage } from '../../../../lib/push';
 import { supabase } from '../../../../lib/supabase';
@@ -15,7 +17,7 @@ import { WORKSHOP } from '../../../../lib/workshop';
 import { TOPICS, TOPIC_LABEL, whatsappLink } from '../../../../lib/threadTopics';
 import { useDraft } from '../../../../lib/draft';
 
-interface Msg { id: string; sender: 'outfitter' | 'workshop'; sender_name: string | null; body: string; created_at: string; requirement_id: string | null; channel?: string; case_id?: string | null; topic?: string; job?: { form_data?: { species?: string; tag_number?: string } } | null }
+interface Msg { attachments?: string[] | null; id: string; sender: 'outfitter' | 'workshop'; sender_name: string | null; body: string; created_at: string; requirement_id: string | null; channel?: string; case_id?: string | null; topic?: string; job?: { form_data?: { species?: string; tag_number?: string } } | null }
 interface HuntInfo { ref: string | null; client: string; outfitter: string; phone: string | null; contact: string | null }
 
 const fld = 'rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 px-3 min-h-11 text-base';
@@ -36,6 +38,8 @@ export function OutfitterThread({ huntId, side, canWrite = true, prefill = '', r
   const [filter, setFilter] = useState<string>(topic && !caseId ? topic : 'all');
   const [sendTopic, setSendTopic] = useState<string>(topic ?? (requirementId ? 'documents' : 'general'));
   const [wa, setWa] = useState({ from: 'outfitter', channel: 'phone', text: '' });
+  const [files, setFiles] = useState<File[]>([]);
+  const fileRef = useRef<HTMLInputElement>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const hasTopics = useRef(true);
 
@@ -52,7 +56,8 @@ export function OutfitterThread({ huntId, side, canWrite = true, prefill = '', r
       if (caseId) query = query.eq('case_id', caseId);
       return query.order('created_at');
     };
-    let { data, error } = await build('id, sender, sender_name, body, created_at, requirement_id, channel, case_id, topic, job:hunt_documents(form_data)');
+    let { data, error } = await build('id, sender, sender_name, body, created_at, requirement_id, channel, case_id, topic, attachments, job:hunt_documents(form_data)');
+    if (error) ({ data, error } = await build('id, sender, sender_name, body, created_at, requirement_id, channel, case_id, topic, job:hunt_documents(form_data)'));   // photos in the chat are not switched on yet
     if (error) { hasTopics.current = false; ({ data } = await build('id, sender, sender_name, body, created_at, requirement_id, channel, case_id')); }
     setMsgs(data ?? []); setLoading(false);
     await (supabase as any).rpc('mark_outfitter_thread_read', { p_hunt: huntId });
@@ -61,15 +66,19 @@ export function OutfitterThread({ huntId, side, canWrite = true, prefill = '', r
   useEffect(() => { bottom.current?.scrollIntoView({ block: 'end' }); }, [msgs.length, filter]);
 
   async function send() {
-    if (!text.trim() || busy) return;
+    if ((!text.trim() && files.length === 0) || busy) return;
     setBusy(true);
+    let paths: string[] = [];
+    try { if (files.length) paths = await uploadHuntFiles(huntId, files); }
+    catch { setBusy(false); toast.error('The photo could not be added. Please check your connection and try again.'); return; }
     const args: Record<string, unknown> = { p_hunt: huntId, p_body: text, p_requirement: requirementId, p_case: caseId };
-    let { error } = await (supabase as any).rpc('send_outfitter_message', { ...args, p_topic: caseId ? 'rejected_skin' : sendTopic, p_doc: docId });
+    const full = { ...args, p_topic: caseId ? 'rejected_skin' : sendTopic, p_doc: docId, ...(paths.length ? { p_files: paths } : {}) };
+    let { error } = await (supabase as any).rpc('send_outfitter_message', full);
     // the workshop has not switched on topics yet: send it the way it always worked
     if (error && /could not find the function|schema cache/i.test(error.message)) ({ error } = await (supabase as any).rpc('send_outfitter_message', args));
     setBusy(false);
     if (error) { toast.error(error.message); return; }
-    dText.clear(); setText(''); dText.clear(); tellAboutMessage('outfitter_message'); load();
+    dText.clear(); setText(''); setFiles([]); tellAboutMessage('outfitter_message'); load();
   }
 
   async function writeDown() {
@@ -117,7 +126,8 @@ export function OutfitterThread({ huntId, side, canWrite = true, prefill = '', r
               <div className={`max-w-[85%] rounded-2xl px-3.5 py-2 ${mine ? 'bg-[#0073ea] text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100'}`}>
                 {(!mine || m.channel === 'whatsapp' || m.channel === 'phone') && <p className="text-xs font-semibold opacity-80">{m.sender_name ?? (m.sender === 'workshop' ? 'Workshop' : 'Outfitter')}{m.channel === 'whatsapp' && !/WhatsApp/.test(m.sender_name ?? '') ? ' · WhatsApp' : ''}</p>}
                 {(tag || animal) && <p className={`text-[11px] font-bold uppercase tracking-wide ${mine ? 'text-blue-100' : 'text-slate-500'}`}>{[tag, animal].filter(Boolean).join(' · ')}</p>}
-                <p className="text-base whitespace-pre-wrap leading-snug">{m.body}</p>
+                {m.body !== '(photo)' && <p className="text-base whitespace-pre-wrap leading-snug">{m.body}</p>}
+                <MessagePhotos paths={m.attachments} bucket="hunt-documents" />
                 <p className={`text-[11px] mt-0.5 ${mine ? 'text-blue-100' : 'text-slate-500'}`}>{new Date(m.created_at).toLocaleString('en-ZA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>
               </div>
             </div>
@@ -132,9 +142,21 @@ export function OutfitterThread({ huntId, side, canWrite = true, prefill = '', r
               <select className={`${fld} !min-h-10 w-full mt-1`} value={sendTopic} onChange={e => setSendTopic(e.target.value)}>{TOPICS.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}</select>
             </label>
           )}
+          <input ref={fileRef} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={e => { const f = Array.from(e.target.files ?? []); if (f.length) setFiles(prev => [...prev, ...f].slice(0, 6)); e.target.value = ''; }} />
+          {files.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {files.map((f, k) => (
+                <div key={k} className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-300 bg-slate-100 flex items-center justify-center text-[10px] text-slate-600">
+                  {f.type === 'application/pdf' ? 'PDF' : <img src={URL.createObjectURL(f)} alt="" className="w-full h-full object-cover" />}
+                  <button type="button" aria-label="Remove" className="absolute top-0.5 right-0.5 w-6 h-6 bg-black/70 rounded-full flex items-center justify-center" onClick={() => setFiles(files.filter((_, j) => j !== k))}><X className="w-3.5 h-3.5 text-white" /></button>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="flex items-end gap-2">
+            <button type="button" aria-label="Add a photo" onClick={() => fileRef.current?.click()} className="min-h-12 min-w-12 rounded-xl border-2 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 flex items-center justify-center"><Camera className="w-5 h-5" /></button>
             <textarea rows={2} value={text} onChange={e => setText(e.target.value)} placeholder="Write a message…" className={`flex-1 py-2 ${fld}`} />
-            <button aria-label="Send" disabled={busy || !text.trim()} onClick={send} className="min-h-12 min-w-12 rounded-xl bg-[#0073ea] text-white flex items-center justify-center disabled:opacity-50">{busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}</button>
+            <button aria-label="Send" disabled={busy || (!text.trim() && files.length === 0)} onClick={send} className="min-h-12 min-w-12 rounded-xl bg-[#0073ea] text-white flex items-center justify-center disabled:opacity-50">{busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}</button>
           </div>
         </div>
       ) : <p className="border-t border-slate-200 dark:border-slate-700 p-3 text-xs text-slate-500">Only managers can write to outfitters.</p>}

@@ -8,7 +8,7 @@ export type Message = {
   client_id: string;
   hunt_id: string | null;
   direction: 'outbound' | 'inbound';
-  channel: 'email' | 'in_app' | 'whatsapp' | 'sms';
+  channel: 'email' | 'in_app' | 'whatsapp' | 'sms' | 'phone' | 'in_person';
   subject: string | null;
   body: string;
   html_body: string | null;
@@ -136,12 +136,7 @@ export function useClientMessages(clientId: string | null) {
     load();
   }
 
-  async function deleteMessage(messageId: string) {
-    await (supabase as any).from('client_messages').delete().eq('id', messageId);
-    load();
-  }
-
-  return { messages, templates, loading, sendMessage, markRead, deleteMessage, refresh: load };
+  return { messages, templates, loading, sendMessage, markRead, refresh: load };
 }
 
 async function sendEmailViaEdgeFunction(payload: {

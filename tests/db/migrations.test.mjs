@@ -27,7 +27,7 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql', '063_mount_change_rules.sql', '064_conversation_topics.sql', '065_mark_done_permission_fix.sql', '066_live_team_messages.sql', '067_push_notifications.sql', '069_hunt_receivings.sql', '070_arrival_alerts.sql', '071_missing_parts_followup.sql', '072_client_drafts.sql', '073_local_clients_no_documents.sql', '074_receiving_issues.sql', '075_proforma_cart.sql', '076_change_after_deposit_credit.sql', '077_tanning_already_done.sql', '078_message_photos_and_alerts.sql', '079_message_notifications_for_clients.sql']) {
+for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql', '063_mount_change_rules.sql', '064_conversation_topics.sql', '065_mark_done_permission_fix.sql', '066_live_team_messages.sql', '067_push_notifications.sql', '069_hunt_receivings.sql', '070_arrival_alerts.sql', '071_missing_parts_followup.sql', '072_client_drafts.sql', '073_local_clients_no_documents.sql', '074_receiving_issues.sql', '075_proforma_cart.sql', '076_change_after_deposit_credit.sql', '077_tanning_already_done.sql', '078_message_photos_and_alerts.sql', '079_message_notifications_for_clients.sql', '080_history_and_kept_messages.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
@@ -1391,5 +1391,75 @@ const nn = (await q(`SELECT title, body, stage FROM client_notifications WHERE c
 ok(nn && nn.title === 'New message from Apex Trophy Solutions' && nn.body.startsWith('Your custom mount: Please see'), 'a message from the workshop appears in the client\'s notifications');
 await db.query(`INSERT INTO client_messages (client_id, direction, channel, body, status) VALUES ($1, 'inbound', 'in_app', 'A question from the client', 'sent')`, [mc]);
 ok((await q(`SELECT count(*)::int n FROM client_notifications WHERE client_id=$1 AND stage='message'`, [mc]))[0].n === 1, 'a message the client wrote does not notify the client');
+
+console.log('\nHistory and kept messages');
+// history of a quote change
+const h1 = await newHunt(['Nyala']);
+await as(HUN2);
+await db.query(`SELECT public.hunter_choose_mount($1, 'Full Mount')`, [h1.id('Nyala')]);
+await db.query(`SELECT public.hunter_finish_choices($1)`, [h1.h]);
+const hq = await qOf(h1.h);
+await db.query(`SELECT public.hunter_respond_quote($1, true, NULL, 'deposit')`, [hq.id]);
+await as(ids.admin);
+await db.query(`SELECT public.staff_record_payment($1, 100, 'EFT', 'History test')`, [hq.id]);
+await as(null);
+const aud = await q(`SELECT table_name, action, changed_by_name, changed_by_role, at, changes FROM audit_log WHERE hunt_id=$1 ORDER BY at, id`, [h1.h]);
+ok(aud.some(a => a.table_name === 'quotes' && a.action === 'insert'), 'a new quote is written in the history');
+const stat = aud.find(a => a.table_name === 'quotes' && a.action === 'update' && a.changes.status?.to === 'accepted');
+ok(!!stat && stat.changes.status.from === 'sent' && stat.at, 'the history says what a quote was and what it became, and when');
+ok(stat && stat.changed_by_role === 'hunter', 'and who did it (the hunter accepted)');
+const pay = aud.find(a => a.table_name === 'quote_payments' && a.action === 'insert');
+ok(!!pay && pay.changed_by_name && pay.changes.row.amount == 100, 'a payment is written in the history with the person who recorded it');
+ok(aud.some(a => a.table_name === 'hunt_documents' && a.changes['form_data.mount_type']), 'a change of mount on a job card is written in the history');
+ok((await q(`SELECT count(*)::int n FROM audit_log WHERE hunt_id=$1 AND changes = '{}'::jsonb`, [h1.h]))[0].n === 0, 'changes that change nothing are not written');
+await as(ids.admin);
+ok((await q(`SELECT count(*)::int n FROM audit_log WHERE hunt_id=$1`, [h1.h]))[0].n > 0, 'an admin can read the history');
+await db.query(`UPDATE audit_log SET changed_by_name = 'x'`);
+ok((await q(`SELECT count(*)::int n FROM audit_log WHERE changed_by_name = 'x'`))[0].n === 0, 'an admin cannot edit the history');
+await db.query(`DELETE FROM audit_log`);
+ok((await q(`SELECT count(*)::int n FROM audit_log`))[0].n > 0, 'an admin cannot remove from the history');
+await as(null);
+ok((await fails(`UPDATE audit_log SET changed_by_name = 'x'`))?.includes('cannot be changed'), 'not even the database owner can edit the history');
+ok((await fails(`DELETE FROM audit_log`))?.includes('cannot be changed'), 'or remove from it');
+await as(ids.worker);
+ok((await q(`SELECT count(*)::int n FROM audit_log`))[0].n === 0, 'ordinary staff cannot read the history');
+await as(HUN2);
+ok((await q(`SELECT count(*)::int n FROM audit_log`))[0].n === 0, 'a hunter cannot read the history');
+await as(null);
+
+// messages are kept
+await as(null);
+await db.query(`INSERT INTO client_messages (client_id, direction, channel, body, status) VALUES ($1, 'outbound', 'in_app', 'Keep me', 'sent')`, [mc]);
+const keepId = (await q(`SELECT id FROM client_messages WHERE body='Keep me'`))[0].id;
+ok((await fails(`DELETE FROM client_messages WHERE id=$1`, [keepId]))?.includes('cannot be deleted'), 'a message to a client cannot be deleted');
+ok((await fails(`UPDATE client_messages SET body='Changed' WHERE id=$1`, [keepId]))?.includes('cannot be changed'), 'and cannot be rewritten');
+await db.query(`UPDATE client_messages SET status='read', read_at=now() WHERE id=$1`, [keepId]);
+ok((await q(`SELECT status FROM client_messages WHERE id=$1`, [keepId]))[0].status === 'read', 'but it can be marked as read');
+const om = (await q(`SELECT id FROM outfitter_messages LIMIT 1`))[0];
+ok((await fails(`DELETE FROM outfitter_messages WHERE id=$1`, [om.id]))?.includes('cannot be deleted'), 'a message with an outfitter cannot be deleted');
+ok((await fails(`UPDATE outfitter_messages SET body='x' WHERE id=$1`, [om.id]))?.includes('cannot be changed'), 'or rewritten');
+await db.query(`UPDATE outfitter_messages SET read_at = now() WHERE id=$1`, [om.id]);
+
+// photos in the outfitter chat
+await as(ids.admin);
+const huntWithOut = (await q(`SELECT id FROM client_hunts WHERE outfitter_id IS NOT NULL LIMIT 1`))[0].id;
+await db.query(`SELECT public.send_outfitter_message($1, 'See the photo', NULL, NULL, 'job_card', NULL, ARRAY['${huntWithOut}/p.jpg'])`, [huntWithOut]);
+ok((await q(`SELECT cardinality(attachments)::int n FROM outfitter_messages WHERE body='See the photo'`))[0].n === 1, 'a photo can be sent in the chat with an outfitter');
+await db.query(`SELECT public.send_outfitter_message($1, '', NULL, NULL, NULL, NULL, ARRAY['${huntWithOut}/q.jpg'])`, [huntWithOut]);
+ok((await q(`SELECT count(*)::int n FROM outfitter_messages WHERE body='(photo)'`))[0].n === 1, 'a photo can be sent without words');
+
+// writing down a conversation with a client
+await as(ids.admin);
+await db.query(`SELECT public.log_client_conversation($1, 'client', 'phone', 'He wants the kudu on a rock base', now() - interval '2 hours')`, [mc]);
+await db.query(`SELECT public.log_client_conversation($1, 'outfitter', 'whatsapp', 'The outfitter says the second skin is on its way')`, [mc]);
+const lg2 = await q(`SELECT direction, channel, subject, sent_at < now() - interval '1 hour' AS earlier FROM client_messages WHERE body LIKE 'He wants the kudu%'`);
+ok(lg2[0].direction === 'inbound' && lg2[0].channel === 'phone' && lg2[0].subject.includes('written down by') && lg2[0].earlier === true, 'a phone call with the client is written into the conversation, dated when it happened');
+ok((await q(`SELECT subject FROM client_messages WHERE body LIKE 'The outfitter says%'`))[0].subject.includes('between the client and the outfitter'), 'what the client and the outfitter said to each other is written down too');
+ok((await fails(`SELECT public.log_client_conversation($1, 'client', 'carrier pigeon', 'x')`, [mc]))?.includes('phone call, WhatsApp or in person'), 'only a phone call, WhatsApp or in person can be written down');
+ok((await fails(`SELECT public.log_client_conversation($1, 'client', 'phone', 'x', now() + interval '2 days')`, [mc]))?.includes('future'), 'a conversation cannot be dated in the future');
+await as(ids.worker);
+ok((await fails(`SELECT public.log_client_conversation($1, 'client', 'phone', 'x')`, [mc]))?.includes('Only managers'), 'ordinary staff cannot write down conversations');
+await as(null);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

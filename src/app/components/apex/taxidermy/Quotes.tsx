@@ -17,6 +17,7 @@ import { useQuotePipeline, loadQuotes, money, STAGE_LABEL, type Quote, type Quot
 import { MessageOutfitterButton } from '../shared/MessageOutfitterButton';
 import { useBack } from '../../../../lib/back';
 import { openHuntFile } from '../../../../lib/docs';
+import { ChangeHistory } from '../shared/ChangeHistory';
 
 const field = 'w-full rounded-lg border border-slate-600 bg-[#0f1a24] text-slate-100 px-3 min-h-11 text-base placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0073ea]';
 const lab = 'block text-sm font-semibold text-slate-300 mb-1';
@@ -25,12 +26,12 @@ const STAGE_COLOUR: Record<string, string> = {
   declined: 'bg-red-900/50 text-red-300', awaiting_deposit: 'bg-orange-900/50 text-orange-300', authorised: 'bg-emerald-900/50 text-emerald-300',
 };
 
-export function Quotes({ onChanged, initialHuntId }: { onChanged?: () => void; initialHuntId?: string }) {
+export function Quotes({ onChanged, initialHuntId, onOpenClient }: { onChanged?: () => void; initialHuntId?: string; onOpenClient?: (clientId: string) => void }) {
   const { rows, loading, refresh } = useQuotePipeline();
   const [open, setOpen] = useState<string | null>(initialHuntId ?? null);
   useBack(!!open, () => setOpen(null));
 
-  if (open) return <QuoteEditor huntId={open} onBack={() => { setOpen(null); refresh(); onChanged?.(); }} />;
+  if (open) return <QuoteEditor huntId={open} onOpenClient={onOpenClient} onBack={() => { setOpen(null); refresh(); onChanged?.(); }} />;
 
   const order = ['to_quote', 'declined', 'awaiting_deposit', 'sent', 'draft', 'authorised'];
   // money still to come in, from every quote the hunter has accepted
@@ -80,12 +81,13 @@ function Row({ r, onOpen }: { r: PipelineRow; onOpen: () => void }) {
   );
 }
 
-function QuoteEditor({ huntId, onBack }: { huntId: string; onBack: () => void }) {
+function QuoteEditor({ huntId, onBack, onOpenClient }: { huntId: string; onBack: () => void; onOpenClient?: (clientId: string) => void }) {
   const { profile } = useAuth();
   const isAdmin = profile?.role === 'admin' || profile?.role === 'studio_manager';
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [who, setWho] = useState({ name: '', ref: '', type: 'export' });
+  const [who, setWho] = useState({ name: '', ref: '', type: 'export', clientId: '' });
+  const [customs, setCustoms] = useState<{ docId: string; species: string; mount: string; description: string; photos: string[] }[]>([]);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [lines, setLines] = useState<QuoteLine[]>([]);
   const [currency, setCurrency] = useState('USD');
@@ -98,9 +100,23 @@ function QuoteEditor({ huntId, onBack }: { huntId: string; onBack: () => void })
 
   async function load() {
     setLoading(true);
-    const { data: hunt } = await (supabase as any).from('client_hunts').select('ref_number, client_type, work_authorised_at, clients(full_name, client_type)').eq('id', huntId).single();
+    const { data: hunt } = await (supabase as any).from('client_hunts').select('ref_number, client_type, client_id, work_authorised_at, clients(full_name, client_type)').eq('id', huntId).single();
     const type = hunt?.clients?.client_type ?? hunt?.client_type ?? 'export';
-    setWho({ name: hunt?.clients?.full_name ?? '', ref: hunt?.ref_number ?? '', type });
+    setWho({ name: hunt?.clients?.full_name ?? '', ref: hunt?.ref_number ?? '', type, clientId: hunt?.client_id ?? '' });
+    // what the client has in mind for custom mounts and replicas: their words and their photos
+    {
+      const { data: cd } = await (supabase as any).from('hunt_documents').select('id, form_data').eq('hunt_id', huntId).eq('doc_type', 'job_card');
+      const wanted = (cd ?? []).filter((d: any) => /^custom mount$/i.test(d.form_data?.mount_type ?? ''));
+      const out: typeof customs = [];
+      for (const d of wanted) {
+        const { data: ph } = await (supabase as any).from('trophy_photos').select('storage_path').eq('hunt_doc_id', d.id).eq('kind', 'reference');
+        const paths = (ph ?? []).map((x: any) => x.storage_path);
+        const urls: string[] = [];
+        if (paths.length) { const { data: signed } = await (supabase as any).storage.from('client-photos').createSignedUrls(paths, 3600); for (const x of signed ?? []) if (x.signedUrl) urls.push(x.signedUrl); }
+        out.push({ docId: d.id, species: d.form_data?.species ?? 'Animal', mount: d.form_data?.mount_type ?? '', description: d.form_data?.custom?.description ?? '', photos: urls });
+      }
+      setCustoms(out);
+    }
     setAuthorised(!!hunt?.work_authorised_at);
     const [q] = await loadQuotes({ huntId });
     setQuote(q ?? null);
@@ -197,6 +213,21 @@ function QuoteEditor({ huntId, onBack }: { huntId: string; onBack: () => void })
         </div>
       )}
 
+      {customs.length > 0 && (
+        <section className="rounded-xl border border-sky-600 bg-sky-950/20 p-4 space-y-3">
+          <h2 className="text-lg font-bold text-sky-100">Custom order: what {who.name || 'the client'} has in mind</h2>
+          {customs.map(c => (
+            <div key={c.docId} className="space-y-2">
+              <p className="font-semibold text-slate-100">{c.species}</p>
+              <p className="text-slate-200 whitespace-pre-wrap">{c.description.trim() || 'No description written. See the photos.'}</p>
+              {c.photos.length > 0 && <div className="flex flex-wrap gap-2">{c.photos.map(u => <a key={u} href={u} target="_blank" rel="noreferrer"><img src={u} alt="Photo from the client" className="w-28 h-28 object-cover rounded-lg border border-slate-600" /></a>)}</div>}
+            </div>
+          ))}
+          <p className="text-sm text-slate-300">Talk to the client first, agree what it will be, then put the price on the line below. The client pays after that.</p>
+          {onOpenClient && who.clientId && <button className="min-h-11 px-4 rounded-lg bg-sky-700 hover:bg-sky-800 text-white font-bold" onClick={() => { try { sessionStorage.setItem('apex_client_tab', 'messages'); } catch { /* opens on the first tab */ } onOpenClient(who.clientId); }}>Talk to the client</button>}
+        </section>
+      )}
+
       <section className="space-y-3">
         <h2 className="text-lg font-bold text-slate-100">Lines</h2>
         {lines.map((l, i) => (
@@ -279,6 +310,13 @@ function QuoteEditor({ huntId, onBack }: { huntId: string; onBack: () => void })
       {changing && quote && <OrderChangeDialog quote={quote} clientType={who.type} who={who.name} onClose={() => setChanging(false)} onDone={() => { setChanging(false); load(); }} />}
       {popup?.kind === 'release' && plan && <ReleasePopup plan={plan} onClose={() => setPopup(null)} onDone={() => { setPopup(null); load(); }} staff={{ id: profile?.id ?? null, name: profile?.full_name ?? 'Staff' }} huntId={huntId} />}
       {popup?.kind === 'accept' && quote && <AcceptPopup currency={quote.currency} total={total} percent={percent} busy={busy} onClose={() => setPopup(null)} onConfirm={acceptForHunter} />}
+
+      {isAdmin && (
+        <details className="rounded-xl border border-slate-700 p-3">
+          <summary className="cursor-pointer min-h-11 flex items-center font-semibold text-slate-200">Everything that was changed on this order (who and when)</summary>
+          <div className="pt-2"><ChangeHistory huntId={huntId} /></div>
+        </details>
+      )}
 
       {editable && (
         <div className="fixed bottom-16 lg:bottom-0 inset-x-0 z-30 bg-[#0F1A1C]/95 border-t border-slate-700 p-3 lg:left-60">

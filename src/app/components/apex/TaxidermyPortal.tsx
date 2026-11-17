@@ -467,7 +467,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
       case 'rejections':      return <RejectionCases key={navClientId ?? 'all'} initialCaseId={navClientId} onNavigate={navigate} />;
       case 'dept-progress':   return <DepartmentProgress onNavigate={navigate} />;
       case 'progress-check':  return <ProgressCheck key={navClientId ?? 'all'} initialHuntId={navClientId} onNavigate={navigate} />;
-      case 'quotes':          return <Quotes key={navClientId ?? 'all'} initialHuntId={navClientId} />;
+      case 'quotes':          return <Quotes key={navClientId ?? 'all'} initialHuntId={navClientId} onOpenClient={(id) => navigate('clients', id)} />;
       case 'stations':        return <StationsHome stations={STATIONS.filter(st => canSeeView(st.view as TaxidermyView))} onOpen={navigate} />;
       case 'status-board':    return <ClientStatusBoard onNavigate={navigate} />;
       case 'dashboard':       return <WorkshopDashboard onNavigate={navigate} />;

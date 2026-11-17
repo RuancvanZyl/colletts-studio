@@ -3,7 +3,8 @@ import { supabase } from '../../../../lib/supabase';
 import { useHunterClient } from '../../../../lib/hooks/useHunterClient';
 import { Button } from '../../ui/button';
 import { Badge } from '../../ui/badge';
-import { Send, Loader2, MessageCircle, Sparkles, ChevronDown, ChevronUp, Tag } from 'lucide-react';
+import { Send, Loader2, MessageCircle, Sparkles, ChevronDown, ChevronUp, Tag, Camera, X } from 'lucide-react';
+import { uploadMessageFiles } from '../../../../lib/messageFiles';
 import { toast } from 'sonner';
 import { useBack } from '../../../../lib/back';
 import { MessagePhotos } from '../shared/MessagePhotos';
@@ -54,6 +55,8 @@ export function TrophyMessages() {
   useBack(!!selected, () => setSelected(null));
   const [body, setBody]         = useState('');
   const [sending, setSending]   = useState(false);
+  const [files, setFiles]       = useState<File[]>([]);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [showStarters, setShowStarters] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -117,8 +120,11 @@ export function TrophyMessages() {
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages.length]);
 
   async function send() {
-    if (!client?.id || !body.trim()) return;
+    if (!client?.id || (!body.trim() && files.length === 0)) return;
     setSending(true);
+    let attachments: string[] = [];
+    try { if (files.length) attachments = await uploadMessageFiles(client.id, files); }
+    catch { setSending(false); toast.error('The photo could not be added. Please check your connection and try again.'); return; }
     const formData = selected
       ? { trophy_tag: selected.tagNumber, species: selected.species }
       : undefined;
@@ -129,13 +135,15 @@ export function TrophyMessages() {
         direction: 'inbound',
         channel:   'in_app',
         subject:   selected ? (/^custom mount$/i.test(selected.mountType) ? `Custom order: ${selected.species} (${selected.tagNumber})` : `Question about ${selected.species} (${selected.tagNumber})`) : 'General question',
-        body:      body.trim(),
+        body:      body.trim() || '(photo)',
         status:    'sent',
         form_data: formData,
+        ...(attachments.length ? { attachments } : {}),
       });
     setSending(false);
     if (error) { toast.error('Could not send message'); return; }
     setBody('');
+    setFiles([]);
     setShowStarters(false);
     tellAboutMessage('client_message');
     await load();
@@ -256,7 +264,7 @@ export function TrophyMessages() {
                   {msg.direction === 'outbound' && msg.subject && (
                     <p className="text-xs font-semibold text-slate-500 mb-1">{msg.subject}</p>
                   )}
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.body}</p>
+                  {msg.body !== '(photo)' && <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.body}</p>}
                   <MessagePhotos paths={msg.attachments} />
                   <p className={`text-[10px] mt-1 ${msg.direction === 'inbound' ? 'text-green-200' : 'text-slate-400'}`}>
                     {new Date(msg.sentAt).toLocaleString()}
@@ -328,7 +336,19 @@ export function TrophyMessages() {
           </div>
 
           {/* Input */}
+          <input ref={fileRef} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={e => { const f = Array.from(e.target.files ?? []); if (f.length) setFiles(prev => [...prev, ...f].slice(0, 6)); e.target.value = ''; }} />
+          {files.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2">
+              {files.map((f, k) => (
+                <div key={k} className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-300 bg-slate-100 flex items-center justify-center text-[10px] text-slate-600">
+                  {f.type === 'application/pdf' ? 'PDF' : <img src={URL.createObjectURL(f)} alt="" className="w-full h-full object-cover" />}
+                  <button type="button" aria-label="Remove" className="absolute top-0.5 right-0.5 w-6 h-6 bg-black/70 rounded-full flex items-center justify-center" onClick={() => setFiles(files.filter((_, j) => j !== k))}><X className="w-3.5 h-3.5 text-white" /></button>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="flex gap-2 items-end">
+            <Button type="button" size="sm" variant="outline" aria-label="Add a photo" className="flex-shrink-0 h-10 w-10 p-0" onClick={() => fileRef.current?.click()}><Camera className="w-4 h-4" /></Button>
             <textarea
               value={body}
               onChange={e => setBody(e.target.value)}
@@ -341,7 +361,7 @@ export function TrophyMessages() {
               size="sm"
               className="flex-shrink-0 bg-green-600 hover:bg-green-700 text-white h-10"
               onClick={send}
-              disabled={sending || !body.trim()}
+              disabled={sending || (!body.trim() && files.length === 0)}
             >
               {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             </Button>

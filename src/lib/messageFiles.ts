@@ -15,7 +15,7 @@ export async function uploadMessageFiles(clientId: string, files: File[]): Promi
   return out;
 }
 
-export async function messageFileUrl(path: string): Promise<string | null> {
-  const { data } = await (supabase as any).storage.from('message-files').createSignedUrl(path, 3600);
+export async function messageFileUrl(path: string, bucket: 'message-files' | 'hunt-documents' = 'message-files'): Promise<string | null> {
+  const { data } = await (supabase as any).storage.from(bucket).createSignedUrl(path, 3600);
   return data?.signedUrl ?? null;
 }

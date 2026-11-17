@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { useClientMessages, type Message, type MessageTemplate } from '../../../../lib/hooks/useClientMessages';
 import { toast } from 'sonner';
+import { supabase } from '../../../../lib/supabase';
+import { plainError } from '../../../../lib/plainError';
 import { Camera, X as XIcon } from 'lucide-react';
 import { uploadMessageFiles } from '../../../../lib/messageFiles';
 import { MessagePhotos } from '../shared/MessagePhotos';
@@ -22,6 +24,8 @@ const CHANNEL_META = {
   in_app:   { icon: MessageSquare, label: 'In-App',   color: 'text-green-500',  bg: 'bg-green-50 dark:bg-green-950/30' },
   whatsapp: { icon: Phone,         label: 'WhatsApp', color: 'text-emerald-500',bg: 'bg-emerald-50 dark:bg-emerald-950/30' },
   sms:      { icon: MessageSquare, label: 'SMS',      color: 'text-violet-500', bg: 'bg-violet-50 dark:bg-violet-950/30' },
+  phone:    { icon: Phone,         label: 'Phone call', color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-950/30' },
+  in_person:{ icon: MessageSquare, label: 'In person', color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-950/30' },
 };
 
 const STATUS_ICON: Record<string, React.ReactNode> = {
@@ -66,7 +70,7 @@ function ComposeModal({
   onClose: () => void;
 }) {
   const { sendMessage } = useClientMessages(clientId);
-  const [channel, setChannel] = useState<'email' | 'in_app' | 'whatsapp' | 'sms'>(
+  const [channel, setChannel] = useState<Message['channel']>(
     clientEmail ? 'email' : 'in_app'
   );
   const [subject, setSubject] = useState(
@@ -125,7 +129,7 @@ function ComposeModal({
           <Label className="text-xs text-slate-500">Send via</Label>
           <div className="flex gap-2 mt-1">
             {(Object.entries(CHANNEL_META) as [Message['channel'], typeof CHANNEL_META.email][])
-              .filter(([c]) => c !== 'whatsapp' && c !== 'sms' || c === channel)
+              .filter(([c]) => c === 'email' || c === 'in_app')
               .map(([c, meta]) => {
                 const Icon = meta.icon;
                 const disabled = c === 'email' && !clientEmail;
@@ -305,6 +309,61 @@ function MessageBubble({ msg, clientName, onReply }: { msg: Message; clientName:
   );
 }
 
+// ── Writing down a conversation that happened outside the app ───────────────────
+function WriteDownDialog({ clientId, clientName, onDone, onClose }: { clientId: string; clientName: string; onDone: () => void; onClose: () => void }) {
+  const [who, setWho] = useState<'client' | 'outfitter'>('client');
+  const [how, setHow] = useState<'phone' | 'whatsapp' | 'in_person'>('phone');
+  const [text, setText] = useState('');
+  const nowLocal = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
+  const [when, setWhen] = useState(nowLocal());
+  const [busy, setBusy] = useState(false);
+  async function save() {
+    if (!text.trim()) { toast.error('Write what was said'); return; }
+    setBusy(true);
+    const { error } = await (supabase as any).rpc('log_client_conversation', { p_client: clientId, p_with: who, p_channel: how, p_body: text, p_when: when ? new Date(when).toISOString() : null, p_hunt: null });
+    setBusy(false);
+    if (error) { toast.error(plainError(error.message)); return; }
+    toast.success('Written into the conversation');
+    onDone(); onClose();
+  }
+  const pill = (on: boolean) => `px-3 py-2 min-h-11 rounded-lg text-sm border ${on ? 'border-[#0073ea] bg-[#0073ea] text-white' : 'border-slate-300 text-slate-700 dark:text-slate-200'}`;
+  return (
+    <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogHeader><DialogTitle>Write down a conversation: {clientName}</DialogTitle></DialogHeader>
+      <div className="space-y-3">
+        <div>
+          <Label className="text-xs text-slate-500">Who was it between?</Label>
+          <div className="flex flex-wrap gap-2 mt-1">
+            <button className={pill(who === 'client')} onClick={() => setWho('client')}>The client and us</button>
+            <button className={pill(who === 'outfitter')} onClick={() => setWho('outfitter')}>The client and the outfitter</button>
+          </div>
+        </div>
+        <div>
+          <Label className="text-xs text-slate-500">How did they speak?</Label>
+          <div className="flex flex-wrap gap-2 mt-1">
+            <button className={pill(how === 'phone')} onClick={() => setHow('phone')}>Phone call</button>
+            <button className={pill(how === 'whatsapp')} onClick={() => setHow('whatsapp')}>WhatsApp</button>
+            <button className={pill(how === 'in_person')} onClick={() => setHow('in_person')}>In person</button>
+          </div>
+        </div>
+        <div>
+          <Label className="text-xs text-slate-500">When was it?</Label>
+          <Input type="datetime-local" value={when} max={nowLocal()} onChange={e => setWhen(e.target.value)} className="mt-1 h-11" />
+        </div>
+        <div>
+          <Label className="text-xs text-slate-500">What was said</Label>
+          <Textarea value={text} onChange={e => setText(e.target.value)} rows={6} className="mt-1 text-sm" placeholder="Type or paste what was said" />
+        </div>
+        <p className="text-xs text-slate-500">It is saved in this client's conversation with the date, the time and your name. It cannot be deleted later.</p>
+      </div>
+      <DialogFooter className="gap-2">
+        <Button variant="outline" onClick={onClose}>Cancel</Button>
+        <Button disabled={busy || !text.trim()} onClick={save} className="bg-[#0073ea] hover:bg-[#0060c0] text-white">{busy && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Save</Button>
+      </DialogFooter>
+    </DialogContent>
+  );
+}
+
 // ── Main panel export ─────────────────────────────────────────────────────────
 export function CommunicationPanel({
   clientId,
@@ -319,6 +378,7 @@ export function CommunicationPanel({
 }) {
   const { messages, templates, loading, refresh } = useClientMessages(clientId);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [writeDownOpen, setWriteDownOpen] = useState(false);
   const [replyTo, setReplyTo] = useState<Message | undefined>();
   const [filter, setFilter] = useState<'all' | 'email' | 'in_app'>('all');
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -327,7 +387,7 @@ export function CommunicationPanel({
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
 
-  const filtered = filter === 'all' ? messages : messages.filter(m => m.channel === filter);
+  const filtered = filter === 'all' ? messages : filter === 'email' ? messages.filter(m => m.channel === 'email') : messages.filter(m => m.channel !== 'email');   // In-App shows everything that is not an email (app messages, calls, WhatsApp, visits)
   const unread = messages.filter(m => m.direction === 'inbound' && m.status !== 'read').length;
 
   function openReply(msg: Message) {
@@ -424,7 +484,14 @@ export function CommunicationPanel({
           <Mail className="w-4 h-4 flex-shrink-0" />
           <span>Write a message to {clientName}…</span>
         </button>
+        <button onClick={() => setWriteDownOpen(true)} className="mt-2 w-full min-h-11 text-sm font-semibold text-slate-700 dark:text-slate-200 underline text-left px-1">
+          Spoke on the phone, on WhatsApp or in person? Write down what was said
+        </button>
       </div>
+
+      <Dialog open={writeDownOpen} onOpenChange={(open: boolean) => setWriteDownOpen(open)}>
+        <WriteDownDialog clientId={clientId} clientName={clientName} onDone={refresh} onClose={() => setWriteDownOpen(false)} />
+      </Dialog>
 
       {/* Compose dialog */}
       <Dialog open={composeOpen} onOpenChange={(open: boolean) => { setComposeOpen(open); if (!open) setReplyTo(undefined); }}>

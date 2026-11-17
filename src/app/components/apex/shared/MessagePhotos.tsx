@@ -3,14 +3,14 @@ import { FileText } from 'lucide-react';
 import { messageFileUrl } from '../../../../lib/messageFiles';
 
 /** The photos and PDFs that came with a message. Tap one to open it big. */
-export function MessagePhotos({ paths }: { paths?: string[] | null }) {
+export function MessagePhotos({ paths, bucket = 'message-files' }: { paths?: string[] | null; bucket?: 'message-files' | 'hunt-documents' }) {
   const [urls, setUrls] = useState<Record<string, string>>({});
   const key = (paths ?? []).join('|');
   useEffect(() => {
     let live = true;
     (async () => {
       const next: Record<string, string> = {};
-      for (const p of paths ?? []) { const u = await messageFileUrl(p); if (u) next[p] = u; }
+      for (const p of paths ?? []) { const u = await messageFileUrl(p, bucket); if (u) next[p] = u; }
       if (live) setUrls(next);
     })();
     return () => { live = false; };

@@ -1,3 +1,4 @@
+import { ChangeHistory } from '../shared/ChangeHistory';
 import { PhotoGallery } from '../shared/TrophyPhotos';
 import { ClientPortalAccess } from '../shared/ClientPortalAccess';
 import { ClientMoney } from './ClientMoney';
@@ -287,7 +288,7 @@ function PassportUploadSection({ clientId }: { clientId: string | null }) {
 }
 
 // ── Detail tabs ───────────────────────────────────────────────────────────────
-type DetailTab = 'info' | 'hunts' | 'photos' | 'messages' | 'jobcards' | 'money' | 'entries';
+type DetailTab = 'info' | 'hunts' | 'photos' | 'messages' | 'jobcards' | 'money' | 'entries' | 'history';
 
 /** One button per hunt that has an outfitter: the conversation with the outfitter about this client, saved against the hunt. */
 function ClientOutfitterChats({ clientId }: { clientId: string }) {
@@ -339,6 +340,7 @@ function ClientDetailPanel({ client, onEdit, onBack, onOpenQuote }: { client: Cl
     { key: 'messages', label: 'Messages' },
     { key: 'info',     label: 'Client Info' },
     { key: 'photos',   label: `Photos${photos.length ? ` (${photos.length})` : ''}` },
+    { key: 'history',  label: 'History' },
   ];
 
   return (
@@ -450,6 +452,12 @@ function ClientDetailPanel({ client, onEdit, onBack, onOpenQuote }: { client: Cl
         {tab === 'jobcards' && <SectionGuard key="jobcards" what="The job cards"><ClientJobCards clientId={client.id} /></SectionGuard>}
         {tab === 'entries' && <SectionGuard key="entries" what="What the client entered"><ClientEntries clientId={client.id} /></SectionGuard>}
         {tab === 'money' && <SectionGuard key="money" what="The money tab"><ClientMoney clientId={client.id} onOpenQuote={onOpenQuote ?? (() => {})} /></SectionGuard>}
+        {tab === 'history' && (
+          <SectionGuard key="history" what="The history">
+            <p className="text-sm text-slate-400 mb-2">Everything that was changed for this client, with the date, the time and who did it. It cannot be edited or removed.</p>
+            <ChangeHistory clientId={client.id} />
+          </SectionGuard>
+        )}
         {tab === 'hunts' && <SectionGuard key="hunts" what="Hunts and documents"><HuntTimeline clientId={client.id} /></SectionGuard>}
 
         {tab === 'messages' && (

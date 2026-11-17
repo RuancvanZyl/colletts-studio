@@ -14,6 +14,7 @@ select * from (values
   ('078 photos in messages',                 (select count(*) from information_schema.columns where table_name = 'client_messages' and column_name in ('attachments', 'push_sent')) = 2
                                               and exists (select 1 from storage.buckets where id = 'message-files')),
   ('079 messages show in notifications',     exists (select 1 from pg_trigger where tgname = 'trg_notify_client_of_message')),
+  ('080 history and kept messages',         to_regclass('public.audit_log') is not null and exists (select 1 from pg_trigger where tgname = 'trg_messages_are_kept')),
   ('Phones that have notifications on',      coalesce((select count(*) from push_subscriptions), 0) > 0)
 ) as t(what, ok)
 order by what;
