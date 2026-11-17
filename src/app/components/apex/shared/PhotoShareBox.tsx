@@ -34,11 +34,16 @@ export function PhotoShareBox({ clientId, onAdded }: { clientId: string; onAdded
   async function add(files: FileList | null, forHunt: string) {
     if (!files || files.length === 0 || !forHunt) return;
     setBusy(true);
-    try {
-      const blobs = await Promise.all([...files].map(f => shrinkPhoto(f, 2000, 0.85)));
-      await savePhotos({ clientId, huntId: forHunt, docId: null, kind: 'hunt', shared: true, files: blobs, staffId: profile?.id ?? null, staffName: profile?.full_name ?? null, storyPart: part });
-      toast.success(`${blobs.length} photo${blobs.length === 1 ? '' : 's'} added for the hunter`); onAdded?.();
-    } catch (e: any) { toast.error(plainError(e?.message ?? 'The photos could not be added.')); }
+    let done = 0, failed = 0;
+    for (const f of [...files]) {   // one at a time, so a dozen big photos cannot run the phone out of memory
+      try {
+        const blob = await shrinkPhoto(f, 1600, 0.82);
+        await savePhotos({ clientId, huntId: forHunt, docId: null, kind: 'hunt', shared: true, files: [blob], staffId: profile?.id ?? null, staffName: profile?.full_name ?? null, storyPart: part });
+        done++;
+      } catch { failed++; }
+    }
+    if (done) { toast.success(`${done} photo${done === 1 ? '' : 's'} added for the hunter`); onAdded?.(); }
+    if (failed) toast.error(`${failed} could not be added. Please add those again.`);
     setBusy(false);
   }
   async function finish(s: Share) {

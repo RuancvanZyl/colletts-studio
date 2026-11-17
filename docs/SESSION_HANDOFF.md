@@ -392,3 +392,8 @@ Owner's rules (2026-11-10): a deposit does not lock an order. A client can chang
 
 ## Livelier film music (2026-11-17)
 - `buildMusic` in `src/lib/huntFilm.ts` replaces the slow pad: an uplifting C - G - Am - F track at 120 BPM made with Web Audio (no licensing): soft open intro, a rise and crash as the first photo appears, then kick, clap, hats, an octave bass, a bright tune and an arpeggio; it settles for the closing card. Photo changes fall on beats (INTRO 5.4s, 3.0s step). Checked offline: peak 0.8, no clipping. `docs/sample-hunt-music.wav` is a render of it (excluded from git).
+
+
+## African-flavoured film music; photo picker no longer overloads the phone (2026-11-17)
+- `buildMusic` is now African in feel: dawn birds, a warm "ah" choir on C - F - C - G, thumb piano (mbira) lines that interlock, hand drums (boom, tone, slap), shaker, the standard 12-pulse bell timeline, a log-drum bass, claps, a marimba tune that answers itself an octave higher, a rise and crash into the first photo. 120 BPM, felt in twelve pulses to the bar, photo changes on the beat. Checked offline: peak 0.94, no clipping.
+- Owner testing as a local hunter: the app restarted or lost photos after picking several. Cause: all picked photos were opened and shrunk at once (memory). Now one at a time, 1600 px, with "Adding photo n of N" and partial progress kept (`HuntStory.addPhotos`, same in `PhotoShareBox`); the film screen's open state is remembered (`trophies:story`) so a restart returns the hunter to it.

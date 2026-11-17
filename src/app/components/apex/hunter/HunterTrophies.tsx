@@ -47,7 +47,7 @@ export function HunterTrophies({ onRegisterHunt, onChanged, onOpenMessages, star
   const [choosing, setChoosing] = useDraft<string[] | null>('trophies:choosing', null, 12 * 3600 * 1000);
   const [open, setOpen] = useState<string | null>(null);
   const [adding, setAdding] = useState(startAdding);
-  const [story, setStory] = useState(false);
+  const [story, setStory] = useDraft<boolean>('trophies:story', false, 12 * 3600 * 1000);   // remembered, so if the phone restarts the app after the photo picker the hunter lands back on the film screen
   useBack(!!choosing, () => setChoosing(null));
   useBack(adding, () => setAdding(false));
 

@@ -297,93 +297,138 @@ export class HuntFilm {
 }
 
 /**
- * Original music, made on the phone (so there is nothing to license): an uplifting adventure track at 120 beats a minute.
- * Soft and open while the title shows, then a steady beat, bass and a bright tune come in as the first photo appears, and it
- * settles for the closing card. Every photo change falls on a beat.
+ * Original music, made on the phone (so there is nothing to license): an African-flavoured track at 120 beats a minute.
+ * Dawn on the savanna (birds, a warm choir, a soft thumb piano) then, as the first photo appears, hand drums, a shaker, a bell
+ * pattern, a deep log-drum bass, a bouncing thumb piano and a marimba tune over the choir's I - IV - I - V chords. It settles for
+ * the closing card. Every photo change falls on a beat; the groove is felt in twelve pulses to the bar (four beats of three).
  */
-const BPM = 120, BEAT = 60 / BPM;
+const BPM = 120, BEAT = 60 / BPM, PULSE = BEAT / 3, BAR = BEAT * 4;
 const mtof = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
-// C – G – Am – F, one bar each
-const CHORDS: { pad: number[]; bass: number; arp: number[]; tune: number[] }[] = [
-  { pad: [48, 52, 55], bass: 36, arp: [60, 64, 67, 72], tune: [76, 79, 76, 74] },
-  { pad: [43, 47, 50], bass: 31, arp: [59, 62, 67, 71], tune: [74, 71, 74, 79] },
-  { pad: [45, 48, 52], bass: 33, arp: [57, 60, 64, 69], tune: [72, 76, 81, 79] },
-  { pad: [41, 45, 48], bass: 29, arp: [57, 60, 65, 69], tune: [69, 72, 77, 76] },
+// C – F – C – G, one bar each. choir: voices; bass: log-drum note; mb: two interlocking thumb-piano lines of six notes (one note every other pulse)
+const CHORDS: { choir: number[]; bass: number; mbA: number[]; mbB: number[]; tune: [number, number][] }[] = [
+  { choir: [55, 60, 64], bass: 36, mbA: [72, 76, 79, 76, 72, 79], mbB: [84, 79, 76, 79, 84, 76], tune: [[0, 76], [3, 79], [6, 81], [9, 79], [10, 76]] },
+  { choir: [57, 60, 65], bass: 41, mbA: [69, 72, 77, 72, 69, 77], mbB: [81, 77, 72, 77, 81, 72], tune: [[0, 77], [3, 81], [6, 84], [9, 81], [11, 79]] },
+  { choir: [55, 60, 64], bass: 36, mbA: [72, 76, 79, 76, 72, 79], mbB: [84, 79, 76, 79, 84, 76], tune: [[0, 76], [2, 79], [4, 81], [6, 84], [9, 81], [11, 79]] },
+  { choir: [59, 62, 67], bass: 31, mbA: [67, 71, 74, 71, 67, 74], mbB: [79, 74, 71, 74, 79, 71], tune: [[0, 79], [3, 83], [6, 79], [8, 76], [10, 74]] },
 ];
+const BELL_PULSES = [0, 2, 4, 5, 7, 9, 11];   // the standard African bell timeline
 
 /** write the whole track into `out`, starting at time t0 on `ctx` */
 export function buildMusic(ctx: BaseAudioContext, out: AudioNode, seconds: number, t0: number) {
   const grooveStart = INTRO - FADE, outroStart = Math.max(grooveStart + 2, seconds - OUTRO);
-  const mix = ctx.createGain(); mix.gain.value = 1.3;
-  const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -20; comp.ratio.value = 3.5; comp.attack.value = 0.01; comp.release.value = 0.2;
+  const mix = ctx.createGain(); mix.gain.value = 0.9;
+  const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -22; comp.ratio.value = 5; comp.attack.value = 0.01; comp.release.value = 0.2;
   mix.connect(comp); comp.connect(out);
 
-  // a little room for the pad, tune and bells
-  const len = Math.floor(ctx.sampleRate * 1.8); const imp = ctx.createBuffer(2, len, ctx.sampleRate);
-  for (let c = 0; c < 2; c++) { const d = imp.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.8); }
-  const reverb = ctx.createConvolver(); reverb.buffer = imp; const wet = ctx.createGain(); wet.gain.value = 0.42; reverb.connect(wet); wet.connect(mix);
+  // the open air: a short, bright room for the thumb piano, marimba, choir and birds
+  const len = Math.floor(ctx.sampleRate * 1.6); const imp = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) { const d = imp.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3); }
+  const reverb = ctx.createConvolver(); reverb.buffer = imp; const wet = ctx.createGain(); wet.gain.value = 0.38; reverb.connect(wet); wet.connect(mix);
   const noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate); { const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
 
-  const tone = (midi: number, when: number, dur: number, type: OscillatorType, vol: number, attack: number, cutoff: number, toReverb = 0.5, detune = 0) => {
-    const o = ctx.createOscillator(); o.type = type; o.frequency.value = mtof(midi); o.detune.value = detune;
-    const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = cutoff; f.Q.value = 0.7;
-    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0 + when); g.gain.linearRampToValueAtTime(vol, t0 + when + attack); g.gain.exponentialRampToValueAtTime(0.0001, t0 + when + dur);
-    o.connect(f); f.connect(g); g.connect(mix);
-    if (toReverb > 0) { const r = ctx.createGain(); r.gain.value = toReverb; g.connect(r); r.connect(reverb); }
-    o.start(t0 + when); o.stop(t0 + when + dur + 0.05);
+  const env = (g: GainNode, when: number, vol: number, attack: number, dur: number) => {
+    g.gain.setValueAtTime(0.0001, t0 + when); g.gain.linearRampToValueAtTime(vol, t0 + when + attack); g.gain.exponentialRampToValueAtTime(0.0001, t0 + when + dur);
   };
-  const kick = (when: number, vol: number) => {
-    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(130, t0 + when); o.frequency.exponentialRampToValueAtTime(42, t0 + when + 0.16);
-    const g = ctx.createGain(); g.gain.setValueAtTime(vol, t0 + when); g.gain.exponentialRampToValueAtTime(0.0001, t0 + when + 0.38);
-    o.connect(g); g.connect(mix); o.start(t0 + when); o.stop(t0 + when + 0.4);
+  const osc = (type: OscillatorType, freq: number, when: number, dur: number, dest: AudioNode, vol: number, attack: number, glideTo?: number, glideTime = 0.05, detune = 0) => {
+    const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(freq, t0 + when); if (glideTo) o.frequency.exponentialRampToValueAtTime(glideTo, t0 + when + glideTime); o.detune.value = detune;
+    const g = ctx.createGain(); env(g, when, vol, attack, dur); o.connect(g); g.connect(dest); o.start(t0 + when); o.stop(t0 + when + dur + 0.05);
+    return g;
   };
+  const send = (g: AudioNode, amount: number) => { const r = ctx.createGain(); r.gain.value = amount; g.connect(r); r.connect(reverb); };
   const noise = (when: number, dur: number, vol: number, type: BiquadFilterType, freq: number, q = 0.8) => {
     const src = ctx.createBufferSource(); src.buffer = noiseBuf; const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
     const g = ctx.createGain(); g.gain.setValueAtTime(vol, t0 + when); g.gain.exponentialRampToValueAtTime(0.0001, t0 + when + dur);
     src.connect(f); f.connect(g); g.connect(mix); src.start(t0 + when, Math.random() * 0.5); src.stop(t0 + when + dur + 0.05);
     return g;
   };
-  const snare = (when: number, vol: number) => { noise(when, 0.2, vol, 'bandpass', 1900, 0.9); tone(55, when, 0.14, 'triangle', vol * 0.5, 0.002, 900, 0); };
-  const hat = (when: number, vol: number, open = false) => noise(when, open ? 0.22 : 0.05, vol, 'highpass', 7500, 0.7);
-  const crash = (when: number, vol: number) => noise(when, 1.8, vol, 'highpass', 4200, 0.6);
+
+  // the instruments ---------------------------------------------------------------------------
+  /** thumb piano (mbira): a bright metallic pluck with a little buzz */
+  const mbira = (midi: number, when: number, vol: number) => {
+    const f = mtof(midi); const g = ctx.createGain(); g.connect(mix);
+    osc('sine', f, when, 0.65, g, vol, 0.002); osc('sine', f * 2.76, when, 0.3, g, vol * 0.28, 0.002); osc('sine', f * 5.4, when, 0.12, g, vol * 0.08, 0.002);
+    noise(when, 0.03, vol * 0.12, 'highpass', 6000); send(g, 0.55);
+  };
+  /** marimba: a round wooden note */
+  const marimba = (midi: number, when: number, vol: number, dur = 0.55) => {
+    const f = mtof(midi); const g = ctx.createGain(); g.connect(mix);
+    osc('sine', f, when, dur, g, vol, 0.003); osc('sine', f * 4, when, 0.12, g, vol * 0.3, 0.002); osc('triangle', f * 0.5, when, dur * 0.6, g, vol * 0.25, 0.003); send(g, 0.5);
+  };
+  /** log drum: the deep, round, bubbling bass note that follows the chords */
+  const logDrum = (midi: number, when: number, vol: number) => {
+    const f = mtof(midi); const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 700; lp.connect(mix);
+    osc('sine', f * 2.2, when, 0.3, lp, vol, 0.002, f, 0.06); osc('sine', f * 2, when, 0.12, lp, vol * 0.25, 0.002);
+  };
+  const boom = (when: number, vol: number) => { osc('sine', 150, when, 0.4, mix, vol, 0.002, 62, 0.12); noise(when, 0.06, vol * 0.25, 'lowpass', 400); };
+  const tonehit = (when: number, vol: number) => { osc('triangle', 340, when, 0.16, mix, vol, 0.002, 215, 0.08); noise(when, 0.07, vol * 0.5, 'bandpass', 900, 1.2); };
+  const slap = (when: number, vol: number) => noise(when, 0.09, vol, 'bandpass', 2600, 1.1);
+  const bell = (when: number, vol: number) => { const g = ctx.createGain(); g.connect(mix); osc('sine', 1180, when, 0.2, g, vol, 0.001); osc('sine', 1770, when, 0.12, g, vol * 0.5, 0.001); send(g, 0.25); };
+  const shaker = (when: number, vol: number) => noise(when, 0.05, vol, 'highpass', 8000, 0.6);
+  const clap = (when: number, vol: number) => { noise(when, 0.11, vol, 'bandpass', 1500, 1.0); noise(when + 0.012, 0.09, vol * 0.7, 'bandpass', 1900, 1.0); };
+  const crash = (when: number, vol: number) => noise(when, 1.6, vol, 'highpass', 4200, 0.6);
+  /** a warm choir on "ah": stacked voices with two vowel filters and a gentle wobble */
+  const choir = (midis: number[], when: number, dur: number, vol: number) => {
+    const g = ctx.createGain(); g.connect(mix); send(g, 0.6);
+    g.gain.setValueAtTime(0.0001, t0 + when); g.gain.linearRampToValueAtTime(vol, t0 + when + 0.45); g.gain.setValueAtTime(vol, t0 + when + dur - 0.5); g.gain.linearRampToValueAtTime(0.0001, t0 + when + dur + 0.3);
+    midis.forEach((m, i) => {
+      for (const d of [-9, 8]) {
+        const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = mtof(m + 12); o.detune.value = d + i * 3;
+        const lfo = ctx.createOscillator(); lfo.frequency.value = 5 + i * 0.4; const lg = ctx.createGain(); lg.gain.value = 14; lfo.connect(lg); lg.connect(o.detune); lfo.start(t0 + when); lfo.stop(t0 + when + dur + 0.4);
+        const mixv = ctx.createGain(); mixv.gain.value = 0.34;
+        for (const [fr, q, lv] of [[700, 6, 1], [1150, 7, 0.55]] as const) { const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = fr; bp.Q.value = q; const l = ctx.createGain(); l.gain.value = lv; o.connect(bp); bp.connect(l); l.connect(mixv); }
+        mixv.connect(g); o.start(t0 + when); o.stop(t0 + when + dur + 0.4);
+      }
+    });
+  };
+  const chirp = (when: number) => {   // a little bird: a quick rising whistle, two or three times
+    const base = 2600 + Math.random() * 1600; const n = 2 + Math.floor(Math.random() * 2);
+    for (let k = 0; k < n; k++) { const g = ctx.createGain(); g.connect(mix); send(g, 0.8); osc('sine', base, when + k * 0.13, 0.1, g, 0.028, 0.008, base * 1.45, 0.08); }
+  };
 
   // the rise into the first photo
   { const src = ctx.createBufferSource(); src.buffer = noiseBuf; src.loop = true; const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 1.4;
     f.frequency.setValueAtTime(400, t0 + grooveStart - 2); f.frequency.exponentialRampToValueAtTime(6500, t0 + grooveStart);
-    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0 + grooveStart - 2); g.gain.exponentialRampToValueAtTime(0.16, t0 + grooveStart - 0.05); g.gain.linearRampToValueAtTime(0, t0 + grooveStart);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0 + grooveStart - 2); g.gain.exponentialRampToValueAtTime(0.14, t0 + grooveStart - 0.05); g.gain.linearRampToValueAtTime(0, t0 + grooveStart);
     src.connect(f); f.connect(g); g.connect(mix); src.start(t0 + grooveStart - 2); src.stop(t0 + grooveStart + 0.05); }
-  crash(grooveStart, 0.2); crash(outroStart, 0.13);
+  crash(grooveStart, 0.18); crash(outroStart, 0.1);
+  // birds over the opening and again over the closing card
+  for (const [a, b] of [[0.6, grooveStart - 1.5], [outroStart + 0.5, seconds - 2]] as const) for (let t = a; t < b; t += 0.9 + Math.random() * 1.3) chirp(t);
 
-  const beats = Math.ceil(seconds / BEAT);
-  for (let b = 0; b < beats; b++) {
-    const t = b * BEAT, bar = Math.floor(b / 4), step = b % 4, ch = CHORDS[bar % 4];
-    const groove = t >= grooveStart - 0.01 && t < outroStart - 0.01;
-    const soft = t < grooveStart ? 0.85 : t >= outroStart ? 0.8 : 1;
-    const buildup = clamp((t - grooveStart) / 4, 0, 1);       // the energy grows over the first bar after the drop
-    if (step === 0) {
-      // the pad: warm chord for the whole bar
-      ch.pad.forEach((m, i) => { tone(m + 12, t, 2.3, 'sawtooth', 0.045 * soft, 0.25, 1100, 0.5, i * 7 - 7); tone(m, t, 2.3, 'triangle', 0.07 * soft, 0.2, 800, 0.3); });
+  const bars = Math.ceil(seconds / BAR);
+  for (let bar = 0; bar < bars; bar++) {
+    const bt = bar * BAR, ch = CHORDS[bar % 4], loop = Math.floor(bar / 4);
+    // the choir holds the chord for the whole bar
+    choir(ch.choir, bt, BAR, bt < grooveStart ? 0.07 : 0.09);
+    for (let p = 0; p < 12; p++) {
+      const t = bt + p * PULSE;
+      if (t >= seconds - 0.1) break;
+      const inGroove = t >= grooveStart - 0.01 && t < outroStart - 0.01;
+      const buildup = clamp((t - grooveStart) / 4, 0, 1);
+      const quiet = t < grooveStart ? 0.55 : t >= outroStart ? 0.6 : 1;
+      // thumb piano: two lines that interlock, one note every other pulse. In the opening only the first line, softly.
+      if (p % 2 === 0) mbira(ch.mbA[p / 2], t, 0.07 * quiet); else if (t >= grooveStart - 0.01 && t < outroStart) mbira(ch.mbB[(p - 1) / 2], t, 0.055);
+      if (t < grooveStart && p % 3 === 0 && t > 2) shaker(t, 0.03);
+      if (inGroove) {
+        const lift = 0.55 + 0.45 * buildup;
+        shaker(t, p % 3 === 0 ? 0.075 * lift : 0.04 * lift);
+        if (BELL_PULSES.includes(p)) bell(t, 0.06 * lift);
+        if (p === 0 || p === 6) boom(t, 0.5 * lift);
+        if (p === 3 || p === 9) { tonehit(t, 0.3 * lift); if (buildup > 0.2) clap(t, 0.13 * lift); }
+        if (p === 4 || p === 10) slap(t, 0.16 * lift);
+        if (p === 2 || p === 8) tonehit(t, 0.12 * lift);
+        if (p === 11 && buildup > 0.6) slap(t, 0.08);
+        // log drum bass follows the chord root, with a jump on the last pulses of the bar
+        if (p === 0 || p === 3 || p === 6 || p === 9) logDrum(ch.bass + (p === 9 && bar % 2 === 1 ? 12 : 0), t, 0.42 * lift);
+        if (p === 11 && buildup > 0.4) logDrum(ch.bass + 7, t, 0.3);
+      } else if (t >= outroStart && (p === 0 || p === 6) && bar % 2 === 0) logDrum(ch.bass, t, 0.3);   // a soft heartbeat under the closing card
     }
-    // arpeggio: eighth notes up and down through the chord
-    for (let h = 0; h < 2; h++) {
-      const idx = (step * 2 + h), n = ch.arp[[0, 1, 2, 3, 2, 1, 2, 3][idx % 8]];
-      tone(n + 12, t + h * BEAT / 2, 0.42, 'triangle', 0.075 * soft, 0.004, 3200, 0.6);
-    }
-    if (groove) {
-      // bass: steady eighth notes with an octave jump
-      const pattern = [0, 0, 12, 0, 0, 0, 12, 0];
-      for (let h = 0; h < 2; h++) { const o = pattern[(step * 2 + h) % 8]; tone(ch.bass + o, t + h * BEAT / 2, 0.3, 'sawtooth', 0.19 * (0.5 + 0.5 * buildup), 0.006, 520, 0, 0); }
-      // drums: kick on 1 and 3 (and a push before the bar), clap on 2 and 4, hats on every eighth
-      if (step === 0 || step === 2) kick(t, 0.55);
-      if (step === 3 && buildup > 0.7) kick(t + BEAT / 2, 0.32);
-      if (step === 1 || step === 3) { if (buildup > 0.2 || b % 8 === 1) snare(t, 0.2 * (0.5 + 0.5 * buildup)); }
-      hat(t, 0.045 * (0.6 + 0.4 * buildup)); hat(t + BEAT / 2, 0.075 * (0.6 + 0.4 * buildup), step === 3);
-      // the tune: one note a beat, an octave higher on every second time round
-      const loop = Math.floor(bar / 4);
-      tone(ch.tune[step], t, 0.55, 'triangle', 0.12 * (0.55 + 0.45 * buildup), 0.006, 4200, 0.7);
-      if (loop % 2 === 1) tone(ch.tune[step] + 12, t, 0.45, 'sine', 0.05, 0.006, 5200, 0.7);
-    } else if (t >= outroStart && step === 0) {
-      kick(t, 0.25);   // one soft heartbeat per bar while the closing card shows
+    // the marimba tune: enters with the groove and answers itself an octave higher the second time round
+    if (bt >= grooveStart - 0.01 && bt < outroStart - 0.01) {
+      const lift = 0.6 + 0.4 * clamp((bt - grooveStart) / 4, 0, 1);
+      for (const [p, m] of ch.tune) {
+        marimba(m + (loop % 2 === 1 ? 12 : 0), bt + p * PULSE, 0.16 * lift);
+        if (loop % 2 === 1) marimba(m, bt + p * PULSE, 0.07 * lift);
+      }
     }
   }
 }

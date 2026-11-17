@@ -82,16 +82,25 @@ export function HuntStory({ clientId, clientName, currency, onClose }: { clientI
 
   // ── adding and removing photos ──
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const [uploadNote, setUploadNote] = useState('');
   async function addPhotos(part: string, files: FileList | null) {
     if (!files || files.length === 0 || !huntId) return;
+    // one photo at a time: opening a dozen big phone photos together can run a phone out of memory and make the app restart
+    const list = [...files]; let done = 0, failed = 0;
     setUploading(part);
-    try {
-      const blobs = await Promise.all([...files].map(f => shrinkPhoto(f, 2000, 0.85)));
-      await savePhotos({ clientId, huntId, docId: null, kind: 'hunt', shared: true, files: blobs, staffId: null, staffName: null, storyPart: part });
-      toast.success(blobs.length === 1 ? 'Photo added' : `${blobs.length} photos added`);
-      await loadHunt();
-    } catch (e: any) { toast.error(plainError(e?.message ?? 'The photos could not be added. Please try again.')); }
-    setUploading(null);
+    for (const f of list) {
+      setUploadNote(`Adding photo ${done + failed + 1} of ${list.length}…`);
+      try {
+        const blob = await shrinkPhoto(f, 1600, 0.82);
+        await savePhotos({ clientId, huntId, docId: null, kind: 'hunt', shared: true, files: [blob], staffId: null, staffName: null, storyPart: part });
+        done++;
+      } catch { failed++; }
+      if ((done + failed) % 3 === 0) await loadHunt();   // show them as they arrive
+    }
+    await loadHunt();
+    setUploading(null); setUploadNote('');
+    if (failed === 0) toast.success(done === 1 ? 'Photo added' : `${done} photos added`);
+    else toast.error(`${done} added, ${failed} could not be added. Please add those again.`);
   }
   async function removePhoto(id: string) {
     const { error } = await (supabase as any).from('trophy_photos').delete().eq('id', id);
@@ -265,6 +274,7 @@ export function HuntStory({ clientId, clientName, currency, onClose }: { clientI
             {/* the photos, part by part */}
             <section className="space-y-3">
               <h2 className="font-bold text-lg">Your photos ({photos.length})</h2>
+              {uploadNote && <p className="rounded-lg bg-sky-50 dark:bg-sky-950/30 border border-sky-300 dark:border-sky-700 p-3 text-sm font-semibold">{uploadNote} Please keep the app open.</p>}
               {STORY_PARTS.map(part => {
                 const mine = photos.filter(p => (p.part ?? 'other') === part.key);
                 return (
@@ -273,7 +283,7 @@ export function HuntStory({ clientId, clientName, currency, onClose }: { clientI
                       <div className="min-w-0"><p className="font-bold">{part.label}</p><p className="text-sm text-slate-600 dark:text-slate-300">{part.hint}</p></div>
                       <input ref={el => { fileRefs.current[part.key] = el; }} type="file" accept="image/*" multiple className="hidden" onChange={e => { addPhotos(part.key, e.target.files); e.target.value = ''; }} />
                       <button disabled={!!uploading} onClick={() => fileRefs.current[part.key]?.click()} className="shrink-0 min-h-12 px-4 rounded-xl bg-green-700 hover:bg-green-800 text-white font-bold inline-flex items-center gap-2 disabled:opacity-60">
-                        {uploading === part.key ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}Add
+                        {uploading === part.key ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}{uploading === part.key ? 'Adding…' : 'Add'}
                       </button>
                     </div>
                     {mine.length > 0 && (
