@@ -32,7 +32,8 @@ export function sortStory<T extends { part: string | null; takenAt?: string }>(p
   return [...photos].sort((a, b) => (PART_ORDER[a.part ?? 'other'] ?? 99) - (PART_ORDER[b.part ?? 'other'] ?? 99) || (a.takenAt ?? '').localeCompare(b.takenAt ?? ''));
 }
 
-const INTRO = 5.2, PER_PHOTO = 3.9, FADE = 0.9, OUTRO = 6.5;
+// every number here is a whole number of beats (120 beats a minute), so photos change on the beat
+const INTRO = 5.4, PER_PHOTO = 3.9, FADE = 0.9, OUTRO = 6.5;
 
 interface Slide { kind: 'intro' | 'photo' | 'outro'; start: number; dur: number; index: number }
 
@@ -82,7 +83,7 @@ export class HuntFilm {
   private grain: HTMLCanvasElement[] = [];
   private vignette!: CanvasGradient;
   private raf = 0;
-  private audio: AmbientMusic | null = null;
+  private audio: FilmMusic | null = null;
   private stopped = false;
 
   constructor(private canvas: HTMLCanvasElement, private photos: StoryPhoto[], private meta: StoryMeta) {
@@ -243,7 +244,7 @@ export class HuntFilm {
   play(opts: { preview: boolean; music: boolean; onTime?: (t: number) => void; onEnd?: (reachedLimit: boolean) => void }) {
     this.stopped = false;
     const limit = opts.preview ? Math.min(PREVIEW_SECONDS, this.duration) : this.duration;
-    if (opts.music) { this.audio = new AmbientMusic(this.duration); this.audio.start(true); }
+    if (opts.music) { this.audio = new FilmMusic(this.duration); this.audio.start(true); }
     const t0 = performance.now();
     const tick = () => {
       if (this.stopped) return;
@@ -268,7 +269,7 @@ export class HuntFilm {
         if (typeof MediaRecorder === 'undefined' || !(this.canvas as any).captureStream) throw new Error('This phone or browser cannot make videos. Please use Safari on an iPhone or Chrome on Android.');
         this.stopped = false;
         const stream: MediaStream = (this.canvas as any).captureStream(30);
-        if (opts.music) { this.audio = new AmbientMusic(this.duration); const track = this.audio.start(false); track?.forEach(tr => stream.addTrack(tr)); }
+        if (opts.music) { this.audio = new FilmMusic(this.duration); const track = this.audio.start(false); track?.forEach(tr => stream.addTrack(tr)); }
         const candidates = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
         const mime = candidates.find(m => (MediaRecorder as any).isTypeSupported?.(m)) ?? '';
         const rec = new MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), videoBitsPerSecond: 3_500_000 });
@@ -295,8 +296,99 @@ export class HuntFilm {
   }
 }
 
-/** Original ambient music, made on the phone (so there is nothing to license): slow warm chords, a soft pulse and bell notes. */
-class AmbientMusic {
+/**
+ * Original music, made on the phone (so there is nothing to license): an uplifting adventure track at 120 beats a minute.
+ * Soft and open while the title shows, then a steady beat, bass and a bright tune come in as the first photo appears, and it
+ * settles for the closing card. Every photo change falls on a beat.
+ */
+const BPM = 120, BEAT = 60 / BPM;
+const mtof = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
+// C – G – Am – F, one bar each
+const CHORDS: { pad: number[]; bass: number; arp: number[]; tune: number[] }[] = [
+  { pad: [48, 52, 55], bass: 36, arp: [60, 64, 67, 72], tune: [76, 79, 76, 74] },
+  { pad: [43, 47, 50], bass: 31, arp: [59, 62, 67, 71], tune: [74, 71, 74, 79] },
+  { pad: [45, 48, 52], bass: 33, arp: [57, 60, 64, 69], tune: [72, 76, 81, 79] },
+  { pad: [41, 45, 48], bass: 29, arp: [57, 60, 65, 69], tune: [69, 72, 77, 76] },
+];
+
+/** write the whole track into `out`, starting at time t0 on `ctx` */
+export function buildMusic(ctx: BaseAudioContext, out: AudioNode, seconds: number, t0: number) {
+  const grooveStart = INTRO - FADE, outroStart = Math.max(grooveStart + 2, seconds - OUTRO);
+  const mix = ctx.createGain(); mix.gain.value = 1.3;
+  const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -20; comp.ratio.value = 3.5; comp.attack.value = 0.01; comp.release.value = 0.2;
+  mix.connect(comp); comp.connect(out);
+
+  // a little room for the pad, tune and bells
+  const len = Math.floor(ctx.sampleRate * 1.8); const imp = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) { const d = imp.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.8); }
+  const reverb = ctx.createConvolver(); reverb.buffer = imp; const wet = ctx.createGain(); wet.gain.value = 0.42; reverb.connect(wet); wet.connect(mix);
+  const noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate); { const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+
+  const tone = (midi: number, when: number, dur: number, type: OscillatorType, vol: number, attack: number, cutoff: number, toReverb = 0.5, detune = 0) => {
+    const o = ctx.createOscillator(); o.type = type; o.frequency.value = mtof(midi); o.detune.value = detune;
+    const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = cutoff; f.Q.value = 0.7;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0 + when); g.gain.linearRampToValueAtTime(vol, t0 + when + attack); g.gain.exponentialRampToValueAtTime(0.0001, t0 + when + dur);
+    o.connect(f); f.connect(g); g.connect(mix);
+    if (toReverb > 0) { const r = ctx.createGain(); r.gain.value = toReverb; g.connect(r); r.connect(reverb); }
+    o.start(t0 + when); o.stop(t0 + when + dur + 0.05);
+  };
+  const kick = (when: number, vol: number) => {
+    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(130, t0 + when); o.frequency.exponentialRampToValueAtTime(42, t0 + when + 0.16);
+    const g = ctx.createGain(); g.gain.setValueAtTime(vol, t0 + when); g.gain.exponentialRampToValueAtTime(0.0001, t0 + when + 0.38);
+    o.connect(g); g.connect(mix); o.start(t0 + when); o.stop(t0 + when + 0.4);
+  };
+  const noise = (when: number, dur: number, vol: number, type: BiquadFilterType, freq: number, q = 0.8) => {
+    const src = ctx.createBufferSource(); src.buffer = noiseBuf; const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+    const g = ctx.createGain(); g.gain.setValueAtTime(vol, t0 + when); g.gain.exponentialRampToValueAtTime(0.0001, t0 + when + dur);
+    src.connect(f); f.connect(g); g.connect(mix); src.start(t0 + when, Math.random() * 0.5); src.stop(t0 + when + dur + 0.05);
+    return g;
+  };
+  const snare = (when: number, vol: number) => { noise(when, 0.2, vol, 'bandpass', 1900, 0.9); tone(55, when, 0.14, 'triangle', vol * 0.5, 0.002, 900, 0); };
+  const hat = (when: number, vol: number, open = false) => noise(when, open ? 0.22 : 0.05, vol, 'highpass', 7500, 0.7);
+  const crash = (when: number, vol: number) => noise(when, 1.8, vol, 'highpass', 4200, 0.6);
+
+  // the rise into the first photo
+  { const src = ctx.createBufferSource(); src.buffer = noiseBuf; src.loop = true; const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 1.4;
+    f.frequency.setValueAtTime(400, t0 + grooveStart - 2); f.frequency.exponentialRampToValueAtTime(6500, t0 + grooveStart);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0 + grooveStart - 2); g.gain.exponentialRampToValueAtTime(0.16, t0 + grooveStart - 0.05); g.gain.linearRampToValueAtTime(0, t0 + grooveStart);
+    src.connect(f); f.connect(g); g.connect(mix); src.start(t0 + grooveStart - 2); src.stop(t0 + grooveStart + 0.05); }
+  crash(grooveStart, 0.2); crash(outroStart, 0.13);
+
+  const beats = Math.ceil(seconds / BEAT);
+  for (let b = 0; b < beats; b++) {
+    const t = b * BEAT, bar = Math.floor(b / 4), step = b % 4, ch = CHORDS[bar % 4];
+    const groove = t >= grooveStart - 0.01 && t < outroStart - 0.01;
+    const soft = t < grooveStart ? 0.85 : t >= outroStart ? 0.8 : 1;
+    const buildup = clamp((t - grooveStart) / 4, 0, 1);       // the energy grows over the first bar after the drop
+    if (step === 0) {
+      // the pad: warm chord for the whole bar
+      ch.pad.forEach((m, i) => { tone(m + 12, t, 2.3, 'sawtooth', 0.045 * soft, 0.25, 1100, 0.5, i * 7 - 7); tone(m, t, 2.3, 'triangle', 0.07 * soft, 0.2, 800, 0.3); });
+    }
+    // arpeggio: eighth notes up and down through the chord
+    for (let h = 0; h < 2; h++) {
+      const idx = (step * 2 + h), n = ch.arp[[0, 1, 2, 3, 2, 1, 2, 3][idx % 8]];
+      tone(n + 12, t + h * BEAT / 2, 0.42, 'triangle', 0.075 * soft, 0.004, 3200, 0.6);
+    }
+    if (groove) {
+      // bass: steady eighth notes with an octave jump
+      const pattern = [0, 0, 12, 0, 0, 0, 12, 0];
+      for (let h = 0; h < 2; h++) { const o = pattern[(step * 2 + h) % 8]; tone(ch.bass + o, t + h * BEAT / 2, 0.3, 'sawtooth', 0.19 * (0.5 + 0.5 * buildup), 0.006, 520, 0, 0); }
+      // drums: kick on 1 and 3 (and a push before the bar), clap on 2 and 4, hats on every eighth
+      if (step === 0 || step === 2) kick(t, 0.55);
+      if (step === 3 && buildup > 0.7) kick(t + BEAT / 2, 0.32);
+      if (step === 1 || step === 3) { if (buildup > 0.2 || b % 8 === 1) snare(t, 0.2 * (0.5 + 0.5 * buildup)); }
+      hat(t, 0.045 * (0.6 + 0.4 * buildup)); hat(t + BEAT / 2, 0.075 * (0.6 + 0.4 * buildup), step === 3);
+      // the tune: one note a beat, an octave higher on every second time round
+      const loop = Math.floor(bar / 4);
+      tone(ch.tune[step], t, 0.55, 'triangle', 0.12 * (0.55 + 0.45 * buildup), 0.006, 4200, 0.7);
+      if (loop % 2 === 1) tone(ch.tune[step] + 12, t, 0.45, 'sine', 0.05, 0.006, 5200, 0.7);
+    } else if (t >= outroStart && step === 0) {
+      kick(t, 0.25);   // one soft heartbeat per bar while the closing card shows
+    }
+  }
+}
+
+class FilmMusic {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   constructor(private seconds: number) {}
@@ -310,41 +402,10 @@ class AmbientMusic {
     const master = ctx.createGain(); this.master = master;
     const t0 = ctx.currentTime + 0.1;
     master.gain.setValueAtTime(0, t0);
-    master.gain.linearRampToValueAtTime(0.5, t0 + 2.5);
-    master.gain.setValueAtTime(0.5, t0 + Math.max(3, this.seconds - 3));
+    master.gain.linearRampToValueAtTime(0.85, t0 + 1.2);
+    master.gain.setValueAtTime(0.85, t0 + Math.max(2, this.seconds - 3));
     master.gain.linearRampToValueAtTime(0, t0 + this.seconds);
-
-    // a simple room: noise that fades away, mixed in behind the chords
-    const len = Math.floor(ctx.sampleRate * 2.8); const imp = ctx.createBuffer(2, len, ctx.sampleRate);
-    for (let c = 0; c < 2; c++) { const d = imp.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6); }
-    const reverb = ctx.createConvolver(); reverb.buffer = imp;
-    const wet = ctx.createGain(); wet.gain.value = 0.55; const dry = ctx.createGain(); dry.gain.value = 0.8;
-    reverb.connect(wet); wet.connect(master); dry.connect(master);
-
-    const chords = [[110.0, 220.0, 261.63, 329.63], [87.31, 174.61, 261.63, 349.23], [130.81, 196.0, 261.63, 329.63], [98.0, 196.0, 246.94, 293.66]];
-    const span = 8; const count = Math.ceil(this.seconds / span) + 1;
-    for (let i = 0; i < count; i++) {
-      const start = t0 + i * span; const chord = chords[i % chords.length];
-      const filter = ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 900; filter.Q.value = 0.6;
-      const lfo = ctx.createOscillator(); lfo.frequency.value = 0.12; const lfoGain = ctx.createGain(); lfoGain.gain.value = 260; lfo.connect(lfoGain); lfoGain.connect(filter.frequency); lfo.start(start); lfo.stop(start + span + 3);
-      const env = ctx.createGain(); env.gain.setValueAtTime(0, start); env.gain.linearRampToValueAtTime(0.32, start + 2.4); env.gain.setValueAtTime(0.32, start + span - 0.4); env.gain.linearRampToValueAtTime(0, start + span + 2.6);
-      filter.connect(env); env.connect(dry); env.connect(reverb);
-      chord.forEach((f, k) => {
-        for (const [type, detune, level] of [['sine', 0, 0.5], ['triangle', k % 2 ? 6 : -6, 0.22]] as const) {
-          const o = ctx.createOscillator(); o.type = type; o.frequency.value = f; o.detune.value = detune;
-          const g = ctx.createGain(); g.gain.value = level / chord.length * 2.2; o.connect(g); g.connect(filter); o.start(start); o.stop(start + span + 3);
-        }
-      });
-      // a soft bell on the first beat of every chord, and a low pulse
-      const bell = ctx.createOscillator(); bell.type = 'sine'; bell.frequency.value = chord[2] * 4;
-      const bg = ctx.createGain(); bg.gain.setValueAtTime(0, start + 0.5); bg.gain.linearRampToValueAtTime(0.09, start + 0.52); bg.gain.exponentialRampToValueAtTime(0.0008, start + 4.5);
-      bell.connect(bg); bg.connect(reverb); bg.connect(dry); bell.start(start + 0.5); bell.stop(start + 5);
-      for (let b = 0; b < 4; b++) {
-        const when = start + b * 2; const k = ctx.createOscillator(); k.type = 'sine'; k.frequency.setValueAtTime(70, when); k.frequency.exponentialRampToValueAtTime(38, when + 0.35);
-        const kg = ctx.createGain(); kg.gain.setValueAtTime(0.0001, when); kg.gain.exponentialRampToValueAtTime(0.28, when + 0.02); kg.gain.exponentialRampToValueAtTime(0.0001, when + 0.7);
-        k.connect(kg); kg.connect(dry); k.start(when); k.stop(when + 0.8);
-      }
-    }
+    buildMusic(ctx, master, this.seconds, t0);
     if (speakers) master.connect(ctx.destination);
     let tracks: MediaStreamTrack[] | null = null;
     if (!speakers) { const dest = ctx.createMediaStreamDestination(); master.connect(dest); tracks = dest.stream.getAudioTracks(); }

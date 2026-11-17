@@ -388,3 +388,7 @@ Owner's rules (2026-11-10): a deposit does not lock an order. A client can chang
 - Staff: Today / Needs you row "hunter shared an album"; on the client's Photos tab `PhotoShareBox` shows the link (opens in a new tab), an uploader that adds the photos for the hunter under the right part of the story (`kind 'hunt'`, taken by the staff member), and "I have copied the photos: delete the link" (`staff_finish_photo_share`: link deleted, hunter told "Your photos are ready"). The same box lets staff add photos for a hunter who sent them by WhatsApp.
 - Staff can press "Watch their film" (`StaffFilmDialog`, no watermark, nothing saved) to judge the quality.
 - Only the service name (host) is kept after the link is deleted; every step is in `audit_log`.
+
+
+## Livelier film music (2026-11-17)
+- `buildMusic` in `src/lib/huntFilm.ts` replaces the slow pad: an uplifting C - G - Am - F track at 120 BPM made with Web Audio (no licensing): soft open intro, a rise and crash as the first photo appears, then kick, clap, hats, an octave bass, a bright tune and an arpeggio; it settles for the closing card. Photo changes fall on beats (INTRO 5.4s, 3.0s step). Checked offline: peak 0.8, no clipping. `docs/sample-hunt-music.wav` is a render of it (excluded from git).
