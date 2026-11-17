@@ -23,6 +23,8 @@ import { isMounted } from '../../../../lib/mountRules';
 import { finishChoices } from '../../../../lib/hooks/useQuotes';
 import { HunterDocuments } from './HunterDocuments';
 import { PassportCard } from './PassportCard';
+import { HuntStory } from './HuntStory';
+import { Film } from 'lucide-react';
 import { useHunterPassport } from '../../../../lib/hooks/useHunterPassport';
 import { useHunterQuotes } from '../../../../lib/hooks/useQuotes';
 import { useBack } from '../../../../lib/back';
@@ -45,6 +47,7 @@ export function HunterTrophies({ onRegisterHunt, onChanged, onOpenMessages, star
   const [choosing, setChoosing] = useDraft<string[] | null>('trophies:choosing', null, 12 * 3600 * 1000);
   const [open, setOpen] = useState<string | null>(null);
   const [adding, setAdding] = useState(startAdding);
+  const [story, setStory] = useState(false);
   useBack(!!choosing, () => setChoosing(null));
   useBack(adding, () => setAdding(false));
 
@@ -94,6 +97,11 @@ export function HunterTrophies({ onRegisterHunt, onChanged, onOpenMessages, star
       </div>
 
       {needsPassport && <PassportCard clientId={client.id} has={false} onSaved={passport.refresh} />}
+
+      <button onClick={() => setStory(true)} className="w-full min-h-14 rounded-2xl border-2 border-amber-600 text-amber-800 dark:text-amber-300 font-bold text-lg flex items-center justify-center gap-2 bg-white dark:bg-slate-900">
+        <Film className="w-6 h-6" />Your hunt film<span className="text-xs font-normal text-slate-500 hidden sm:inline">your photos, made into a film</span>
+      </button>
+      {story && <HuntStory clientId={client.id} clientName={client.name} currency={client.type === 'local' ? 'ZAR' : 'USD'} onClose={() => setStory(false)} />}
 
       <button onClick={() => setAdding(true)} className="w-full min-h-14 rounded-2xl border-2 border-green-700 text-green-800 dark:text-green-300 font-bold text-lg flex items-center justify-center gap-2 bg-white dark:bg-slate-900">
         <span className="text-2xl">🎯</span>Add my animals<span className="text-xs font-normal text-slate-500 hidden sm:inline">after your hunt</span>

@@ -1,4 +1,5 @@
 import { ChangeHistory } from '../shared/ChangeHistory';
+import { VideoUnlockBox } from '../shared/VideoUnlockBox';
 import { PhotoGallery } from '../shared/TrophyPhotos';
 import { ClientPortalAccess } from '../shared/ClientPortalAccess';
 import { ClientMoney } from './ClientMoney';
@@ -473,6 +474,7 @@ function ClientDetailPanel({ client, onEdit, onBack, onOpenQuote }: { client: Cl
 
         {tab === 'photos' && (
           <div className="space-y-5">
+            <VideoUnlockBox clientId={client.id} />
             {photosLoading ? (
               <div className="flex items-center gap-2 text-xs text-slate-400">
                 <Loader2 className="w-3 h-3 animate-spin" /> Loading photos…

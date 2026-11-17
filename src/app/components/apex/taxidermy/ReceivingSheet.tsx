@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialo
 import { PART_LABEL as PL } from '../../../../lib/received';
 import { ReceivingGrid } from './ReceivingGrid';
 import { SpeciesField } from '../shared/AnimalPicker';
+import { HunterPhotosButton } from '../shared/HunterPhotosButton';
 import { crossCheck } from '../shared/ReceivedFields';
 import {
   ClipboardList, CheckCircle2, Camera, User, AlertTriangle,
@@ -579,6 +580,7 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
           <h1 className="text-slate-900 dark:text-slate-100">{huntInfo?.client_name}</h1>
           {huntInfo?.client_number && <p className="text-xs text-slate-400 font-mono">{huntInfo.client_number}</p>}
         </div>
+        <HunterPhotosButton huntId={huntId} clientName={huntInfo?.client_name} />
         {/* Status counters */}
         <div className="flex gap-2">
           {pendingCount > 0 && <Badge className="bg-slate-200 text-slate-700">{pendingCount} pending</Badge>}

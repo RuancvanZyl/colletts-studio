@@ -7,7 +7,7 @@ import { blobPut, blobGet, blobDelete } from './idb';
 import { classify, performActionWith, registerExecutor } from './outbox';
 import type { Executor } from './outboxCore';
 
-export type PhotoKind = 'arrival' | 'progress' | 'finished' | 'reference';
+export type PhotoKind = 'arrival' | 'progress' | 'finished' | 'reference' | 'hunt';
 
 export interface PhotoBatch {
   clientId: string;
@@ -20,6 +20,8 @@ export interface PhotoBatch {
   staffName: string | null;
   items: { id: string; blobId: string }[];
   takenAt: string;
+  /** for the hunter's own hunt photos: the part of the story (the land, the camp ...) */
+  storyPart?: string;
 }
 
 /** Shrink phone photos (often 4–8 MB) so they upload quickly on a weak connection. */
@@ -86,6 +88,7 @@ export const addPhotosExecutor: Executor = async a => {
         id: it.id, client_id: x.clientId, hunt_id: x.huntId, hunt_doc_id: x.docId, kind: x.kind,
         storage_path: path, caption: x.caption || null, shared_with_client: x.shared,
         taken_by: x.staffId, taken_by_name: x.staffName, taken_at: x.takenAt,
+        ...(x.storyPart ? { story_part: x.storyPart } : {}),
       }, { onConflict: 'id' });
       if (dbErr) return classify(dbErr);
       if (blob) await blobDelete(it.blobId);
@@ -103,7 +106,7 @@ registerExecutor('photo_add', addPhotosExecutor);
  */
 export async function savePhotos(opts: {
   clientId: string; huntId?: string | null; docId?: string | null; kind: PhotoKind; files: Blob[];
-  caption?: string; shared?: boolean; staffId: string | null; staffName: string | null;
+  caption?: string; shared?: boolean; staffId: string | null; staffName: string | null; storyPart?: string;
 }) {
   const items: { id: string; blobId: string }[] = [];
   for (const f of opts.files) {
@@ -115,6 +118,7 @@ export async function savePhotos(opts: {
     clientId: opts.clientId, huntId: opts.huntId ?? null, docId: opts.docId ?? null, kind: opts.kind,
     caption: opts.caption ?? '', shared: opts.shared ?? opts.kind !== 'progress',
     staffId: opts.staffId, staffName: opts.staffName, items, takenAt: new Date().toISOString(),
+    ...(opts.storyPart ? { storyPart: opts.storyPart } : {}),
   };
   return performActionWith('photo_add', batch as unknown as Record<string, unknown>, opts.staffId);
 }

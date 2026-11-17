@@ -28,7 +28,7 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql', '063_mount_change_rules.sql', '064_conversation_topics.sql', '065_mark_done_permission_fix.sql', '066_live_team_messages.sql', '067_push_notifications.sql', '069_hunt_receivings.sql', '070_arrival_alerts.sql', '071_missing_parts_followup.sql', '072_client_drafts.sql', '073_local_clients_no_documents.sql', '074_receiving_issues.sql', '075_proforma_cart.sql', '076_change_after_deposit_credit.sql', '077_tanning_already_done.sql', '078_message_photos_and_alerts.sql', '079_message_notifications_for_clients.sql', '080_history_and_kept_messages.sql', '081_registration_type_and_passport.sql']) {
+for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql', '063_mount_change_rules.sql', '064_conversation_topics.sql', '065_mark_done_permission_fix.sql', '066_live_team_messages.sql', '067_push_notifications.sql', '069_hunt_receivings.sql', '070_arrival_alerts.sql', '071_missing_parts_followup.sql', '072_client_drafts.sql', '073_local_clients_no_documents.sql', '074_receiving_issues.sql', '075_proforma_cart.sql', '076_change_after_deposit_credit.sql', '077_tanning_already_done.sql', '078_message_photos_and_alerts.sql', '079_message_notifications_for_clients.sql', '080_history_and_kept_messages.sql', '081_registration_type_and_passport.sql', '082_hunt_story.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
@@ -1489,5 +1489,50 @@ ok((await q(`SELECT count(*)::int n FROM client_documents WHERE client_id=$1`, [
 await as(null);
 const pa = await q(`SELECT changes FROM audit_log WHERE table_name='client_documents' AND client_id=$1 ORDER BY at, id`, [expId]);
 ok(pa.length === 2 && pa[1].changes.storage_path.from.endsWith('p1.jpg') && pa[1].changes.storage_path.to.endsWith('p2.jpg'), 'every passport added or replaced is kept in the history, with the old file named');
+
+console.log('\nHunt story');
+await as(HUN2);
+const sHunt = (await q(`SELECT public.hunter_register_animals($1::date, $1::date, 'Steve Safaris', '[{"key":"a","species":"Kudu"}]'::jsonb) j`, [yesterday]))[0].j.hunt_id;
+const myClient = (await q(`SELECT id FROM clients WHERE auth_user_id=$1`, [HUN2]))[0].id;
+await db.query(`INSERT INTO trophy_photos (client_id, hunt_id, kind, storage_path, shared_with_client, story_part) VALUES ($1, $2, 'hunt', 'trophy-photos/${myClient}/h1.jpg', true, 'land')`, [myClient, sHunt]);
+ok((await q(`SELECT story_part FROM trophy_photos WHERE storage_path LIKE '%/h1.jpg'`))[0].story_part === 'land', 'a hunter can add a hunt photo with the part of the story it belongs to');
+ok((await fails(`INSERT INTO trophy_photos (client_id, hunt_id, kind, storage_path, shared_with_client) VALUES ($1, $2, 'finished', 'trophy-photos/${myClient}/h2.jpg', true)`, [myClient, sHunt])) !== null, 'but a hunter cannot add the workshop\'s kinds of photo');
+await as(HUN3);
+ok((await q(`SELECT count(*)::int n FROM trophy_photos WHERE storage_path LIKE '%/h1.jpg'`))[0].n === 0, 'another hunter cannot see these photos');
+await db.query(`DELETE FROM trophy_photos WHERE storage_path LIKE '%/h1.jpg'`);
+await as(null);
+ok((await q(`SELECT count(*)::int n FROM trophy_photos WHERE storage_path LIKE '%/h1.jpg'`))[0].n === 1, 'and cannot remove them');
+await as(ids.worker);
+ok((await q(`SELECT count(*)::int n FROM trophy_photos WHERE storage_path LIKE '%/h1.jpg'`))[0].n === 1, 'the workshop can see the hunter\'s photos at check-in');
+await as(HUN2);
+const vid = (await q(`SELECT public.hunter_start_video($1) id`, [sHunt]))[0].id;
+ok((await q(`SELECT public.hunter_start_video($1) id`, [sHunt]))[0].id === vid, 'one film per hunt');
+ok((await q(`SELECT status FROM memory_videos WHERE id=$1`, [vid]))[0].status === 'preview', 'it starts as a preview');
+await as(HUN3);
+ok((await fails(`SELECT public.hunter_unlock_video($1)`, [vid]))?.includes('not on your profile'), 'another hunter cannot unlock it');
+ok((await fails(`SELECT public.hunter_start_video($1)`, [sHunt]))?.includes('not on your profile'), 'or start it');
+await as(null);
+await db.query(`INSERT INTO app_settings (key, value) VALUES ('video_price_usd', '25'), ('video_price_zar', '450')`);
+await as(HUN2);
+ok((await fails(`SELECT public.hunter_unlock_video($1)`, [vid]))?.includes('paid for'), 'once a price is set, the hunter cannot unlock it for free');
+ok((await fails(`SELECT public.unlock_video_paid($1, 'x')`, [vid])) !== null, 'and cannot call the payment unlock');
+await as(ids.worker);
+ok((await fails(`SELECT public.staff_unlock_video($1)`, [vid]))?.includes('Only managers'), 'ordinary staff cannot unlock it');
+await as(ids.admin);
+await db.query(`SELECT public.staff_unlock_video($1, 'Paid by EFT')`, [vid]);
+await as(null);
+const un = (await q(`SELECT status, unlocked_how, payment_reference FROM memory_videos WHERE id=$1`, [vid]))[0];
+ok(un.status === 'unlocked' && un.unlocked_how === 'staff' && un.payment_reference === 'Paid by EFT', 'a manager can unlock it once payment is confirmed');
+ok((await q(`SELECT count(*)::int n FROM client_notifications WHERE hunt_id=$1 AND stage='video'`, [sHunt]))[0].n === 1, 'and the hunter is told it is ready');
+// free while no price
+await db.query(`DELETE FROM app_settings`);
+await as(HUN2);
+const sHunt2 = (await q(`SELECT public.hunter_register_animals($1::date, $1::date, 'Steve Safaris', '[{"key":"a","species":"Impala"}]'::jsonb) j`, [yesterday]))[0].j.hunt_id;
+const vid2 = (await q(`SELECT public.hunter_start_video($1) id`, [sHunt2]))[0].id;
+await db.query(`SELECT public.hunter_unlock_video($1)`, [vid2]);
+await as(null);
+ok((await q(`SELECT unlocked_how FROM memory_videos WHERE id=$1`, [vid2]))[0].unlocked_how === 'free', 'while there is no price the hunter can unlock it with one tap');
+await db.query(`SELECT public.unlock_video_paid($1, 'card-123')`, [vid]);   // already unlocked: nothing changes
+ok((await q(`SELECT count(*)::int n FROM audit_log WHERE table_name='memory_videos'`))[0].n >= 4, 'every step is in the history');
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
