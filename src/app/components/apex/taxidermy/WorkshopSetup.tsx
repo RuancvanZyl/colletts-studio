@@ -12,7 +12,7 @@ import { Button } from '../../ui/button';
 interface Item { id: string; dept_key: string; label: string; requires_photo: boolean; sort_order: number; is_active: boolean }
 
 export function WorkshopSetup() {
-  const [dept, setDept] = useState<string>('skinning');
+  const [dept, setDept] = useState<string>('receiving');
   const [items, setItems] = useState<Item[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);

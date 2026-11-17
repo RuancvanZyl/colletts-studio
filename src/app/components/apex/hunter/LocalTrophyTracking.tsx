@@ -9,7 +9,6 @@ import { Loader2, CheckCircle2, Clock, MapPin, Phone, Package, Sparkles } from '
 
 const COLLECTION_STAGES = [
   { key: 'receiving',       label: 'Received' },
-  { key: 'skinning',        label: 'Skinning' },
   { key: 'salting',         label: 'Salting' },
   { key: 'tannery',         label: 'Tannery' },
   { key: 'mounting',        label: 'Mounting' },

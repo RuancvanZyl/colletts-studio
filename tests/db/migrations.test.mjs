@@ -1565,5 +1565,20 @@ await as(null);
 const wd = (await q(`SELECT status, link FROM photo_shares WHERE id=$1`, [sh2]))[0];
 ok(wd.status === 'withdrawn' && wd.link === null, 'the hunter can take the link back at any time and it is deleted');
 ok((await q(`SELECT count(*)::int n FROM audit_log WHERE table_name='photo_shares'`))[0].n >= 4, 'every step is in the history');
+
+console.log('\nNo skinning department (084)');
+await as(null);
+await db.exec(`INSERT INTO hunt_documents (id, hunt_id, doc_type, title, current_department, form_data) VALUES
+  ('e0000000-0000-0000-0000-0000000000a1','d0000000-0000-0000-0000-000000000001','job_card','Zebra - Flat Skin','skinning','{"mount_type":"Flat Skin","species":"Zebra"}'),
+  ('e0000000-0000-0000-0000-0000000000a2','d0000000-0000-0000-0000-000000000001','job_card','Impala - Euro','skinning','{"mount_type":"Euro Mount","species":"Impala"}')`);
+// run last, because the tests above use Skinning as their example department
+await db.exec(fs.readFileSync(MIG + '084_no_skinning_department.sql', 'utf8'));
+await db.exec(fs.readFileSync(MIG + '084_no_skinning_department.sql', 'utf8'));   // safe to run twice
+const skin = await q(`SELECT title, current_department d, jsonb_array_length(form_data->'stage_history') h FROM hunt_documents WHERE id IN ('e0000000-0000-0000-0000-0000000000a1','e0000000-0000-0000-0000-0000000000a2') ORDER BY title`);
+ok(skin[0].d === 'cleaning_bleach' && skin[1].d === 'salting', 'cards waiting in Skinning move on: skull work to Cleaning & bleach, skins to Salting');
+ok(skin.every(x => x.h >= 1), 'and the move is written in the card history');
+ok((await q(`SELECT count(*)::int n FROM department_checklist_items WHERE dept_key='skinning' AND is_active`))[0].n === 0, 'the Skinning checklist is switched off');
+ok((await q(`SELECT count(*)::int n FROM staff_profiles WHERE 'skinning' = any(works_in) OR 'skinning' = any(manages_departments)`))[0].n === 0
+   && (await q(`SELECT 'receiving' = any(works_in) r FROM staff_profiles WHERE id=$1`, [ids.mgr]))[0].r, 'nobody works in Skinning any more: those who did now work in Receiving');
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

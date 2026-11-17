@@ -10,7 +10,7 @@ export interface Milestone { key: string; label: string; due_date: string; compl
 export interface AnimalPos { pipeline: string[]; dept: string; done: boolean }
 
 const DAY = 86_400_000;
-/** The order of every stage, to place a card whose mount was changed part-way on its new route */
+/** The order of every stage, to place a card whose mount was changed part-way on its new route (skinning is retired but kept here for old cards) */
 const CANON = ['receiving', 'skinning', 'salting', 'cleaning_bleach', 'dip_pack', 'storage', 'tannery', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'];
 function positionOn(pipeline: string[], dept: string): number {
   const i = pipeline.indexOf(dept);

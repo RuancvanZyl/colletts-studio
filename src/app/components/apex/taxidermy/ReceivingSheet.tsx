@@ -455,7 +455,7 @@ function ReceivingChecklist({ huntId, onBack }: { huntId: string; onBack: () => 
           continue;
         }
         const pipeline = getPipeline(line.mountType);
-        const nextDept = pipeline[1] ?? 'skinning'; // first dept after receiving
+        const nextDept = pipeline[1] ?? 'salting'; // first dept after receiving
 
         const historyEntry = {
           dept:        'receiving',

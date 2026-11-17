@@ -444,7 +444,7 @@ export function TaxidermyPortal({ onLogout }: TaxidermyPortalProps) {
     .filter(sec => sec.tabs.length > 0);
   const sectionOf = (v: string) => sections.find(sec => sec.tabs.some(t => t.view === v) || (sec.key === 'workshop' && STATION_VIEWS.includes(v)));
   const activeSection = sectionOf(currentView);
-  const activeTab = STATION_VIEWS.includes(currentView) ? 'stations' : currentView;
+  const activeTab = activeSection?.tabs.some(t => t.view === currentView) ? currentView : STATION_VIEWS.includes(currentView) ? 'stations' : currentView;
   const sectionBadge = (sec: { tabs: { badge?: number | null }[] }) => sec.tabs.reduce((n, t) => n + (t.badge ?? 0), 0);
   const openSection = (sec: { key: string; tabs: { view: TaxidermyView }[] }) => navigate(lastTab[sec.key] && sec.tabs.some(t => t.view === lastTab[sec.key]) ? lastTab[sec.key] : sec.tabs[0].view);
   const viewLabel = (v: string) => STATIONS.find(st => st.view === v)?.label ?? sections.flatMap(sec => sec.tabs).find(t => t.view === v)?.label ?? v.replace(/-/g, ' ');

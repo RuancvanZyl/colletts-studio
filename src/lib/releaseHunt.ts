@@ -32,7 +32,7 @@ export async function planRelease(huntId: string): Promise<ReleasePreview> {
     if (fd.released_at || d.current_department !== 'receiving') { alreadyReleased++; continue; }
     const mount = String(fd.mount_type ?? '');
     if (!mount || /^pending instructions$/i.test(mount)) { noMount++; continue; }
-    const to = getNextDepartment(mount, 'receiving') ?? 'skinning';
+    const to = getNextDepartment(mount, 'receiving') ?? 'salting';
     const parts = (fd.received_parts ?? []).map((p: any) => p.code);
     plans.push({
       docId: d.id, species: fd.species ?? 'Animal', mount, toDept: to, toLabel: DEPT_LABELS[to] ?? to,

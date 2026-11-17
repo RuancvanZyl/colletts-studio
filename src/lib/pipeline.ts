@@ -3,27 +3,27 @@
 // Full in-house taxidermy pipeline
 export const PIPELINE_STAGES: Record<string, string[]> = {
   // Cape mounts — skin must be cleaned, salted, tanned before mounting
-  'Shoulder Mount':        ['receiving', 'skinning', 'salting', 'cleaning_bleach', 'tannery', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
-  'Offset Shoulder Mount': ['receiving', 'skinning', 'salting', 'cleaning_bleach', 'tannery', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
-  'Pedestal Mount':        ['receiving', 'skinning', 'salting', 'cleaning_bleach', 'tannery', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
-  'Full Mount':            ['receiving', 'skinning', 'salting', 'tannery', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
-  'Half Mount':            ['receiving', 'skinning', 'salting', 'cleaning_bleach', 'tannery', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
+  'Shoulder Mount':        ['receiving', 'salting', 'cleaning_bleach', 'tannery', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
+  'Offset Shoulder Mount': ['receiving', 'salting', 'cleaning_bleach', 'tannery', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
+  'Pedestal Mount':        ['receiving', 'salting', 'cleaning_bleach', 'tannery', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
+  'Full Mount':            ['receiving', 'salting', 'tannery', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
+  'Half Mount':            ['receiving', 'salting', 'cleaning_bleach', 'tannery', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
   // Skull / bone work — no skin processing
-  'Euro Skull':            ['receiving', 'skinning', 'cleaning_bleach', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
-  'Euro Mount':            ['receiving', 'skinning', 'cleaning_bleach', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
-  'Bleach Only':           ['receiving', 'skinning', 'cleaning_bleach', 'mounting', 'quality_check', 'packing', 'administration'],
-  'Artistic Skull':        ['receiving', 'skinning', 'cleaning_bleach', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
+  'Euro Skull':            ['receiving', 'cleaning_bleach', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
+  'Euro Mount':            ['receiving', 'cleaning_bleach', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
+  'Bleach Only':           ['receiving', 'cleaning_bleach', 'mounting', 'quality_check', 'packing', 'administration'],
+  'Artistic Skull':        ['receiving', 'cleaning_bleach', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
   // Skin / flat work
-  'Flat Skin':             ['receiving', 'skinning', 'salting', 'tannery', 'packing', 'administration'],
-  'Rug Mount on Felt':     ['receiving', 'skinning', 'salting', 'tannery', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
-  'Tan Only':              ['receiving', 'skinning', 'salting', 'tannery', 'packing', 'administration'],
+  'Flat Skin':             ['receiving', 'salting', 'tannery', 'packing', 'administration'],
+  'Rug Mount on Felt':     ['receiving', 'salting', 'tannery', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
+  'Tan Only':              ['receiving', 'salting', 'tannery', 'packing', 'administration'],
   // Hunter's own idea: takes the full route (the combined animals follow the main one)
-  'Custom mount':          ['receiving', 'skinning', 'salting', 'cleaning_bleach', 'tannery', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
-  'Custom mount (combined)': ['receiving', 'skinning', 'salting', 'cleaning_bleach', 'tannery', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
+  'Custom mount':          ['receiving', 'salting', 'cleaning_bleach', 'tannery', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
+  'Custom mount (combined)': ['receiving', 'salting', 'cleaning_bleach', 'tannery', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
   // A cast copy: no skin work
   'Replica':               ['receiving', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
   // Client ships overseas to mount — we treat & pack
-  'Dip & Pack':            ['receiving', 'skinning', 'salting', 'dip_pack', 'packing', 'administration'],
+  'Dip & Pack':            ['receiving', 'salting', 'dip_pack', 'packing', 'administration'],
   // Pre-tan only — client mounts overseas, we just tan the skin
   'Life Cast':             ['receiving', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'],
 };
@@ -45,7 +45,7 @@ export const STALL_HOURS: Record<string, number> = {
   administration:  72,
 };
 
-const DEFAULT_PIPELINE = ['receiving', 'skinning', 'salting', 'cleaning_bleach', 'tannery', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'];
+const DEFAULT_PIPELINE = ['receiving', 'salting', 'cleaning_bleach', 'tannery', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'];
 
 export function getPipeline(mountType: string): string[] {
   return PIPELINE_STAGES[mountType] ?? DEFAULT_PIPELINE;
@@ -59,10 +59,13 @@ export function getPipeline(mountType: string): string[] {
 export function stageIndex(stages: string[], dept: string): number {
   const i = stages.indexOf(dept);
   if (i >= 0) return i;
-  const rank = ALL_DEPARTMENTS.indexOf(dept);
+  const rank = STAGE_ORDER.indexOf(dept);
   if (rank < 0) return -1;
-  return stages.findIndex(s => ALL_DEPARTMENTS.indexOf(s) > rank);
+  return stages.findIndex(s => STAGE_ORDER.indexOf(s) > rank);
 }
+
+/** Every stage in floor order, including retired ones (skinning: done on the farm, not here) so an old card still finds its next stage. */
+const STAGE_ORDER = ['receiving', 'skinning', 'salting', 'cleaning_bleach', 'dip_pack', 'storage', 'tannery', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration'];
 
 export function getNextDepartment(mountType: string, currentDept: string): string | null {
   const stages = getPipeline(mountType);
@@ -73,8 +76,9 @@ export function getNextDepartment(mountType: string, currentDept: string): strin
 }
 
 // Every pipeline stage — for owners / managers who oversee the whole floor
+// Skinning is not a workshop department: trophies are skinned on the farm by the outfitter and arrive as skins.
 export const ALL_DEPARTMENTS = [
-  'receiving', 'skinning', 'salting', 'cleaning_bleach', 'dip_pack', 'storage',
+  'receiving', 'salting', 'cleaning_bleach', 'dip_pack', 'storage',
   'tannery', 'mounting', 'finishing', 'quality_check', 'photos', 'packing', 'administration',
 ];
 
@@ -85,7 +89,7 @@ export const STAFF_DEPARTMENTS: Record<string, string[]> = {
   'Steve':   ALL_DEPARTMENTS,
   'Abri':    ALL_DEPARTMENTS,
   'Cecilia': ALL_DEPARTMENTS,
-  'Vince':   ['receiving', 'skinning', 'salting', 'cleaning_bleach', 'storage', 'dip_pack'],
+  'Vince':   ['receiving', 'salting', 'cleaning_bleach', 'storage', 'dip_pack'],
   'Divine':  ['tannery'],
   'Emanuel': ['mounting'],
   'Kyle':    ['mounting', 'finishing'],
@@ -94,7 +98,7 @@ export const STAFF_DEPARTMENTS: Record<string, string[]> = {
 // Maps DB `departments.name` values to pipeline stage keys
 const DB_DEPT_TO_STAGES: Record<string, string[]> = {
   'Receiving':          ['receiving'],
-  'Skin Processing':    ['skinning', 'salting', 'cleaning_bleach', 'dip_pack'],
+  'Skin Processing':    ['salting', 'cleaning_bleach', 'dip_pack'],
   'Skull Processing':   ['cleaning_bleach'],
   'Storage':            ['storage'],
   'Tannery':            ['tannery'],
