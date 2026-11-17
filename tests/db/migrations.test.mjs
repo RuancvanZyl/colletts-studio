@@ -11,6 +11,7 @@ const q = async (sql, params) => (await db.query(sql, params)).rows;
 const fails = async (sql, params) => { try { await db.query(sql, params); return null; } catch (e) { return String(e.message); } };
 
 await db.exec(fs.readFileSync(HERE + 'bootstrap.sql', 'utf8'));
+await db.exec(`ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS raw_user_meta_data jsonb;`);
 // like Supabase: new functions can be run by signed-in users unless a migration takes that away (the tests must not hide a missing permission)
 await db.exec(`ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO authenticated, anon;`);
 await db.exec(`
@@ -27,7 +28,7 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql', '063_mount_change_rules.sql', '064_conversation_topics.sql', '065_mark_done_permission_fix.sql', '066_live_team_messages.sql', '067_push_notifications.sql', '069_hunt_receivings.sql', '070_arrival_alerts.sql', '071_missing_parts_followup.sql', '072_client_drafts.sql', '073_local_clients_no_documents.sql', '074_receiving_issues.sql', '075_proforma_cart.sql', '076_change_after_deposit_credit.sql', '077_tanning_already_done.sql', '078_message_photos_and_alerts.sql', '079_message_notifications_for_clients.sql', '080_history_and_kept_messages.sql']) {
+for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql', '063_mount_change_rules.sql', '064_conversation_topics.sql', '065_mark_done_permission_fix.sql', '066_live_team_messages.sql', '067_push_notifications.sql', '069_hunt_receivings.sql', '070_arrival_alerts.sql', '071_missing_parts_followup.sql', '072_client_drafts.sql', '073_local_clients_no_documents.sql', '074_receiving_issues.sql', '075_proforma_cart.sql', '076_change_after_deposit_credit.sql', '077_tanning_already_done.sql', '078_message_photos_and_alerts.sql', '079_message_notifications_for_clients.sql', '080_history_and_kept_messages.sql', '081_registration_type_and_passport.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
@@ -1461,5 +1462,32 @@ await as(ids.worker);
 ok((await fails(`SELECT public.log_client_conversation($1, 'client', 'phone', 'x')`, [mc]))?.includes('Only managers'), 'ordinary staff cannot write down conversations');
 await as(null);
 
+
+console.log('\nSign-up type and passport');
+await as(null);
+const SU_L = 'f1000000-0000-0000-0000-0000000000a1', SU_E = 'f1000000-0000-0000-0000-0000000000a2';
+await db.query(`INSERT INTO auth.users (id, email, raw_user_meta_data) VALUES ($1, 'loc@example.com', '{"client_type":"local"}'), ($2, 'exp@example.com', '{"client_type":"export"}')`, [SU_L, SU_E]);
+await as(SU_L);
+const locId = (await q(`SELECT public.get_or_create_hunter_client('Local Larry', 'loc@example.com', NULL) id`))[0].id;
+await as(SU_E);
+const expId = (await q(`SELECT public.get_or_create_hunter_client('Export Eve', 'exp@example.com', NULL) id`))[0].id;
+await as(null);
+ok((await q(`SELECT client_type FROM clients WHERE id=$1`, [locId]))[0].client_type === 'local', 'a client who chose Local at sign-up is saved as local (the local price list)');
+ok((await q(`SELECT client_type FROM clients WHERE id=$1`, [expId]))[0].client_type === 'export', 'a client who chose Export is saved as export');
+await as(SU_L);
+ok((await q(`SELECT public.get_or_create_hunter_client('Local Larry', 'loc@example.com', NULL) id`))[0].id === locId, 'signing in again gives the same client, not a new one');
+await as(SU_E);
+ok((await fails(`SELECT public.hunter_save_passport('passports/${locId}/x.jpg', 'x.jpg')`))?.includes('not in your own folder'), 'a client cannot put a passport in someone else\'s folder');
+await db.query(`SELECT public.hunter_save_passport('passports/${expId}/p1.jpg', 'p1.jpg')`);
+await db.query(`SELECT public.hunter_save_passport('passports/${expId}/p2.jpg', 'p2.jpg')`);
+ok((await q(`SELECT storage_path FROM client_documents WHERE client_id=$1 AND doc_type='passport'`, [expId]))[0].storage_path.endsWith('p2.jpg'), 'the client can add and replace their passport photo');
+ok((await q(`SELECT count(*)::int n FROM client_documents WHERE client_id=$1`, [expId]))[0].n === 1, 'there is one passport on their file');
+await as(SU_L);
+ok((await q(`SELECT count(*)::int n FROM client_documents WHERE client_id=$1`, [expId]))[0].n === 0, 'another client cannot see it');
+await as(ids.worker);
+ok((await q(`SELECT count(*)::int n FROM client_documents WHERE client_id=$1`, [expId]))[0].n === 1, 'staff can see it on the client\'s file');
+await as(null);
+const pa = await q(`SELECT changes FROM audit_log WHERE table_name='client_documents' AND client_id=$1 ORDER BY at, id`, [expId]);
+ok(pa.length === 2 && pa[1].changes.storage_path.from.endsWith('p1.jpg') && pa[1].changes.storage_path.to.endsWith('p2.jpg'), 'every passport added or replaced is kept in the history, with the old file named');
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

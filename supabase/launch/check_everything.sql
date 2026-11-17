@@ -15,6 +15,7 @@ select * from (values
                                               and exists (select 1 from storage.buckets where id = 'message-files')),
   ('079 messages show in notifications',     exists (select 1 from pg_trigger where tgname = 'trg_notify_client_of_message')),
   ('080 history and kept messages',         to_regclass('public.audit_log') is not null and exists (select 1 from pg_trigger where tgname = 'trg_messages_are_kept')),
+  ('081 sign-up type and passport',         exists (select 1 from pg_proc where proname = 'hunter_save_passport')),
   ('Phones that have notifications on',      coalesce((select count(*) from push_subscriptions), 0) > 0)
 ) as t(what, ok)
 order by what;

@@ -1,6 +1,8 @@
 /** HunterProfile — who the workshop has on file for this hunter, how to get the app on the home screen, and sign out. */
 import { LogOut, Mail, Phone, User, Hash, Globe } from 'lucide-react';
 import { useHunterClient } from '../../../../lib/hooks/useHunterClient';
+import { PassportCard } from './PassportCard';
+import { useHunterPassport } from '../../../../lib/hooks/useHunterPassport';
 import { InstallCard } from '../shared/InstallApp';
 import { AppVersion } from '../shared/AppVersion';
 import { ChangePasswordButton } from '../shared/ChangePassword';
@@ -13,6 +15,7 @@ interface HunterProfileProps {
 
 export function HunterProfile({ onLogout }: HunterProfileProps) {
   const { client, displayName } = useHunterClient();
+  const passport = useHunterPassport((client as any)?.id, !!client && (client as any).client_type !== 'local');
   const c: any = client ?? {};
   const rows = [
     { icon: Hash, label: 'Your hunter number', value: c.client_number },
@@ -33,6 +36,7 @@ export function HunterProfile({ onLogout }: HunterProfileProps) {
             {c.created_at && <p className="text-sm text-slate-600 dark:text-slate-300">Hunting with {WORKSHOP.name} since {new Date(c.created_at).toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' })}</p>}
           </div>
         </div>
+        {(client as any)?.client_type !== 'local' && !passport.loading && <PassportCard clientId={(client as any).id} has={passport.has} onSaved={passport.refresh} />}
         {rows.length > 0 && (
           <ul className="divide-y divide-slate-100 dark:divide-slate-800">
             {rows.map(r => (

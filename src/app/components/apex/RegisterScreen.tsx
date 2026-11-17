@@ -226,7 +226,7 @@ export function RegisterScreen({
             {/* Hunt type — hunters only */}
             {portalType === 'hunter' && (
               <div className="space-y-3">
-                <h3 className="text-slate-900 dark:text-white">Hunt Type</h3>
+                <h3 className="text-slate-900 dark:text-white">Where will your trophies go?</h3>
                 <div className="grid grid-cols-2 gap-3">
                   {(['local', 'export'] as const).map(t => (
                     <button key={t} type="button" onClick={() => setClientType(t)}
@@ -235,9 +235,9 @@ export function RegisterScreen({
                           ? 'border-[#0073ea] bg-blue-50 dark:bg-blue-950/30'
                           : 'border-slate-200 dark:border-slate-700'
                       }`}>
-                      <div className="font-semibold text-sm text-slate-900 dark:text-slate-100 capitalize">{t}</div>
+                      <div className="font-semibold text-sm text-slate-900 dark:text-slate-100">{t === 'local' ? 'Staying in South Africa' : 'Leaving South Africa'}</div>
                       <div className="text-xs text-slate-500 mt-0.5">
-                        {t === 'local' ? 'Trophies stay in South Africa' : 'Trophies shipped internationally'}
+                        {t === 'local' ? 'Local: my trophies stay in South Africa (South African prices in rand)' : 'Export: my trophies are shipped out of South Africa (prices in US dollars). You will be asked for a photo of your passport after you sign in.'}
                       </div>
                     </button>
                   ))}

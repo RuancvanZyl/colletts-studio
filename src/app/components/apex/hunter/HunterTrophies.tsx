@@ -22,6 +22,8 @@ import { mountsFor } from '../../../../lib/pricing';
 import { isMounted } from '../../../../lib/mountRules';
 import { finishChoices } from '../../../../lib/hooks/useQuotes';
 import { HunterDocuments } from './HunterDocuments';
+import { PassportCard } from './PassportCard';
+import { useHunterPassport } from '../../../../lib/hooks/useHunterPassport';
 import { useHunterQuotes } from '../../../../lib/hooks/useQuotes';
 import { useBack } from '../../../../lib/back';
 import { useDraft } from '../../../../lib/draft';
@@ -38,6 +40,7 @@ function statusOf(a: HunterAnimal): { text: string; tone: 'todo' | 'wait' | 'wor
 export function HunterTrophies({ onRegisterHunt, onChanged, onOpenMessages, startAdding = false }: { onRegisterHunt?: () => void; onChanged?: () => void; onOpenMessages?: () => void; startAdding?: boolean }) {
   const { client, animals, loading, refresh } = useHunterAnimals();
   const { quotes, refresh: refreshQuotes } = useHunterQuotes(client?.id);
+  const passport = useHunterPassport(client?.id, !!client && client.type !== 'local');
   // the step the hunter was on is remembered, so a refresh brings them straight back to it
   const [choosing, setChoosing] = useDraft<string[] | null>('trophies:choosing', null, 12 * 3600 * 1000);
   const [open, setOpen] = useState<string | null>(null);
@@ -54,6 +57,14 @@ export function HunterTrophies({ onRegisterHunt, onChanged, onOpenMessages, star
   const first = client.name.split(' ')[0];
   const waiting = animals.filter(a => !a.mountChosen && !a.finished);
 
+  // an export client adds their passport photo before anything else (it is kept in their file)
+  const needsPassport = client.type !== 'local' && !passport.loading && !passport.has;
+  if (adding && needsPassport) return (
+    <div className="space-y-4">
+      <PassportCard clientId={client.id} has={false} onSaved={passport.refresh} intro="Before you add your animals we need a clear photo of the page of your passport with your photo and details. It is kept safely in your file and only the workshop can see it." />
+      <button className="w-full min-h-12 rounded-xl border-2 border-slate-300 dark:border-slate-600 font-bold text-slate-700 dark:text-slate-200" onClick={() => setAdding(false)}>Back</button>
+    </div>
+  );
   if (adding) return <AddAnimalsFlow clientId={client.id} clientType={client.type} onClose={() => setAdding(false)} onSaved={() => { refresh(); onChanged?.(); }} />;
 
   if (choosing) {
@@ -81,6 +92,8 @@ export function HunterTrophies({ onRegisterHunt, onChanged, onOpenMessages, star
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Hello, {first}</h1>
         <p className="text-sm text-slate-600 dark:text-slate-300">{animals.length > 0 ? `This is everything ${WORKSHOP.name} has received from you.` : 'Your trophies will appear here as soon as the workshop receives them.'}</p>
       </div>
+
+      {needsPassport && <PassportCard clientId={client.id} has={false} onSaved={passport.refresh} />}
 
       <button onClick={() => setAdding(true)} className="w-full min-h-14 rounded-2xl border-2 border-green-700 text-green-800 dark:text-green-300 font-bold text-lg flex items-center justify-center gap-2 bg-white dark:bg-slate-900">
         <span className="text-2xl">🎯</span>Add my animals<span className="text-xs font-normal text-slate-500 hidden sm:inline">after your hunt</span>
