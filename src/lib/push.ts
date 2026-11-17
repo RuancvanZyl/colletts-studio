@@ -65,15 +65,22 @@ export async function tellAboutArrival(huntId: string): Promise<void> {
   } catch { /* the arrival itself is saved; the notification is only a nudge */ }
 }
 
-/** A hunter or outfitter wrote to the workshop: ask the server to tell the managers' phones. The tap opens that conversation. Never blocks or fails the send. */
-export async function tellAboutMessage(kind: 'client_message' | 'outfitter_message' | 'to_client'): Promise<void> {
+/** Ask the server to tell the phones about new messages. Says how many phones it told. */
+export async function sendPhoneAlerts(kind: 'client_message' | 'outfitter_message' | 'to_client'): Promise<{ ok: boolean; sent: number; error?: string }> {
   try {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-    await fetch(PUSH_URL, {
+    if (!session) return { ok: false, sent: 0, error: 'Please sign in first' };
+    const res = await fetch(PUSH_URL, {
       method: 'POST', headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ kind }),
     });
-  } catch { /* the message itself was saved; the notification is only a nudge */ }
+    const j = await res.json().catch(() => ({} as any));
+    return { ok: !!j.ok, sent: Number(j.sent ?? 0), error: j.error };
+  } catch (e: any) { return { ok: false, sent: 0, error: String(e?.message ?? e) }; }
+}
+
+/** A hunter or outfitter wrote to the workshop (or the workshop wrote to a hunter): ask the server to tell the phones. The tap opens that conversation. Never blocks or fails the send. */
+export async function tellAboutMessage(kind: 'client_message' | 'outfitter_message' | 'to_client'): Promise<void> {
+  await sendPhoneAlerts(kind);   // the message itself was saved; the notification is only a nudge
 }
 
 /** After a message is sent: ask the server to tell the other people's devices. Never blocks or fails the send. */

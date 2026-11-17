@@ -14,6 +14,7 @@ import { useClientMessages, type Message, type MessageTemplate } from '../../../
 import { toast } from 'sonner';
 import { supabase } from '../../../../lib/supabase';
 import { plainError } from '../../../../lib/plainError';
+import { sendPhoneAlerts } from '../../../../lib/push';
 import { Camera, X as XIcon } from 'lucide-react';
 import { uploadMessageFiles } from '../../../../lib/messageFiles';
 import { MessagePhotos } from '../shared/MessagePhotos';
@@ -379,6 +380,15 @@ export function CommunicationPanel({
   const { messages, templates, loading, refresh } = useClientMessages(clientId);
   const [composeOpen, setComposeOpen] = useState(false);
   const [writeDownOpen, setWriteDownOpen] = useState(false);
+  const [alerting, setAlerting] = useState(false);
+  async function alertPhone() {
+    setAlerting(true);
+    const r = await sendPhoneAlerts('to_client');
+    setAlerting(false);
+    if (!r.ok) toast.error(r.error ? plainError(r.error) : 'The alert could not be sent. Please try again.');
+    else if (r.sent > 0) toast.success(`Phone alert sent to ${r.sent} phone${r.sent === 1 ? '' : 's'}`);
+    else toast.info('Nothing to send: either every message was already announced, or this client has not turned on notifications on their phone.');
+  }
   const [replyTo, setReplyTo] = useState<Message | undefined>();
   const [filter, setFilter] = useState<'all' | 'email' | 'in_app'>('all');
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -483,6 +493,9 @@ export function CommunicationPanel({
         >
           <Mail className="w-4 h-4 flex-shrink-0" />
           <span>Write a message to {clientName}…</span>
+        </button>
+        <button disabled={alerting} onClick={alertPhone} className="mt-2 w-full min-h-11 text-sm font-semibold text-slate-700 dark:text-slate-200 underline text-left px-1 disabled:opacity-60">
+          {alerting ? 'Sending…' : 'Send a phone alert for my latest message to this client'}
         </button>
         <button onClick={() => setWriteDownOpen(true)} className="mt-2 w-full min-h-11 text-sm font-semibold text-slate-700 dark:text-slate-200 underline text-left px-1">
           Spoke on the phone, on WhatsApp or in person? Write down what was said
