@@ -3,20 +3,24 @@ import { Film, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../../../lib/supabase';
 import { plainError } from '../../../../lib/plainError';
+import { StaffFilmDialog } from './StaffFilmDialog';
 
-interface Row { id: string; status: 'preview' | 'unlocked'; unlocked_how: string | null; unlocked_at: string | null; ref: string | null; photos: number }
+interface Row { hunt_id: string | null; id: string; status: 'preview' | 'unlocked'; unlocked_how: string | null; unlocked_at: string | null; ref: string | null; photos: number }
 
 /** The hunter's hunt films: where each one stands, and a button to unlock it once payment has been confirmed. */
 export function VideoUnlockBox({ clientId }: { clientId: string }) {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [watch, setWatch] = useState<string | null>(null);
+  const [name, setName] = useState('');
+  useEffect(() => { (supabase as any).from('clients').select('full_name').eq('id', clientId).maybeSingle().then(({ data }: any) => setName(data?.full_name ?? '')); }, [clientId]);
   async function load() {
     const { data, error } = await (supabase as any).from('memory_videos').select('id, status, unlocked_how, unlocked_at, hunt_id, client_hunts(ref_number)').eq('client_id', clientId).order('created_at', { ascending: false });
     if (error) { setRows([]); return; }
     const out: Row[] = [];
     for (const r of data ?? []) {
       const { count } = await (supabase as any).from('trophy_photos').select('id', { count: 'exact', head: true }).eq('hunt_id', r.hunt_id).eq('kind', 'hunt');
-      out.push({ id: r.id, status: r.status, unlocked_how: r.unlocked_how, unlocked_at: r.unlocked_at, ref: r.client_hunts?.ref_number ?? null, photos: count ?? 0 });
+      out.push({ hunt_id: r.hunt_id, id: r.id, status: r.status, unlocked_how: r.unlocked_how, unlocked_at: r.unlocked_at, ref: r.client_hunts?.ref_number ?? null, photos: count ?? 0 });
     }
     setRows(out);
   }
@@ -37,9 +41,11 @@ export function VideoUnlockBox({ clientId }: { clientId: string }) {
       {rows.map(r => (
         <div key={r.id} className="flex items-center justify-between gap-3 text-sm">
           <span className="text-slate-800 dark:text-slate-200">{r.ref ?? 'Hunt'} · {r.photos} photo{r.photos === 1 ? '' : 's'} · {r.status === 'unlocked' ? `unlocked${r.unlocked_how ? ` (${r.unlocked_how === 'free' ? 'free' : r.unlocked_how === 'paid' ? 'paid in the app' : 'by the workshop'})` : ''}` : 'preview only'}</span>
+          {r.hunt_id && r.photos > 0 && <button onClick={() => setWatch(r.hunt_id)} className="shrink-0 min-h-10 px-3 rounded-lg border border-amber-700 text-amber-900 dark:text-amber-200 font-semibold">Watch their film</button>}
           {r.status === 'preview' && <button disabled={busy === r.id} onClick={() => unlock(r.id)} className="shrink-0 min-h-10 px-3 rounded-lg bg-amber-700 hover:bg-amber-800 text-white font-semibold disabled:opacity-60">{busy === r.id ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Payment received: unlock'}</button>}
         </div>
       ))}
+      {watch && <StaffFilmDialog huntId={watch} clientName={name || 'The hunter'} onClose={() => setWatch(null)} />}
     </div>
   );
 }

@@ -17,6 +17,7 @@ select * from (values
   ('080 history and kept messages',         to_regclass('public.audit_log') is not null and exists (select 1 from pg_trigger where tgname = 'trg_messages_are_kept')),
   ('081 sign-up type and passport',         exists (select 1 from pg_proc where proname = 'hunter_save_passport')),
   ('082 hunt film and hunter photos',      to_regclass('public.memory_videos') is not null),
+  ('083 share an album with the workshop', to_regclass('public.photo_shares') is not null),
   ('Phones that have notifications on',      coalesce((select count(*) from push_subscriptions), 0) > 0)
 ) as t(what, ok)
 order by what;

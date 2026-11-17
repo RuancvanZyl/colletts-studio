@@ -30,6 +30,12 @@ export function HuntStory({ clientId, clientName, currency, onClose }: { clientI
   const [price, setPrice] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState<string | null>(null);
+  const [albumShare, setAlbumShare] = useState<{ id: string; host: string } | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [link, setLink] = useState('');
+  const [shareNote, setShareNote] = useState('');
+  const [agree, setAgree] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   // ── load the hunts ──
   useEffect(() => {
@@ -69,6 +75,8 @@ export function HuntStory({ clientId, clientName, currency, onClose }: { clientI
     if (error) { setSetup('missing'); return; }
     const { data: mv } = await (supabase as any).from('memory_videos').select('id, status').eq('id', vid).maybeSingle();
     setVideo(mv ?? null); setSetup('ok');
+    const { data: sh } = await (supabase as any).from('photo_shares').select('id, link_host').eq('hunt_id', huntId).eq('status', 'waiting').maybeSingle();
+    setAlbumShare(sh ? { id: sh.id, host: sh.link_host } : null);
   }, [clientId, huntId]);
   useEffect(() => { loadHunt(); }, [loadHunt]);
 
@@ -89,6 +97,22 @@ export function HuntStory({ clientId, clientName, currency, onClose }: { clientI
     const { error } = await (supabase as any).from('trophy_photos').delete().eq('id', id);
     if (error) { toast.error(plainError(error.message)); return; }
     setPhotos(p => p.filter(x => x.id !== id));
+  }
+
+  async function sendLink() {
+    if (!huntId) return;
+    setSharing(true);
+    const { error } = await (supabase as any).rpc('hunter_share_photos', { p_hunt: huntId, p_link: link, p_consent: agree, p_note: shareNote || null });
+    setSharing(false);
+    if (error) { toast.error(plainError(error.message)); return; }
+    toast.success('Thank you. We have your link and will copy your photos.');
+    setLink(''); setShareNote(''); setAgree(false); setShareOpen(false); loadHunt();
+  }
+  async function takeLinkBack() {
+    if (!albumShare) return;
+    const { error } = await (supabase as any).rpc('hunter_withdraw_photo_share', { p_share: albumShare.id });
+    if (error) { toast.error(plainError(error.message)); return; }
+    toast.success('Your link has been deleted'); setAlbumShare(null);
   }
 
   // ── the film ──
@@ -201,6 +225,41 @@ export function HuntStory({ clientId, clientName, currency, onClose }: { clientI
                 <li><strong>Be close and clear</strong> with people and the animal. Upright photos fill the whole screen.</li>
                 <li><strong>{MIN_PHOTOS} photos</strong> make a film, about 10 to 15 make a great one.</li>
               </ul>
+            </section>
+
+            {/* let the workshop collect them from one album */}
+            <section className={`${pill} space-y-3`}>
+              {albumShare ? (
+                <>
+                  <p className="font-bold flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-green-600" />We have your album link</p>
+                  <p className="text-sm text-slate-700 dark:text-slate-200">It is from {albumShare.host}. We will copy your photos into your hunt film and tell you when they are ready. Then we delete your link.</p>
+                  <button onClick={takeLinkBack} className="w-full min-h-12 rounded-xl border-2 border-slate-400 font-bold">Take my link back (delete it now)</button>
+                </>
+              ) : (
+                <>
+                  <button onClick={() => setShareOpen(o => !o)} className="w-full text-left">
+                    <p className="font-bold">Rather let us collect your photos for you?</p>
+                    <p className="text-sm text-slate-700 dark:text-slate-200">Share one album with us and we do the rest. It is safe: you choose the album, we only get a view-only link.</p>
+                  </button>
+                  {shareOpen && (
+                    <div className="space-y-3">
+                      <ol className="text-sm text-slate-700 dark:text-slate-200 list-decimal pl-5 space-y-1">
+                        <li>Put your hunt photos in <strong>one album</strong> on your phone.</li>
+                        <li><strong>iPhone:</strong> open the album, tap Share, then <em>Copy iCloud Link</em>. <strong>Google Photos:</strong> open the album, tap Share, then <em>Create link</em>. Dropbox, OneDrive and WeTransfer links work too.</li>
+                        <li>Paste the link below and tick the box.</li>
+                      </ol>
+                      <p className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 p-2 text-sm"><strong>Never send us a password, your Apple ID or your Google login.</strong> We never need them. Only a share link for the one album.</p>
+                      <input value={link} onChange={e => setLink(e.target.value)} inputMode="url" placeholder="Paste your album link here" className="w-full min-h-12 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 text-base" />
+                      <input value={shareNote} onChange={e => setShareNote(e.target.value)} placeholder="A note, for example the name of the album (optional)" className="w-full min-h-12 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 text-base" />
+                      <label className="flex items-start gap-3 text-sm text-slate-800 dark:text-slate-100 cursor-pointer">
+                        <input type="checkbox" checked={agree} onChange={e => setAgree(e.target.checked)} className="mt-1 w-5 h-5" />
+                        <span>I agree that the workshop may open this one link, copy the photos in it for my hunt film and keep them in my file. The workshop deletes the link afterwards, and I can take it back at any time.</span>
+                      </label>
+                      <button disabled={sharing || !link.trim() || !agree} onClick={sendLink} className="w-full min-h-14 rounded-xl bg-green-700 hover:bg-green-800 text-white text-lg font-bold disabled:opacity-50 inline-flex items-center justify-center gap-2">{sharing && <Loader2 className="w-5 h-5 animate-spin" />}Send my album link</button>
+                    </div>
+                  )}
+                </>
+              )}
             </section>
 
             {/* the photos, part by part */}

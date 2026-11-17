@@ -13,10 +13,11 @@ export interface AttentionCounts {
   receivingIssues: number;  // animals received with an issue that nobody has decided about yet
   receivingFixing: number;
   leatherAsk: number;       // animals with skin left over where the client has not said what to do
+  photoShares: number;      // hunters who shared an album link and are waiting for the workshop to copy their photos
   leatherToConfirm: number; // clients who want leather work that the workshop has not agreed with them yet
   paymentProofs: number;    // hunters who say they have paid by bank transfer and nobody has checked yet  // animals with an issue that has a decision but is not marked solved yet
 }
-const ZERO: AttentionCounts = { toCheck: 0, fromOutfitter: 0, unreadChat: 0, unverified: 0, lateAccept: 0, notAcked: 0, needOutcome: 0, clientOverdue: 0, heldAside: 0, arrivedToCheck: 0, missingParts: 0, receivingIssues: 0, receivingFixing: 0, paymentProofs: 0, leatherAsk: 0, leatherToConfirm: 0 };
+const ZERO: AttentionCounts = { toCheck: 0, fromOutfitter: 0, unreadChat: 0, unverified: 0, lateAccept: 0, notAcked: 0, needOutcome: 0, clientOverdue: 0, heldAside: 0, arrivedToCheck: 0, missingParts: 0, receivingIssues: 0, receivingFixing: 0, paymentProofs: 0, leatherAsk: 0, leatherToConfirm: 0, photoShares: 0 };
 
 export function useAttentionCounts(): AttentionCounts {
   const [c, setC] = useState<AttentionCounts>(ZERO);
@@ -44,10 +45,11 @@ export function useAttentionCounts(): AttentionCounts {
       const leatherRows: any[] = lq.error ? [] : (lq.data ?? []);
       const leatherAsk = leatherRows.filter(x => leftoverSkin(x.mount, Array.isArray(x.parts) ? x.parts.map((p: any) => p.code) : []) && (!x.lc || x.lc === 'later')).length;
       const leatherToConfirm = leatherRows.filter(x => x.lc === 'leather' && !x.lconf).length;
+      const ps = await db.from('photo_shares').select('id', { count: 'exact', head: true }).eq('status', 'waiting');
       const fu = await db.from('part_followups').select('id', { count: 'exact', head: true }).is('resolved_at', null);
       const missing = fu.error ? oldMissing : (fu.count ?? 0);
       setC({
-        arrivedToCheck: arrivedHunts.size, missingParts: missing, receivingIssues: issues.filter(x => !x.dec).length, receivingFixing: issues.filter(x => x.dec).length, paymentProofs: pp.error ? 0 : (pp.count ?? 0), leatherAsk, leatherToConfirm,
+        arrivedToCheck: arrivedHunts.size, missingParts: missing, receivingIssues: issues.filter(x => !x.dec).length, receivingFixing: issues.filter(x => x.dec).length, paymentProofs: pp.error ? 0 : (pp.count ?? 0), leatherAsk, leatherToConfirm, photoShares: ps.error ? 0 : (ps.count ?? 0),
         heldAside: cases.filter(x => x.order_override_at).length,
         clientOverdue: cases.filter(x => { const d = informDaysLeft(x); return d !== null && d < 0; }).length,
         notAcked: cases.filter(x => x.outfitter_id && !x.outfitter_ack_at).length,

@@ -28,7 +28,7 @@ await db.exec(`
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
  ALTER TABLE hunt_documents ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 `);
-for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql', '063_mount_change_rules.sql', '064_conversation_topics.sql', '065_mark_done_permission_fix.sql', '066_live_team_messages.sql', '067_push_notifications.sql', '069_hunt_receivings.sql', '070_arrival_alerts.sql', '071_missing_parts_followup.sql', '072_client_drafts.sql', '073_local_clients_no_documents.sql', '074_receiving_issues.sql', '075_proforma_cart.sql', '076_change_after_deposit_credit.sql', '077_tanning_already_done.sql', '078_message_photos_and_alerts.sql', '079_message_notifications_for_clients.sql', '080_history_and_kept_messages.sql', '081_registration_type_and_passport.sql', '082_hunt_story.sql']) {
+for (const f of ['034_order_timelines.sql', '035_order_timeline_manual_start_date.sql', '041_task_flow.sql', '042_offline_sync.sql', '043_communications.sql', '044_trophy_photos.sql', '045_hunter_onboarding.sql', '046_hunter_preregister.sql', '047_species_guide.sql', '048_quotes.sql', '049_start_timeline_on_payment.sql', '050_outfitter_link.sql', '051_documents_and_outfitter_chat.sql', '052_document_provinces.sql', '053_hunt_register_checks.sql', '054_permit_profiles_and_ai.sql', '055_progress_reviews.sql', '056_milestone_feedback.sql', '057_department_handover.sql', '058_soak_reports_and_cases.sql', '059_case_client_deadline_and_ai.sql', '060_carry_on_with_good_trophies.sql', '061_credit_and_amend_invoice.sql', '062_live_updates.sql', '063_mount_change_rules.sql', '064_conversation_topics.sql', '065_mark_done_permission_fix.sql', '066_live_team_messages.sql', '067_push_notifications.sql', '069_hunt_receivings.sql', '070_arrival_alerts.sql', '071_missing_parts_followup.sql', '072_client_drafts.sql', '073_local_clients_no_documents.sql', '074_receiving_issues.sql', '075_proforma_cart.sql', '076_change_after_deposit_credit.sql', '077_tanning_already_done.sql', '078_message_photos_and_alerts.sql', '079_message_notifications_for_clients.sql', '080_history_and_kept_messages.sql', '081_registration_type_and_passport.sql', '082_hunt_story.sql', '083_photo_share.sql']) {
   try { await db.exec(fs.readFileSync(MIG + f, 'utf8')); console.log('migration ok:', f); }
   catch (e) { console.log('MIGRATION FAILED', f, e.message); process.exit(1); }
 }
@@ -1534,5 +1534,36 @@ await as(null);
 ok((await q(`SELECT unlocked_how FROM memory_videos WHERE id=$1`, [vid2]))[0].unlocked_how === 'free', 'while there is no price the hunter can unlock it with one tap');
 await db.query(`SELECT public.unlock_video_paid($1, 'card-123')`, [vid]);   // already unlocked: nothing changes
 ok((await q(`SELECT count(*)::int n FROM audit_log WHERE table_name='memory_videos'`))[0].n >= 4, 'every step is in the history');
+
+console.log('\nSharing an album with the workshop');
+await as(HUN2);
+const GOOD = 'https://www.icloud.com/sharedalbum/#B0aGZ4Fj3xk';
+ok((await fails(`SELECT public.hunter_share_photos($1, $2, false)`, [sHunt, GOOD]))?.includes('tick the box'), 'the hunter must agree first');
+ok((await fails(`SELECT public.hunter_share_photos($1, 'http://www.icloud.com/x', true)`, [sHunt]))?.includes('not from iCloud'), 'a link that is not https is refused');
+ok((await fails(`SELECT public.hunter_share_photos($1, 'https://evil.example.com/icloud.com', true)`, [sHunt]))?.includes('not from iCloud'), 'a link from some other website is refused');
+ok((await fails(`SELECT public.hunter_share_photos($1, 'https://icloud.com.evil.com/x', true)`, [sHunt]))?.includes('not from iCloud'), 'and so is a link that only looks like iCloud');
+await as(HUN3);
+ok((await fails(`SELECT public.hunter_share_photos($1, $2, true)`, [sHunt, GOOD]))?.includes('not on your profile'), 'another hunter cannot share on this hunt');
+await as(HUN2);
+const shId = (await q(`SELECT public.hunter_share_photos($1, $2, true, 'The album is called Limpopo 2026') id`, [sHunt, GOOD]))[0].id;
+ok((await q(`SELECT public.hunter_share_photos($1, 'https://photos.app.goo.gl/abc', true) id`, [sHunt]))[0].id === shId, 'sharing again replaces the link instead of making a second request');
+ok((await q(`SELECT link_host FROM photo_shares WHERE id=$1`, [shId]))[0].link_host === 'photos.app.goo.gl', 'only the name of the service is kept for the record');
+await as(HUN3);
+ok((await q(`SELECT count(*)::int n FROM photo_shares`))[0].n === 0, 'another hunter cannot see the request or the link');
+ok((await fails(`SELECT public.hunter_withdraw_photo_share($1)`, [shId]))?.includes('Nothing to take back'), 'or take it back');
+await as(ids.worker);
+ok((await q(`SELECT link FROM photo_shares WHERE id=$1`, [shId]))[0].link === 'https://photos.app.goo.gl/abc', 'the workshop can see the link');
+await db.query(`SELECT public.staff_finish_photo_share($1, 'Copied 11 photos')`, [shId]);
+await as(null);
+const done = (await q(`SELECT status, link, done_by IS NOT NULL AS by FROM photo_shares WHERE id=$1`, [shId]))[0];
+ok(done.status === 'done' && done.link === null && done.by === true, 'when the photos are copied the link is deleted and who did it is kept');
+ok((await q(`SELECT count(*)::int n FROM client_notifications WHERE hunt_id=$1 AND title='Your photos are ready'`, [sHunt]))[0].n === 1, 'and the hunter is told their photos are ready');
+await as(HUN2);
+const sh2 = (await q(`SELECT public.hunter_share_photos($1, $2, true) id`, [sHunt, GOOD]))[0].id;
+await db.query(`SELECT public.hunter_withdraw_photo_share($1)`, [sh2]);
+await as(null);
+const wd = (await q(`SELECT status, link FROM photo_shares WHERE id=$1`, [sh2]))[0];
+ok(wd.status === 'withdrawn' && wd.link === null, 'the hunter can take the link back at any time and it is deleted');
+ok((await q(`SELECT count(*)::int n FROM audit_log WHERE table_name='photo_shares'`))[0].n >= 4, 'every step is in the history');
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
