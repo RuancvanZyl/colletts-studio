@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { supabase } from '../../../../lib/supabase';
 import { plainError } from '../../../../lib/plainError';
 import { savePhotos, shrinkPhoto } from '../../../../lib/offline/photos';
-import { HuntFilm, STORY_PARTS, PREVIEW_SECONDS, sortStory, type StoryPhoto } from '../../../../lib/huntFilm';
+import { HuntFilm, STORY_PARTS, PREVIEW_SECONDS, sortStory, makeAudioContext, type StoryPhoto } from '../../../../lib/huntFilm';
 import { WORKSHOP } from '../../../../lib/workshop';
 import { useBack } from '../../../../lib/back';
 import { tellAboutMessage } from '../../../../lib/push';
@@ -135,6 +135,13 @@ export function HuntStory({ clientId, clientName, currency, onClose }: { clientI
   const hunt = hunts.find(h => h.id === huntId);
 
   useEffect(() => () => { filmRef.current?.dispose(); }, []);
+  // the film and its music stop at once when the app goes to the background
+  useEffect(() => {
+    const hide = () => { if (document.visibilityState === 'hidden' && filmRef.current && state === 'playing') { filmRef.current.stop(); setState('idle'); } };
+    document.addEventListener('visibilitychange', hide); window.addEventListener('pagehide', hide);
+    return () => { document.removeEventListener('visibilitychange', hide); window.removeEventListener('pagehide', hide); };
+  }, [state]);
+  function stopFilm() { filmRef.current?.stop(); setState('idle'); }
   useEffect(() => { filmRef.current?.dispose(); filmRef.current = null; setState('idle'); setResult(null); }, [huntId, photos.length]);
 
   async function prepare(): Promise<HuntFilm | null> {
@@ -159,9 +166,10 @@ export function HuntStory({ clientId, clientName, currency, onClose }: { clientI
   }
 
   async function playPreview() {
-    const film = await prepare(); if (!film) return;
+    const audioCtx = makeAudioContext();   // switched on inside the tap, before anything is awaited
+    const film = await prepare(); if (!film) { audioCtx?.close(); return; }
     setState('playing');
-    film.play({ preview: !unlocked, music: true, onEnd: reached => setState(reached ? 'limit' : 'ended') });
+    film.play({ preview: !unlocked, music: true, audioCtx, onEnd: reached => setState(reached ? 'limit' : 'ended') });
   }
 
   async function unlock() {
@@ -179,10 +187,11 @@ export function HuntStory({ clientId, clientName, currency, onClose }: { clientI
   }
 
   async function makeFilm() {
-    const film = await prepare(); if (!film) return;
+    const audioCtx = makeAudioContext();
+    const film = await prepare(); if (!film) { audioCtx?.close(); return; }
     film.stop(); setState('making'); setProgress(0);
     try {
-      const out = await film.record({ music: true, onProgress: setProgress });
+      const out = await film.record({ music: true, audioCtx, onProgress: setProgress });
       setResult({ url: URL.createObjectURL(out.blob), blob: out.blob, ext: out.ext }); setState('made');
     } catch (e: any) { setState('idle'); toast.error(plainError(e?.message ?? 'The film could not be made. Please try again.')); }
   }
@@ -316,6 +325,7 @@ export function HuntStory({ clientId, clientName, currency, onClose }: { clientI
                       <span className="font-bold text-lg">{state === 'loading' ? 'Getting ready…' : unlocked ? 'Watch my film' : 'Watch the free preview'}</span>
                     </button>
                   )}
+                  {state === 'playing' && <button onClick={stopFilm} className="absolute top-3 right-3 min-h-11 px-4 rounded-full bg-black/60 text-white font-bold text-sm">Stop</button>}
                   {state === 'limit' && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center text-white bg-black/70">
                       <Lock className="w-10 h-10" />

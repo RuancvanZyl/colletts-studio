@@ -241,10 +241,11 @@ export class HuntFilm {
 
   // ── playing and recording ────────────────────────────────────────────────────
   /** watch it on the canvas. A preview stops after PREVIEW_SECONDS and calls onLimit. */
-  play(opts: { preview: boolean; music: boolean; onTime?: (t: number) => void; onEnd?: (reachedLimit: boolean) => void }) {
+  play(opts: { preview: boolean; music: boolean; audioCtx?: AudioContext | null; onTime?: (t: number) => void; onEnd?: (reachedLimit: boolean) => void }) {
+    this.audio?.stop(); this.audio = null;   // never two tunes at once
     this.stopped = false;
     const limit = opts.preview ? Math.min(PREVIEW_SECONDS, this.duration) : this.duration;
-    if (opts.music) { this.audio = new FilmMusic(this.duration); this.audio.start(true); }
+    if (opts.music) { this.audio = new FilmMusic(this.duration, opts.audioCtx); this.audio.start(true); }
     const t0 = performance.now();
     const tick = () => {
       if (this.stopped) return;
@@ -263,13 +264,13 @@ export class HuntFilm {
   stop() { this.stopped = true; cancelAnimationFrame(this.raf); this.audio?.stop(); this.audio = null; }
 
   /** play the whole film in real time and record it. The app has to stay open while this runs. */
-  record(opts: { music: boolean; onProgress?: (fraction: number) => void }): Promise<{ blob: Blob; ext: string; mime: string }> {
+  record(opts: { music: boolean; audioCtx?: AudioContext | null; onProgress?: (fraction: number) => void }): Promise<{ blob: Blob; ext: string; mime: string }> {
     return new Promise((resolve, reject) => {
       try {
         if (typeof MediaRecorder === 'undefined' || !(this.canvas as any).captureStream) throw new Error('This phone or browser cannot make videos. Please use Safari on an iPhone or Chrome on Android.');
         this.stopped = false;
         const stream: MediaStream = (this.canvas as any).captureStream(30);
-        if (opts.music) { this.audio = new FilmMusic(this.duration); const track = this.audio.start(false); track?.forEach(tr => stream.addTrack(tr)); }
+        if (opts.music) { this.audio = new FilmMusic(this.duration, opts.audioCtx); const track = this.audio.start(false); track?.forEach(tr => stream.addTrack(tr)); }
         const candidates = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
         const mime = candidates.find(m => (MediaRecorder as any).isTypeSupported?.(m)) ?? '';
         const rec = new MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), videoBitsPerSecond: 3_500_000 });
@@ -433,16 +434,33 @@ export function buildMusic(ctx: BaseAudioContext, out: AudioNode, seconds: numbe
   }
 }
 
+/**
+ * Call this straight from the tap (before anything is awaited). An iPhone only lets a page make sound if the sound is switched on
+ * inside the tap itself, and by default it stays silent when the side switch is on silent: telling the phone this is "playback"
+ * (like a video) makes the music play either way.
+ */
+export function makeAudioContext(): AudioContext | null {
+  try {
+    const AC = (window as any).AudioContext || (window as any).webkitAudioContext;
+    if (!AC) return null;
+    try { const session = (navigator as any).audioSession; if (session) session.type = 'playback'; } catch { /* older phones */ }
+    const ctx: AudioContext = new AC();
+    ctx.resume?.();
+    const src = ctx.createBufferSource(); src.buffer = ctx.createBuffer(1, 1, 22050); src.connect(ctx.destination); src.start(0);   // a silent blip finishes unlocking it
+    return ctx;
+  } catch { return null; }
+}
+
 class FilmMusic {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
-  constructor(private seconds: number) {}
+  constructor(private seconds: number, private ready?: AudioContext | null) {}
 
   /** starts the music; when `speakers` is false it is only sent to the recording. Returns the audio tracks for the recording. */
   start(speakers: boolean): MediaStreamTrack[] | null {
-    const AC = (window as any).AudioContext || (window as any).webkitAudioContext;
-    if (!AC) return null;
-    const ctx: AudioContext = new AC(); this.ctx = ctx;
+    const ctx: AudioContext | null = this.ready ?? makeAudioContext();
+    if (!ctx) return null;
+    this.ctx = ctx;
     ctx.resume?.();
     const master = ctx.createGain(); this.master = master;
     const t0 = ctx.currentTime + 0.1;

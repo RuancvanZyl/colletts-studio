@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { supabase } from '../../../../lib/supabase';
 import { plainError } from '../../../../lib/plainError';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
-import { HuntFilm, sortStory, type StoryPhoto } from '../../../../lib/huntFilm';
+import { HuntFilm, sortStory, makeAudioContext, type StoryPhoto } from '../../../../lib/huntFilm';
 import { WORKSHOP } from '../../../../lib/workshop';
 
 /** Staff watch a hunter's film (no watermark, nothing saved) to check the quality before or after the hunter does. */
@@ -37,9 +37,15 @@ export function StaffFilmDialog({ huntId, clientName, onClose }: { huntId: strin
       } catch (e: any) { toast.error(plainError(e?.message ?? 'The film could not be made.')); setState('empty'); }
     })();
     return () => { filmRef.current?.dispose(); filmRef.current = null; };
-  }, [huntId, clientName]);
+  }, [huntId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function play() { const f = filmRef.current; if (!f) return; setState('playing'); f.play({ preview: false, music: true, onEnd: () => setState('ready') }); }
+  useEffect(() => {
+    const hide = () => { if (document.visibilityState === 'hidden') { filmRef.current?.stop(); setState(s => s === 'playing' ? 'ready' : s); } };
+    document.addEventListener('visibilitychange', hide); window.addEventListener('pagehide', hide);
+    return () => { document.removeEventListener('visibilitychange', hide); window.removeEventListener('pagehide', hide); };
+  }, []);
+  function stop() { filmRef.current?.stop(); setState('ready'); }
+  function play() { const audioCtx = makeAudioContext(); const f = filmRef.current; if (!f) return; setState('playing'); f.play({ preview: false, music: true, audioCtx, onEnd: () => setState('ready') }); }
 
   return (
     <Dialog open onOpenChange={(o: boolean) => { if (!o) onClose(); }}>
@@ -49,6 +55,7 @@ export function StaffFilmDialog({ huntId, clientName, onClose }: { huntId: strin
           <canvas ref={canvasRef} className="w-full h-full" />
           {state === 'loading' && <div className="absolute inset-0 flex items-center justify-center text-white"><Loader2 className="w-8 h-8 animate-spin" /></div>}
           {state === 'ready' && <button onClick={play} className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white bg-black/35"><Play className="w-14 h-14" /><span className="font-bold">Watch the film</span></button>}
+          {state === 'playing' && <button onClick={stop} className="absolute top-3 right-3 min-h-11 px-4 rounded-full bg-black/60 text-white font-bold text-sm">Stop</button>}
           {state === 'empty' && <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-white text-sm">This hunter has not added any hunt photos yet.</div>}
         </div>
         <p className="text-xs text-slate-500">{count} photo{count === 1 ? '' : 's'}. This is how the hunter's film looks, without the watermark. Nothing is saved.</p>
