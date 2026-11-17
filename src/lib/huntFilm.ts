@@ -347,13 +347,13 @@ export function buildMusic(ctx: BaseAudioContext, out: AudioNode, seconds: numbe
   /** thumb piano (mbira): a bright metallic pluck with a little buzz */
   const mbira = (midi: number, when: number, vol: number) => {
     const f = mtof(midi); const g = ctx.createGain(); g.connect(mix);
-    osc('sine', f, when, 0.65, g, vol, 0.002); osc('sine', f * 2.76, when, 0.3, g, vol * 0.28, 0.002); osc('sine', f * 5.4, when, 0.12, g, vol * 0.08, 0.002);
+    osc('sine', f, when, 0.65, g, vol, 0.002); osc('sine', f * 2.76, when, 0.3, g, vol * 0.3, 0.002);
     noise(when, 0.03, vol * 0.12, 'highpass', 6000); send(g, 0.55);
   };
   /** marimba: a round wooden note */
   const marimba = (midi: number, when: number, vol: number, dur = 0.55) => {
     const f = mtof(midi); const g = ctx.createGain(); g.connect(mix);
-    osc('sine', f, when, dur, g, vol, 0.003); osc('sine', f * 4, when, 0.12, g, vol * 0.3, 0.002); osc('triangle', f * 0.5, when, dur * 0.6, g, vol * 0.25, 0.003); send(g, 0.5);
+    osc('sine', f, when, dur, g, vol, 0.003); osc('sine', f * 4, when, 0.12, g, vol * 0.3, 0.002); send(g, 0.5);
   };
   /** log drum: the deep, round, bubbling bass note that follows the chords */
   const logDrum = (midi: number, when: number, vol: number) => {
@@ -367,17 +367,18 @@ export function buildMusic(ctx: BaseAudioContext, out: AudioNode, seconds: numbe
   const shaker = (when: number, vol: number) => noise(when, 0.05, vol, 'highpass', 8000, 0.6);
   const clap = (when: number, vol: number) => { noise(when, 0.11, vol, 'bandpass', 1500, 1.0); noise(when + 0.012, 0.09, vol * 0.7, 'bandpass', 1900, 1.0); };
   const crash = (when: number, vol: number) => noise(when, 1.6, vol, 'highpass', 4200, 0.6);
-  /** a warm choir on "ah": stacked voices with two vowel filters and a gentle wobble */
+  /** a warm choir on "ah": the vowel filters and the gentle wobble are shared by every note, so it stays light */
+  const choirBus = ctx.createGain(); choirBus.gain.value = 0.34;
+  const choirOut = ctx.createGain(); choirOut.connect(mix); send(choirOut, 0.6);
+  for (const [fr, q, lv] of [[700, 6, 1], [1150, 7, 0.55]] as const) { const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = fr; bp.Q.value = q; const l = ctx.createGain(); l.gain.value = lv; choirBus.connect(bp); bp.connect(l); l.connect(choirOut); }
+  const wobble = ctx.createOscillator(); wobble.frequency.value = 5.2; const wobbleGain = ctx.createGain(); wobbleGain.gain.value = 14; wobble.connect(wobbleGain); wobble.start(t0); wobble.stop(t0 + seconds + 1);
   const choir = (midis: number[], when: number, dur: number, vol: number) => {
-    const g = ctx.createGain(); g.connect(mix); send(g, 0.6);
+    const g = ctx.createGain(); g.connect(choirBus);
     g.gain.setValueAtTime(0.0001, t0 + when); g.gain.linearRampToValueAtTime(vol, t0 + when + 0.45); g.gain.setValueAtTime(vol, t0 + when + dur - 0.5); g.gain.linearRampToValueAtTime(0.0001, t0 + when + dur + 0.3);
     midis.forEach((m, i) => {
       for (const d of [-9, 8]) {
         const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = mtof(m + 12); o.detune.value = d + i * 3;
-        const lfo = ctx.createOscillator(); lfo.frequency.value = 5 + i * 0.4; const lg = ctx.createGain(); lg.gain.value = 14; lfo.connect(lg); lg.connect(o.detune); lfo.start(t0 + when); lfo.stop(t0 + when + dur + 0.4);
-        const mixv = ctx.createGain(); mixv.gain.value = 0.34;
-        for (const [fr, q, lv] of [[700, 6, 1], [1150, 7, 0.55]] as const) { const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = fr; bp.Q.value = q; const l = ctx.createGain(); l.gain.value = lv; o.connect(bp); bp.connect(l); l.connect(mixv); }
-        mixv.connect(g); o.start(t0 + when); o.stop(t0 + when + dur + 0.4);
+        wobbleGain.connect(o.detune); o.connect(g); o.start(t0 + when); o.stop(t0 + when + dur + 0.4);
       }
     });
   };
@@ -396,7 +397,7 @@ export function buildMusic(ctx: BaseAudioContext, out: AudioNode, seconds: numbe
   for (const [a, b] of [[0.6, grooveStart - 1.5], [outroStart + 0.5, seconds - 2]] as const) for (let t = a; t < b; t += 0.9 + Math.random() * 1.3) chirp(t);
 
   const bars = Math.ceil(seconds / BAR);
-  for (let bar = 0; bar < bars; bar++) {
+  const scheduleBar = (bar: number) => {
     const bt = bar * BAR, ch = CHORDS[bar % 4], loop = Math.floor(bar / 4);
     // the choir holds the chord for the whole bar
     choir(ch.choir, bt, BAR, bt < grooveStart ? 0.07 : 0.09);
@@ -431,7 +432,13 @@ export function buildMusic(ctx: BaseAudioContext, out: AudioNode, seconds: numbe
         if (loop % 2 === 1) marimba(m, bt + p * PULSE, 0.07 * lift);
       }
     }
-  }
+  };
+  let next = 0;
+  return {
+    /** write every bar that starts before `limit` seconds (call it again as the music plays) */
+    scheduleUntil(limit: number) { while (next < bars && next * BAR < limit) scheduleBar(next++); },
+    done: () => next >= bars,
+  };
 }
 
 /**
@@ -454,6 +461,7 @@ export function makeAudioContext(): AudioContext | null {
 class FilmMusic {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  private timer: ReturnType<typeof setInterval> | undefined;
   constructor(private seconds: number, private ready?: AudioContext | null) {}
 
   /** starts the music; when `speakers` is false it is only sent to the recording. Returns the audio tracks for the recording. */
@@ -468,7 +476,10 @@ class FilmMusic {
     master.gain.linearRampToValueAtTime(0.85, t0 + 1.2);
     master.gain.setValueAtTime(0.85, t0 + Math.max(2, this.seconds - 3));
     master.gain.linearRampToValueAtTime(0, t0 + this.seconds);
-    buildMusic(ctx, master, this.seconds, t0);
+    // only the next few seconds are written at any time: writing the whole track at once can make a phone stutter
+    const track = buildMusic(ctx, master, this.seconds, t0);
+    const feed = () => { if (!this.ctx) return; track.scheduleUntil(ctx.currentTime - t0 + 4); if (track.done() && this.timer) clearInterval(this.timer); };
+    feed(); this.timer = setInterval(feed, 400);
     if (speakers) master.connect(ctx.destination);
     let tracks: MediaStreamTrack[] | null = null;
     if (!speakers) { const dest = ctx.createMediaStreamDestination(); master.connect(dest); tracks = dest.stream.getAudioTracks(); }
@@ -476,6 +487,7 @@ class FilmMusic {
   }
 
   stop() {
+    if (this.timer) clearInterval(this.timer);
     try { this.master?.gain.cancelScheduledValues(0); this.master?.gain.setTargetAtTime(0, this.ctx?.currentTime ?? 0, 0.15); } catch { /* already closed */ }
     const c = this.ctx; this.ctx = null;
     setTimeout(() => { try { c?.close(); } catch { /* already closed */ } }, 600);
