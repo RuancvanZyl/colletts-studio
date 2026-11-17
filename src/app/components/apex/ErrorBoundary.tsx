@@ -44,12 +44,13 @@ export class ErrorBoundary extends Component<Props, State> {
               Refresh Page
             </Button>
             {this.state.error && (
-              <details className="mt-4 text-left">
+              <details open className="mt-4 text-left">
                 <summary className="text-xs text-slate-500 dark:text-slate-500 cursor-pointer">
-                  Error details
+                  What went wrong (please send a screenshot of this)
                 </summary>
                 <pre className="mt-2 text-xs text-slate-600 dark:text-slate-400 overflow-auto p-2 bg-slate-50 dark:bg-slate-900 rounded">
                   {this.state.error.message}
+                  {this.state.error.stack ? `\n\n${this.state.error.stack.split('\n').slice(0, 6).join('\n')}` : ''}
                 </pre>
               </details>
             )}
