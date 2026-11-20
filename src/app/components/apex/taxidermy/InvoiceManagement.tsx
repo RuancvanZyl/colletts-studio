@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
 import { FileText, Plus, Search, RefreshCw, CreditCard, Loader2, ChevronRight, Trash2, AlertTriangle, Link2, Link2Off, ExternalLink } from 'lucide-react';
 import { useInvoices } from '../../../../lib/hooks/useInvoices';
 import { useClients } from '../../../../lib/hooks/useClients';
-import { getXeroStatus, startXeroOAuth, clearXeroConnection, pushInvoiceToXero } from '../../../../lib/xero';
+import { getXeroStatus, clearXeroConnection, pushInvoiceToXero } from '../../../../lib/xero';
 import { toast } from 'sonner';
 import type { InvoiceWithDetails } from '../../../../lib/hooks/useInvoices';
 import type { Database } from '../../../../lib/database.types';
@@ -191,12 +191,12 @@ export function InvoiceManagement() {
         <div className="flex-1 text-sm">
           {xeroStatus.connected
             ? <span className="text-green-800 dark:text-green-200">Connected to Xero — <strong>{xeroStatus.tenantName}</strong></span>
-            : <span className="text-amber-800 dark:text-amber-200">Xero not connected — invoices won't sync automatically</span>
+            : <span className="text-amber-800 dark:text-amber-200">Xero is not linked yet. Payments are recorded by hand, in Money, Quotes.</span>
           }
         </div>
         {xeroStatus.connected
           ? <button onClick={() => { clearXeroConnection(); window.location.reload(); }} className="text-xs text-red-500 hover:underline">Disconnect</button>
-          : <button onClick={startXeroOAuth} className="text-xs text-[#0073ea] hover:underline flex items-center gap-1">Connect Xero <ExternalLink className="w-3 h-3" /></button>
+          : null   // the Xero link has not been built, so there is no "Connect" button that leads nowhere
         }
       </div>
 
@@ -333,10 +333,12 @@ export function InvoiceManagement() {
                       <CreditCard className="w-3 h-3 mr-2" />Record Payment
                     </Button>
                   )}
-                  <Button size="sm" variant="outline" className="w-full" onClick={() => handlePushToXero(selected)} disabled={xeroPushing || !xeroStatus.connected}>
-                    {xeroPushing ? <Loader2 className="w-3 h-3 mr-2 animate-spin" /> : <ExternalLink className="w-3 h-3 mr-2" />}
-                    {xeroStatus.connected ? 'Sync to Xero' : 'Connect Xero to sync'}
-                  </Button>
+                  {xeroStatus.connected && (
+                    <Button size="sm" variant="outline" className="w-full" onClick={() => handlePushToXero(selected)} disabled={xeroPushing}>
+                      {xeroPushing ? <Loader2 className="w-3 h-3 mr-2 animate-spin" /> : <ExternalLink className="w-3 h-3 mr-2" />}
+                      Sync to Xero
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>

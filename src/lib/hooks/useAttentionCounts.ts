@@ -13,11 +13,12 @@ export interface AttentionCounts {
   receivingIssues: number;  // animals received with an issue that nobody has decided about yet
   receivingFixing: number;
   leatherAsk: number;       // animals with skin left over where the client has not said what to do
+  readyToStart: number;     // paid hunts with animals that have arrived and chosen a mount, but are not yet moved out of Receiving into the workshop
   photoShares: number;      // hunters who shared an album link and are waiting for the workshop to copy their photos
   leatherToConfirm: number; // clients who want leather work that the workshop has not agreed with them yet
   paymentProofs: number;    // hunters who say they have paid by bank transfer and nobody has checked yet  // animals with an issue that has a decision but is not marked solved yet
 }
-const ZERO: AttentionCounts = { toCheck: 0, fromOutfitter: 0, unreadChat: 0, unverified: 0, lateAccept: 0, notAcked: 0, needOutcome: 0, clientOverdue: 0, heldAside: 0, arrivedToCheck: 0, missingParts: 0, receivingIssues: 0, receivingFixing: 0, paymentProofs: 0, leatherAsk: 0, leatherToConfirm: 0, photoShares: 0 };
+const ZERO: AttentionCounts = { toCheck: 0, fromOutfitter: 0, unreadChat: 0, unverified: 0, lateAccept: 0, notAcked: 0, needOutcome: 0, clientOverdue: 0, heldAside: 0, arrivedToCheck: 0, missingParts: 0, receivingIssues: 0, receivingFixing: 0, paymentProofs: 0, leatherAsk: 0, leatherToConfirm: 0, photoShares: 0, readyToStart: 0 };
 
 export function useAttentionCounts(): AttentionCounts {
   const [c, setC] = useState<AttentionCounts>(ZERO);
@@ -32,8 +33,8 @@ export function useAttentionCounts(): AttentionCounts {
       const cases: any[] = qc ?? [];
       // trophies at the receiving stage: arrived but not checked yet, and animals with parts missing
       const recvQuery = (cols: string) => db.from('hunt_documents').select(cols).eq('doc_type', 'job_card').eq('current_department', 'receiving').in('status', ['awaiting_arrival', 'in_progress', 'flagged']);
-      const first = await recvQuery('hunt_id, status, arrived_at, received:form_data->received_parts, tf:form_data->>to_follow, mp:form_data->missing_parts');
-      const rc = first.error ? (await recvQuery('hunt_id, status, received:form_data->received_parts, tf:form_data->>to_follow, mp:form_data->missing_parts')).data : first.data;   // without migration 070 there is no arrival column
+      const first = await recvQuery('hunt_id, status, arrived_at, received:form_data->received_parts, tf:form_data->>to_follow, mp:form_data->missing_parts, rel:form_data->>released_at, mt:form_data->>mount_type');
+      const rc = first.error ? (await recvQuery('hunt_id, status, received:form_data->received_parts, tf:form_data->>to_follow, mp:form_data->missing_parts, rel:form_data->>released_at, mt:form_data->>mount_type')).data : first.data;   // without migration 070 there is no arrival column
       const atReceiving: any[] = rc ?? [];
       const arrivedHunts = new Set(atReceiving.filter(x => x.arrived_at && !(Array.isArray(x.received) && x.received.length > 0)).map(x => x.hunt_id));
       const oldMissing = atReceiving.filter(x => x.tf === 'true' || (x.status === 'flagged' && Array.isArray(x.mp) && x.mp.length > 0)).length;
@@ -45,11 +46,16 @@ export function useAttentionCounts(): AttentionCounts {
       const leatherRows: any[] = lq.error ? [] : (lq.data ?? []);
       const leatherAsk = leatherRows.filter(x => leftoverSkin(x.mount, Array.isArray(x.parts) ? x.parts.map((p: any) => p.code) : []) && (!x.lc || x.lc === 'later')).length;
       const leatherToConfirm = leatherRows.filter(x => x.lc === 'leather' && !x.lconf).length;
+      // paid, arrived, mount chosen, but still sitting in Receiving: somebody has to press "Start the work" (Money, Quotes, that hunt)
+      const waitingToStart = atReceiving.filter(x => x.status === 'in_progress' && !x.rel && x.mt && !/^pending instructions$/i.test(x.mt));
+      const startHunts = [...new Set(waitingToStart.map(x => x.hunt_id))];
+      const au = startHunts.length ? await db.from('client_hunts').select('id').in('id', startHunts).not('work_authorised_at', 'is', null) : { data: [], error: null };
+      const readyToStart = au.error ? 0 : (au.data ?? []).length;
       const ps = await db.from('photo_shares').select('id', { count: 'exact', head: true }).eq('status', 'waiting');
       const fu = await db.from('part_followups').select('id', { count: 'exact', head: true }).is('resolved_at', null);
       const missing = fu.error ? oldMissing : (fu.count ?? 0);
       setC({
-        arrivedToCheck: arrivedHunts.size, missingParts: missing, receivingIssues: issues.filter(x => !x.dec).length, receivingFixing: issues.filter(x => x.dec).length, paymentProofs: pp.error ? 0 : (pp.count ?? 0), leatherAsk, leatherToConfirm, photoShares: ps.error ? 0 : (ps.count ?? 0),
+        arrivedToCheck: arrivedHunts.size, missingParts: missing, receivingIssues: issues.filter(x => !x.dec).length, receivingFixing: issues.filter(x => x.dec).length, paymentProofs: pp.error ? 0 : (pp.count ?? 0), leatherAsk, leatherToConfirm, photoShares: ps.error ? 0 : (ps.count ?? 0), readyToStart,
         heldAside: cases.filter(x => x.order_override_at).length,
         clientOverdue: cases.filter(x => { const d = informDaysLeft(x); return d !== null && d < 0; }).length,
         notAcked: cases.filter(x => x.outfitter_id && !x.outfitter_ack_at).length,
